@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ComponentType, type ReactNode, useMemo, useState } from "react";
+import { type ComponentType, type ReactNode, useMemo } from "react";
 import {
   ArrowLeft,
-  BarChart2,
   CirclePlus,
   Home,
   ListChecks,
+  LogOut,
   Newspaper,
   Trophy,
   UserCircle,
@@ -23,11 +23,10 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/ranking", label: "Ranking", icon: Trophy },
-  { href: "/partidas", label: "Partidas", icon: ListChecks },
   { href: "/noticias", label: "Notícias", icon: Newspaper },
+  { href: "/partidas", label: "Partidas", icon: ListChecks },
+  { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/perfil", label: "Perfil", icon: UserCircle },
-  { href: "/estatisticas", label: "Stats", icon: BarChart2 },
 ];
 
 export function AppShell({
@@ -43,12 +42,17 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [mounted] = useState(typeof window !== "undefined");
   const active = useMemo(
     () => navItems.find((item) => pathname === item.href)?.href,
-    [pathname],
+    [pathname]
   );
-  const { user } = useAuth();
+  const { user, loading, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <main className="min-h-screen bg-[#f5f4fa] text-foreground">
@@ -72,12 +76,27 @@ export function AppShell({
               <p className="text-xs text-primary-foreground/80">{subtitle}</p>
             ) : null}
           </div>
-          <Link
-            href="/login"
-            className="rounded-full bg-primary-foreground/20 px-3 py-1 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary-foreground/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
-          >
-            {mounted && user ? user.name : "Login"}
-          </Link>
+          {!loading && user ? (
+            <div className="flex items-center gap-2">
+              <span className="max-w-[80px] truncate rounded-full bg-primary-foreground/20 px-3 py-1 text-[11px] font-semibold text-primary-foreground">
+                {user.name}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/10 text-primary-foreground transition hover:bg-primary-foreground/20"
+                aria-label="Sair"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          ) : !loading ? (
+            <Link
+              href="/login"
+              className="rounded-full bg-primary-foreground/20 px-3 py-1 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary-foreground/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
+            >
+              Login
+            </Link>
+          ) : null}
         </div>
       </header>
 

@@ -1,16 +1,19 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { registerMatch } from "@/lib/match-store";
 import { useAuth } from "@/lib/auth-store";
-import { mockUsers } from "@/lib/mock-users";
 import { useMemo, useState } from "react";
 import { Combobox } from "@/components/ui/combobox";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { useUsers, useRegisterMatch } from "@/lib/queries";
 
 type SetScore = { numero: number; winner: "" | "a" | "b" };
 
 export default function RegistrarJogoPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
   const [sets, setSets] = useState<SetScore[]>([
     { numero: 1, winner: "" },
     { numero: 2, winner: "" },
@@ -19,14 +22,25 @@ export default function RegistrarJogoPage() {
     { numero: 5, winner: "" },
   ]);
   const [selectedOutcome, setSelectedOutcome] = useState<string>("");
-  const [opponent, setOpponent] = useState("");
-  const opponentOptions = mockUsers.filter((u) => u.id !== user?.id);
+  const [opponentId, setOpponentId] = useState("");
+
+  // React Query hooks
+  const { data: users = [], isLoading: loadingUsers } = useUsers();
+  const registerMutation = useRegisterMatch();
+
+  // Filtrar para não mostrar o usuário logado como adversário
+  const opponentOptions = users.filter((u) => u.id !== user?.id);
   const comboboxOptions = opponentOptions.map((opt) => ({
-    label: opt.name,
-    value: opt.name,
-    description: opt.email,
+    label: opt.full_name || opt.name || opt.email || "Usuário",
+    value: opt.id,
+    description: opt.email || "",
   }));
-  const canSubmit = selectedOutcome !== "" && opponent.trim().length > 0;
+
+  // Encontrar o nome do adversário selecionado
+  const selectedOpponent = users.find((u) => u.id === opponentId);
+  const opponentName = selectedOpponent?.full_name || selectedOpponent?.name || selectedOpponent?.email || "Adversário";
+
+  const canSubmit = selectedOutcome !== "" && opponentId !== "" && !registerMutation.isPending;
 
   const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
   const { resumoSets, winsA, winsB } = useMemo(() => {
@@ -41,10 +55,10 @@ export default function RegistrarJogoPage() {
 
   const previsao =
     winsA === winsB
-      ? "Selecione o resultado para ver a previsão"
+      ? null
       : winsA > winsB
-        ? "Você vence: +20 pts"
-        : "Você perde: -8 pts";
+        ? { text: "Vitória: +20 pts", color: "text-green-600" }
+        : { text: "Derrota: +8 pts", color: "text-blue-600" };
 
   const applyOutcome = (outcome: string) => {
     const [aStr, bStr] = outcome.split("x");
@@ -52,9 +66,9 @@ export default function RegistrarJogoPage() {
     const winsB = parseInt(bStr, 10);
     const total = winsA + winsB;
     const newSets: SetScore[] = Array.from({ length: 5 }).map((_, idx) => {
-      if (idx < winsA) return { numero: idx + 1, a: "", b: "", winner: "a" };
-      if (idx < total) return { numero: idx + 1, a: "", b: "", winner: "b" };
-      return { numero: idx + 1, a: "", b: "", winner: "" };
+      if (idx < winsA) return { numero: idx + 1, winner: "a" as const };
+      if (idx < total) return { numero: idx + 1, winner: "b" as const };
+      return { numero: idx + 1, winner: "" as const };
     });
     setSets(newSets);
     setSelectedOutcome(outcome);
@@ -71,101 +85,138 @@ export default function RegistrarJogoPage() {
     setSelectedOutcome("");
   };
 
+  const handleSubmit = () => {
+    if (!canSubmit || !user) return;
+    setError(null);
+
+    registerMutation.mutate(
+      {
+        playerId: user.id,
+        opponentId,
+        outcome: selectedOutcome,
+      },
+      {
+        onSuccess: () => {
+          router.push("/partidas");
+        },
+        onError: (err) => {
+          setError(err.message || "Erro ao registrar partida. Tente novamente.");
+        },
+      }
+    );
+  };
+
   return (
     <AppShell
       title="Registrar jogo"
-      subtitle="Passo 2/2 • Melhor de 5 • Máx. 2 jogos/dia"
+      subtitle="Melhor de 5 • Máx. 2 jogos/dia"
       showBack
     >
-      <div className="space-y-5">
-        <div className="space-y-2">
+      <div className="space-y-4">
+        {/* Card de seleção de adversário */}
+        <article className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
           <label className="text-xs font-semibold text-muted-foreground">
-            Adversário
+            Selecione o adversário
           </label>
           <Combobox
             options={comboboxOptions}
-            placeholder="Selecione ou busque"
+            placeholder={loadingUsers ? "Carregando..." : "Buscar jogador..."}
             emptyText="Nenhum adversário encontrado"
-            value={opponent}
-            onChange={(v) => setOpponent(v)}
+            value={opponentId}
+            onChange={(v) => setOpponentId(v)}
           />
-        </div>
+        </article>
 
-        <div className="h-2 w-full rounded-full bg-muted">
-          <div className="h-2 w-full rounded-full bg-primary" />
-        </div>
-
-        <div className="flex items-center justify-between text-sm font-semibold text-muted-foreground">
-          <span>Você</span>
-          <span>vs</span>
-          <span>André</span>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2 text-xs font-semibold">
-            {quickOutcomes.map((outcome) => (
-              <button
-                key={outcome}
-                type="button"
-                onClick={() => applyOutcome(outcome)}
-                className={`rounded-full border px-3 py-2 transition ${
-                  selectedOutcome === outcome
-                    ? "border-primary bg-primary/15 text-primary"
-                    : "border-border bg-card text-foreground"
-                }`}
-              >
-                {outcome} (melhor de 5)
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between rounded-2xl bg-muted/70 px-3 py-3 text-xs text-muted-foreground">
-            <div className="space-y-1">
-              <p>Escolha um resultado rápido (3x0, 3x1, 3x2).</p>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">
-                Resultado atual: {resumoSets}
-              </p>
+        {/* Card de confronto */}
+        <article className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="text-center flex-1">
+              <p className="text-sm font-semibold text-foreground">{user?.name || "Você"}</p>
+              <p className="text-xs text-muted-foreground">Você</p>
             </div>
-            <button
-              type="button"
-              onClick={resetSets}
-              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary"
-            >
-              Limpar
-            </button>
+            <div className="px-4">
+              <span className="text-2xl font-bold text-primary">{resumoSets}</span>
+            </div>
+            <div className="text-center flex-1">
+              <p className="text-sm font-semibold text-foreground">{opponentName}</p>
+              <p className="text-xs text-muted-foreground">Adversário</p>
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-2 text-xs text-muted-foreground">
-          <p className="font-semibold text-foreground">
-            Previsão: {previsao}
-          </p>
-          <p className="text-[11px]">
-            Regras atuais: vitória +20 pts, derrota -8 pts.
-          </p>
-          <p className="text-amber-600 font-semibold">Máx. 2 jogos/dia</p>
-        </div>
+          {/* Resultados rápidos */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Selecione o resultado:</p>
+            <div className="flex flex-wrap gap-2">
+              {quickOutcomes.map((outcome) => (
+                <button
+                  key={outcome}
+                  type="button"
+                  onClick={() => applyOutcome(outcome)}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                    selectedOutcome === outcome
+                      ? "border-primary bg-primary/15 text-primary"
+                      : "border-border bg-muted/50 text-foreground hover:border-primary/50"
+                  }`}
+                >
+                  {outcome}
+                </button>
+              ))}
+            </div>
+          </div>
 
+          {selectedOutcome && (
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={resetSets}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition"
+              >
+                Limpar seleção
+              </button>
+              {previsao && (
+                <span className={`text-sm font-semibold ${previsao.color}`}>
+                  {previsao.text}
+                </span>
+              )}
+            </div>
+          )}
+        </article>
+
+        {/* Card de informações */}
+        <article className="rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Regras: vitória +20 pts, derrota +8 pts</span>
+            <span className="font-semibold text-amber-600">Máx. 2 jogos/dia</span>
+          </div>
+        </article>
+
+        {/* Erro */}
+        {(error || registerMutation.error) && (
+          <article className="rounded-2xl border border-red-200 bg-red-50 p-3 shadow-sm">
+            <p className="text-sm text-red-600">
+              {error || registerMutation.error?.message}
+            </p>
+          </article>
+        )}
+
+        {/* Botão de submit */}
         <button
           disabled={!canSubmit}
-          onClick={() => {
-            if (!canSubmit) return;
-            registerMatch({
-              me: user?.name ?? "Você",
-              opponent: opponent.trim(),
-              outcome: selectedOutcome,
-              horario: "Agora",
-            });
-            resetSets();
-            setOpponent("");
-          }}
-          className={`w-full rounded-full px-4 py-3 text-sm font-semibold shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+          onClick={handleSubmit}
+          className={`w-full rounded-2xl px-4 py-4 text-sm font-semibold shadow-sm transition ${
             canSubmit
               ? "bg-primary text-primary-foreground hover:scale-[1.01]"
-              : "cursor-not-allowed bg-muted text-muted-foreground shadow-none"
+              : "cursor-not-allowed bg-muted text-muted-foreground"
           }`}
         >
-          Registrar partida
+          {registerMutation.isPending ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Registrando...
+            </span>
+          ) : (
+            "Registrar partida"
+          )}
         </button>
       </div>
     </AppShell>
