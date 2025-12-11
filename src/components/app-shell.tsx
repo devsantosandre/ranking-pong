@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ComponentType, type ReactNode, useMemo } from "react";
+import { type ComponentType, type ReactNode, useMemo, useState } from "react";
 import {
   ArrowLeft,
   BarChart2,
@@ -13,6 +13,7 @@ import {
   Trophy,
   UserCircle,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-store";
 
 type NavItem = {
   href: string;
@@ -42,10 +43,12 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [mounted] = useState(typeof window !== "undefined");
   const active = useMemo(
     () => navItems.find((item) => pathname === item.href)?.href,
     [pathname],
   );
+  const { user } = useAuth();
 
   return (
     <main className="min-h-screen bg-[#f5f4fa] text-foreground">
@@ -69,6 +72,12 @@ export function AppShell({
               <p className="text-xs text-primary-foreground/80">{subtitle}</p>
             ) : null}
           </div>
+          <Link
+            href="/login"
+            className="rounded-full bg-primary-foreground/20 px-3 py-1 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary-foreground/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
+          >
+            {mounted && user ? user.name : "Login"}
+          </Link>
         </div>
       </header>
 

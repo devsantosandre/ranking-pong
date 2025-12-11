@@ -1,11 +1,16 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
+import { registerMatch } from "@/lib/match-store";
+import { useAuth } from "@/lib/auth-store";
+import { mockUsers } from "@/lib/mock-users";
 import { useMemo, useState } from "react";
+import { Combobox } from "@/components/ui/combobox";
 
 type SetScore = { numero: number; winner: "" | "a" | "b" };
 
 export default function RegistrarJogoPage() {
+  const { user } = useAuth();
   const [sets, setSets] = useState<SetScore[]>([
     { numero: 1, winner: "" },
     { numero: 2, winner: "" },
@@ -14,7 +19,14 @@ export default function RegistrarJogoPage() {
     { numero: 5, winner: "" },
   ]);
   const [selectedOutcome, setSelectedOutcome] = useState<string>("");
-  const canSubmit = selectedOutcome !== "";
+  const [opponent, setOpponent] = useState("");
+  const opponentOptions = mockUsers.filter((u) => u.id !== user?.id);
+  const comboboxOptions = opponentOptions.map((opt) => ({
+    label: opt.name,
+    value: opt.name,
+    description: opt.email,
+  }));
+  const canSubmit = selectedOutcome !== "" && opponent.trim().length > 0;
 
   const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
   const { resumoSets, winsA, winsB } = useMemo(() => {
@@ -50,11 +62,11 @@ export default function RegistrarJogoPage() {
 
   const resetSets = () => {
     setSets([
-      { numero: 1, a: "", b: "", winner: "" },
-      { numero: 2, a: "", b: "", winner: "" },
-      { numero: 3, a: "", b: "", winner: "" },
-      { numero: 4, a: "", b: "", winner: "" },
-      { numero: 5, a: "", b: "", winner: "" },
+      { numero: 1, winner: "" },
+      { numero: 2, winner: "" },
+      { numero: 3, winner: "" },
+      { numero: 4, winner: "" },
+      { numero: 5, winner: "" },
     ]);
     setSelectedOutcome("");
   };
@@ -66,6 +78,19 @@ export default function RegistrarJogoPage() {
       showBack
     >
       <div className="space-y-5">
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-muted-foreground">
+            Adversário
+          </label>
+          <Combobox
+            options={comboboxOptions}
+            placeholder="Selecione ou busque"
+            emptyText="Nenhum adversário encontrado"
+            value={opponent}
+            onChange={(v) => setOpponent(v)}
+          />
+        </div>
+
         <div className="h-2 w-full rounded-full bg-muted">
           <div className="h-2 w-full rounded-full bg-primary" />
         </div>
@@ -123,6 +148,17 @@ export default function RegistrarJogoPage() {
 
         <button
           disabled={!canSubmit}
+          onClick={() => {
+            if (!canSubmit) return;
+            registerMatch({
+              me: user?.name ?? "Você",
+              opponent: opponent.trim(),
+              outcome: selectedOutcome,
+              horario: "Agora",
+            });
+            resetSets();
+            setOpponent("");
+          }}
           className={`w-full rounded-full px-4 py-3 text-sm font-semibold shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
             canSubmit
               ? "bg-primary text-primary-foreground hover:scale-[1.01]"

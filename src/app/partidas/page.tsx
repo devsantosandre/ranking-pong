@@ -1,41 +1,41 @@
+"use client";
+
 import { AppShell } from "@/components/app-shell";
+import {
+  confirmMatch,
+  type MatchEntry,
+  updateOutcome,
+  useMatchStore,
+} from "@/lib/match-store";
+import { useAuth } from "@/lib/auth-store";
+import { useState } from "react";
 
-type MatchStatus = "pendente" | "validado" | "contestado";
-
-type MatchCard = {
-  me: string;
-  opponent: string;
-  score?: string;
-  delta?: string;
-  sets?: string;
-  horario: string;
-  status: MatchStatus;
-};
-
-const pendentes: MatchCard[] = [
-  { me: "Você", opponent: "Ricardo Oliveira", horario: "Hoje 09:00", status: "pendente" },
-  { me: "Você", opponent: "Felipe Velter", horario: "Ontem 20:10", status: "contestado" },
-];
-
-const recentes: MatchCard[] = [
-  {
-    me: "Lucas",
-    opponent: "André",
-    score: "3 x 2",
-    delta: "+15 pts / -8 pts",
-    sets: "Set 1: 2/3 · Set 2: 1/3",
-    horario: "Hoje, 10:30",
-    status: "validado",
-  },
-];
-
-const statusBadge: Record<MatchStatus, { label: string; className: string }> = {
+const statusBadge: Record<
+  MatchEntry["status"],
+  { label: string; className: string }
+> = {
   pendente: { label: "Confirmação pendente", className: "bg-amber-100 text-amber-700" },
-  contestado: { label: "Contestado", className: "bg-red-100 text-red-600" },
+  contestado: { label: "Ajustar placar", className: "bg-red-100 text-red-600" },
   validado: { label: "Validado", className: "bg-emerald-100 text-emerald-700" },
 };
 
 export default function PartidasPage() {
+  const { pendentes, recentes } = useMatchStore();
+  const { user } = useAuth();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftOutcome, setDraftOutcome] = useState<Record<string, string>>({});
+
+  const pendentesDoUsuario = user
+    ? pendentes.filter(
+        (m) => m.me === user.name || m.opponent === user.name,
+      )
+    : [];
+  const recentesDoUsuario = user
+    ? recentes.filter(
+        (m) => m.me === user.name || m.opponent === user.name,
+      )
+    : [];
+
   return (
     <AppShell
       title="Partidas"
@@ -59,11 +59,20 @@ export default function PartidasPage() {
         </div>
 
         <div className="space-y-3">
-          {pendentes.map((item) => {
+          {pendentesDoUsuario.map((item) => {
             const badge = statusBadge[item.status];
+            const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
+            const isEditing = editingId === item.id;
+            const selected = draftOutcome[item.id] ?? item.outcome;
+            const euRegistrei = item.me === user?.name;
+            const euSouOponente = item.opponent === user?.name;
+            const euDevoAgir =
+              (euSouOponente && item.status === "pendente") ||
+              (euRegistrei && item.edited === true);
+            const lastActionByMe = item.lastActionBy === user?.name;
             return (
               <article
-                key={`${item.opponent}-${item.horario}`}
+                key={item.id}
                 className="space-y-3 rounded-2xl border border-border bg-muted/60 p-3 shadow-sm"
               >
                 <div className="flex items-center justify-between">
@@ -76,29 +85,107 @@ export default function PartidasPage() {
                     {badge.label}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Ao registrar, a partida fica pendente até o adversário confirmar. Se discordar, use
-                  &quot;Contestar&quot;.
-                </p>
-                <div className="flex gap-2">
-                  <button className="flex-1 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                    Confirmar
-                  </button>
-                  <button className="flex-1 rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                    Contestar
-                  </button>
-                </div>
+
+                {euRegistrei && !euDevoAgir ? (
+                  <p className="text-xs text-muted-foreground">
+                    Aguardando o adversário confirmar ou contestar. Você já registrou este placar.
+                  </p>
+                ) : isEditing ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Ajuste o placar e salve. O outro jogador confirma em seguida.
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+                      {quickOutcomes.map((outcome) => (
+                        <button
+                          key={outcome}
+                          onClick={() =>
+                            setDraftOutcome((prev) => ({
+                              ...prev,
+                              [item.id]: outcome,
+                            }))
+                          }
+                          className={`rounded-full border px-3 py-2 transition ${
+                            selected === outcome
+                              ? "border-primary bg-primary/15 text-primary"
+                              : "border-border bg-card text-foreground"
+                          }`}
+                        >
+                          {outcome}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Confirme o placar ou conteste caso esteja errado.
+                  </p>
+                )}
+
+                {euDevoAgir && !lastActionByMe ? (
+                  <div className="flex gap-2">
+                    {!isEditing ? (
+                      <>
+                        <button
+                          onClick={() => confirmMatch(item.id)}
+                          className="flex-1 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingId(item.id);
+                            setDraftOutcome((prev) => ({
+                              ...prev,
+                              [item.id]: item.outcome,
+                            }));
+                          }}
+                          className="flex-1 rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          Contestar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            if (selected) {
+                              updateOutcome(item.id, selected, user?.name ?? "");
+                              setEditingId(null);
+                            }
+                          }}
+                          className="flex-1 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          Salvar ajuste
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingId(null);
+                            setDraftOutcome((prev) => {
+                              const next = { ...prev };
+                              delete next[item.id];
+                              return next;
+                            });
+                          }}
+                          className="flex-1 rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : null}
               </article>
             );
           })}
         </div>
 
         <div className="space-y-3">
-          {recentes.map((match) => {
+          {recentesDoUsuario.map((match) => {
             const badge = statusBadge[match.status];
             return (
               <article
-                key={match.horario}
+                key={match.id}
                 className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm"
               >
                 <div className="flex items-center justify-between">
@@ -110,13 +197,20 @@ export default function PartidasPage() {
                   </span>
                 </div>
                 <p className="text-sm font-semibold text-foreground">
-                  {match.me} <span className="text-primary">{match.score}</span>{" "}
+                  {match.me}{" "}
+                  {match.score ? (
+                    <span className="text-primary">{match.score}</span>
+                  ) : null}{" "}
                   {match.opponent}
                 </p>
-                <p className="text-xs font-semibold text-green-600">
-                  {match.delta}
-                </p>
-                <p className="text-xs text-muted-foreground">{match.sets}</p>
+                {match.delta ? (
+                  <p className="text-xs font-semibold text-green-600">
+                    {match.delta}
+                  </p>
+                ) : null}
+                {match.setsDesc ? (
+                  <p className="text-xs text-muted-foreground">{match.setsDesc}</p>
+                ) : null}
               </article>
             );
           })}

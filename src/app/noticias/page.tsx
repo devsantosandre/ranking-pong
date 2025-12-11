@@ -1,34 +1,11 @@
+"use client";
+
 import { AppShell } from "@/components/app-shell";
-
-type NewsPost = {
-  title: string;
-  season: string;
-  timeAgo: string;
-  winner: string;
-  loser: string;
-  score: string;
-};
-
-const posts: NewsPost[] = [
-  {
-    title: "BARRAGEM MASCULINA SESC TAGUATINGA SUL",
-    season: "42ª Temporada",
-    timeAgo: "15 horas",
-    winner: "Felipe Velter Teles",
-    loser: "Saulo Velter Teles",
-    score: "6x3 4x6 10x6",
-  },
-  {
-    title: "BARRAGEM MASCULINA SESC TAGUATINGA SUL",
-    season: "42ª Temporada",
-    timeAgo: "19 horas",
-    winner: "André Luís de Sousa Santos",
-    loser: "Carlos Alberto Gonçalves",
-    score: "7x5 7x6",
-  },
-];
+import { useNewsStore } from "@/lib/news-store";
 
 export default function NoticiasPage() {
+  const { posts } = useNewsStore();
+
   return (
     <AppShell
       title="Notícias - Jogos"
