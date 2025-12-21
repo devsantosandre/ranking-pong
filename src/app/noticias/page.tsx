@@ -2,8 +2,8 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useNews } from "@/lib/queries";
-import { Loader2 } from "lucide-react";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { NewsListSkeleton } from "@/components/skeletons";
 import { useMemo } from "react";
 
 export default function NoticiasPage() {
@@ -44,9 +44,7 @@ export default function NoticiasPage() {
         subtitle="Feed de resultados e destaques"
         showBack
       >
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+        <NewsListSkeleton count={4} />
       </AppShell>
     );
   }

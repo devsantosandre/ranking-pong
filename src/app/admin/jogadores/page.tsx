@@ -30,6 +30,7 @@ import {
   adminChangeUserRole,
   type AdminUser,
 } from "@/app/actions/admin";
+import { PlayerListSkeleton } from "@/components/skeletons";
 
 const roleLabels: Record<string, string> = {
   player: "Jogador",
@@ -523,9 +524,7 @@ export default function AdminJogadoresPage() {
 
         {/* Loading */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <PlayerListSkeleton count={6} />
         ) : filteredUsers.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             Nenhum jogador encontrado

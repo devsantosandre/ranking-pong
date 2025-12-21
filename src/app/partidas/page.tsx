@@ -12,6 +12,7 @@ import {
   type UserInfo,
 } from "@/lib/queries";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { PendingMatchListSkeleton } from "@/components/skeletons";
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   pendente: { label: "Aguardando confirmação", className: "bg-amber-100 text-amber-700" },
@@ -82,8 +83,17 @@ export default function PartidasPage() {
   if (authLoading || isLoading) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="space-y-4">
+          {/* Tabs skeleton */}
+          <div className="flex gap-3 text-sm font-semibold">
+            <button className="rounded-full bg-primary/15 px-3 py-2 text-primary">
+              Pendentes
+            </button>
+            <button className="rounded-full bg-muted/70 px-3 py-2 text-foreground">
+              Recentes
+            </button>
+          </div>
+          <PendingMatchListSkeleton count={4} />
         </div>
       </AppShell>
     );

@@ -1,10 +1,11 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { Search, Loader2 } from "lucide-react";
+import { Search } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRanking } from "@/lib/queries";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { PlayerListSkeleton } from "@/components/skeletons";
 
 export default function RankingPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,8 +44,17 @@ export default function RankingPage() {
   if (isLoading) {
     return (
       <AppShell title="Ranking" subtitle="Classificação dos jogadores" showBack>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="space-y-4">
+          {/* Search field visible during loading */}
+          <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <input
+              className="h-10 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder="Buscar jogador..."
+              disabled
+            />
+          </div>
+          <PlayerListSkeleton count={8} />
         </div>
       </AppShell>
     );

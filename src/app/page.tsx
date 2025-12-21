@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useRanking, useMatches } from "@/lib/queries";
+import { HomePageSkeleton, PendingMatchListSkeleton } from "@/components/skeletons";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
@@ -53,9 +54,7 @@ export default function Home() {
   if (isLoading) {
     return (
       <AppShell title="Visão geral" subtitle="Carregando..." showBack={false}>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+        <HomePageSkeleton />
       </AppShell>
     );
   }
@@ -166,9 +165,7 @@ export default function Home() {
               Faça login para ver suas partidas
             </p>
           ) : matchesLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
+            <PendingMatchListSkeleton count={2} />
           ) : pendingMatches.length > 0 ? (
             pendingMatches.map((match) => {
               const opponent = match.player_a_id === user.id ? match.player_b : match.player_a;

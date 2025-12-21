@@ -6,6 +6,7 @@ import { Loader2, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { MatchListSkeleton } from "@/components/skeletons";
 import {
   adminGetAllMatches,
   adminCancelMatch,
@@ -175,9 +176,7 @@ export default function AdminPartidasPage() {
 
         {/* Loading */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <MatchListSkeleton count={5} />
         ) : matches.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             Nenhuma partida encontrada

@@ -3,7 +3,6 @@
 import { AppShell } from "@/components/app-shell";
 import { useState, useEffect } from "react";
 import {
-  Loader2,
   AlertTriangle,
   X,
   User,
@@ -13,6 +12,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { LogListSkeleton } from "@/components/skeletons";
 import { adminGetLogs, type AdminLog } from "@/app/actions/admin";
 
 const actionLabels: Record<string, { label: string; color: string }> = {
@@ -110,9 +110,7 @@ export default function AdminLogsPage() {
 
         {/* Loading */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <LogListSkeleton count={6} />
         ) : logs.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             Nenhuma acao registrada

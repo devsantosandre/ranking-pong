@@ -8,6 +8,7 @@ import { Loader2, Key, Check, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ProfilePageSkeleton, MatchListSkeleton } from "@/components/skeletons";
 
 export default function PerfilPage() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -175,9 +176,7 @@ export default function PerfilPage() {
   if (isLoading) {
     return (
       <AppShell title="Perfil" subtitle="Carregando..." showBack>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+        <ProfilePageSkeleton />
       </AppShell>
     );
   }
@@ -329,9 +328,7 @@ export default function PerfilPage() {
         <div className="space-y-3">
           <p className="px-1 text-sm font-semibold text-foreground">Últimos jogos</p>
           {matchesLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
+            <MatchListSkeleton count={3} />
           ) : recentMatches.length > 0 ? (
             recentMatches.map((match) => {
               const euSouA = match.player_a_id === user.id;
