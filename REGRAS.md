@@ -355,3 +355,8 @@
 6. **Notícias de resultados** - feed
 7. **Inatividade** - cron + notificações básicas
 8. **Testes e Deploy** - end-to-end mobile, Vercel + Supabase
+
+
+
+
+

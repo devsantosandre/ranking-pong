@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/client";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Image from "next/image";
 
 type AuthMode = "login" | "register";
 
@@ -76,10 +77,15 @@ export default function LoginPage() {
       <div className="w-full max-w-[380px] space-y-6">
         {/* Logo / Branding */}
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 text-3xl shadow-lg">
-            🏓
+          <div className="mx-auto mb-4 flex h-48 w-48 items-center justify-center rounded-2xl bg-white/20 shadow-lg overflow-hidden p-4">
+            <Image
+              src="/smash-pong-logo.png"
+              alt="Smash Pong Logo"
+              width={152}
+              height={152}
+              className="object-contain"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-white">Smash Pong</h1>
           <p className="mt-1 text-sm text-white/70">
             {mode === "login"
               ? "Entre na sua conta"
