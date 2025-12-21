@@ -1,8 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
+
+const PAGE_SIZE = 20;
 
 export type User = {
   id: string;
@@ -15,7 +17,7 @@ export type User = {
   jogos_disputados: number | null;
 };
 
-// Hook para buscar lista de usuários
+// Hook para buscar lista de usuários (apenas ativos)
 export function useUsers() {
   const supabase = createClient();
 
@@ -25,6 +27,7 @@ export function useUsers() {
       const { data, error } = await supabase
         .from("users")
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
+        .eq("is_active", true)
         .order("name");
 
       if (error) throw error;
@@ -33,21 +36,31 @@ export function useUsers() {
   });
 }
 
-// Hook para buscar ranking (ordenado por rating)
+// Hook para buscar ranking com paginacao (ordenado por rating, apenas ativos)
 export function useRanking() {
   const supabase = createClient();
 
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: queryKeys.users.ranking(),
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
+      const from = pageParam * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       const { data, error } = await supabase
         .from("users")
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
-        .order("rating_atual", { ascending: false });
+        .eq("is_active", true)
+        .order("rating_atual", { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
-      return data as User[];
+      return {
+        users: data as User[],
+        nextPage: data && data.length === PAGE_SIZE ? pageParam + 1 : undefined,
+      };
     },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    initialPageParam: 0,
   });
 }
 

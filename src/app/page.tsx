@@ -5,11 +5,21 @@ import { useAuth } from "@/lib/auth-store";
 import { useRanking, useMatches } from "@/lib/queries";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useMemo } from "react";
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const { data: ranking = [], isLoading: rankingLoading } = useRanking();
-  const { data: matches = [], isLoading: matchesLoading } = useMatches(user?.id);
+  const { data: rankingData, isLoading: rankingLoading } = useRanking();
+  const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
+
+  // Flatten paginated data
+  const ranking = useMemo(() => {
+    return rankingData?.pages.flatMap((page) => page.users) ?? [];
+  }, [rankingData]);
+
+  const matches = useMemo(() => {
+    return matchesData?.pages.flatMap((page) => page.matches) ?? [];
+  }, [matchesData]);
 
   const isLoading = authLoading || rankingLoading;
 

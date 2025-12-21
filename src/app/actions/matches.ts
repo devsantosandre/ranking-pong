@@ -36,8 +36,23 @@ export async function confirmMatchAction(
   const myRating = myData?.rating_atual ?? 250;
   const opponentRating = opponentData?.rating_atual ?? 250;
 
-  const myDelta = isWinner ? 20 : 8;
-  const opponentDelta = isWinner ? 8 : 20;
+  // Buscar configuracoes dinamicas
+  const { data: settings } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["pontos_vitoria", "pontos_derrota"]);
+
+  const pontosVitoria = parseInt(
+    settings?.find((s) => s.key === "pontos_vitoria")?.value || "20",
+    10
+  );
+  const pontosDerrota = parseInt(
+    settings?.find((s) => s.key === "pontos_derrota")?.value || "8",
+    10
+  );
+
+  const myDelta = isWinner ? pontosVitoria : pontosDerrota;
+  const opponentDelta = isWinner ? pontosDerrota : pontosVitoria;
 
   // Determinar quem é o vencedor da partida
   const winnerId = match.vencedor_id;
@@ -66,7 +81,7 @@ export async function confirmMatchAction(
   await supabase
     .from("users")
     .update({
-      rating_atual: (winnerData?.rating_atual ?? 250) + 20,
+      rating_atual: (winnerData?.rating_atual ?? 250) + pontosVitoria,
       vitorias: (winnerData?.vitorias ?? 0) + 1,
       jogos_disputados: (winnerData?.jogos_disputados ?? 0) + 1,
     })
@@ -77,7 +92,7 @@ export async function confirmMatchAction(
   await supabase
     .from("users")
     .update({
-      rating_atual: (loserData?.rating_atual ?? 250) + 8,
+      rating_atual: (loserData?.rating_atual ?? 250) + pontosDerrota,
       derrotas: (loserData?.derrotas ?? 0) + 1,
       jogos_disputados: (loserData?.jogos_disputados ?? 0) + 1,
     })
@@ -160,6 +175,15 @@ export async function registerMatchAction(input: {
   const resultadoA = parseInt(aStr, 10);
   const resultadoB = parseInt(bStr, 10);
 
+  // Buscar limite diario das configuracoes
+  const { data: limiteSetting } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "limite_jogos_diarios")
+    .single();
+
+  const limiteJogosDiarios = parseInt(limiteSetting?.value || "2", 10);
+
   // Verificar limite diário
   const today = new Date().toISOString().split("T")[0];
   const { data: limitData } = await supabase
@@ -170,8 +194,8 @@ export async function registerMatchAction(input: {
     .eq("data", today)
     .single();
 
-  if (limitData && limitData.jogos_registrados >= 2) {
-    return { success: false, error: "Limite de 2 jogos/dia contra este adversário atingido!" };
+  if (limitData && limitData.jogos_registrados >= limiteJogosDiarios) {
+    return { success: false, error: `Limite de ${limiteJogosDiarios} jogos/dia contra este adversário atingido!` };
   }
 
   // Determinar vencedor

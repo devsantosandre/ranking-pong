@@ -11,17 +11,24 @@ import {
   useState,
 } from "react";
 
+export type UserRole = "player" | "moderator" | "admin";
+
 export type AuthUser = {
   id: string;
   name: string;
   email?: string;
   rating?: number;
+  role: UserRole;
+  isActive: boolean;
 };
 
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   logout: () => Promise<void>;
+  isAdmin: boolean;
+  isModerator: boolean;
+  canAccessAdmin: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -42,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Buscar dados completos da tabela users
       const { data: profile } = await supabase
         .from("users")
-        .select("full_name, name, rating_atual")
+        .select("full_name, name, rating_atual, role, is_active")
         .eq("id", authUser.id)
         .single();
 
@@ -53,9 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           profile?.name ||
           authUser.user_metadata?.name ||
           authUser.email?.split("@")[0] ||
-          "Usuário",
+          "Usuario",
         email: authUser.email,
         rating: profile?.rating_atual ?? 250,
+        role: (profile?.role as UserRole) || "player",
+        isActive: profile?.is_active ?? true,
       });
       setLoading(false);
     },
@@ -90,8 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [supabase]);
 
+  // Helpers de permissao
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+  const canAccessAdmin = user?.role === "admin" || user?.role === "moderator";
+
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, logout, isAdmin, isModerator, canAccessAdmin }}
+    >
       {children}
     </AuthContext.Provider>
   );

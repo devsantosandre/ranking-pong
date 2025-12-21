@@ -1,7 +1,11 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { addNews } from "@/lib/news-store";
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const addNews = (_data: { title: string; winner: string; loser: string; score: string }) => {
+  // Legacy placeholder - news is now handled via Supabase
+};
 
 type MatchStatus = "pendente" | "validado" | "contestado";
 

@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import {
   useMatches,
@@ -11,6 +11,7 @@ import {
   type MatchWithUsers,
   type UserInfo,
 } from "@/lib/queries";
+import { LoadMoreButton } from "@/components/ui/load-more-button";
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   pendente: { label: "Aguardando confirmação", className: "bg-amber-100 text-amber-700" },
@@ -28,9 +29,21 @@ export default function PartidasPage() {
   const [draftOutcome, setDraftOutcome] = useState<Record<string, string>>({});
 
   // React Query hooks
-  const { data: matches = [], isLoading, error } = useMatches(user?.id);
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useMatches(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
+
+  // Flatten paginated data
+  const matches = useMemo(() => {
+    return data?.pages.flatMap((page) => page.matches) ?? [];
+  }, [data]);
 
   const pendentes = matches.filter((m) => m.status === "pendente" || m.status === "edited");
   const recentes = matches.filter((m) => m.status === "validado");
@@ -178,6 +191,13 @@ export default function PartidasPage() {
                 formatDate={formatDate}
               />
             ))}
+
+          {/* Botao Carregar mais */}
+          <LoadMoreButton
+            onClick={() => fetchNextPage()}
+            isLoading={isFetchingNextPage}
+            hasMore={!!hasNextPage}
+          />
         </div>
       </div>
     </AppShell>

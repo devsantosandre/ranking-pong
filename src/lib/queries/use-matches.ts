@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
 import {
@@ -8,6 +8,8 @@ import {
   contestMatchAction,
   registerMatchAction,
 } from "@/app/actions/matches";
+
+const PAGE_SIZE = 20;
 
 export type MatchData = {
   id: string;
@@ -35,14 +37,17 @@ export type MatchWithUsers = MatchData & {
   player_b: UserInfo;
 };
 
-// Hook para buscar partidas do usuário
+// Hook para buscar partidas do usuário com paginacao
 export function useMatches(userId: string | undefined) {
   const supabase = createClient();
 
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: queryKeys.matches.list(userId),
-    queryFn: async () => {
-      if (!userId) return [];
+    queryFn: async ({ pageParam = 0 }) => {
+      if (!userId) return { matches: [] as MatchWithUsers[], nextPage: undefined };
+
+      const from = pageParam * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
       // Buscar partidas
       const { data: matchesData, error: matchesError } = await supabase
@@ -50,14 +55,16 @@ export function useMatches(userId: string | undefined) {
         .select("*")
         .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .range(from, to);
 
       if (matchesError) throw matchesError;
-      if (!matchesData || matchesData.length === 0) return [];
+      if (!matchesData || matchesData.length === 0) {
+        return { matches: [] as MatchWithUsers[], nextPage: undefined };
+      }
 
       // Coletar IDs únicos de jogadores
       const playerIds = new Set<string>();
-      matchesData.forEach((m) => {
+      matchesData.forEach((m: MatchData) => {
         playerIds.add(m.player_a_id);
         playerIds.add(m.player_b_id);
       });
@@ -72,10 +79,10 @@ export function useMatches(userId: string | undefined) {
 
       // Criar mapa de usuários
       const usersMap = new Map<string, UserInfo>();
-      usersData?.forEach((u) => usersMap.set(u.id, u));
+      usersData?.forEach((u: UserInfo) => usersMap.set(u.id, u));
 
       // Combinar dados
-      const matchesWithUsers: MatchWithUsers[] = matchesData.map((match) => ({
+      const matchesWithUsers: MatchWithUsers[] = matchesData.map((match: MatchData) => ({
         ...match,
         player_a: usersMap.get(match.player_a_id) || {
           id: match.player_a_id,
@@ -91,8 +98,13 @@ export function useMatches(userId: string | undefined) {
         },
       }));
 
-      return matchesWithUsers;
+      return {
+        matches: matchesWithUsers,
+        nextPage: matchesData.length === PAGE_SIZE ? pageParam + 1 : undefined,
+      };
     },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    initialPageParam: 0,
     enabled: !!userId,
   });
 }

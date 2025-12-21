@@ -10,6 +10,7 @@ import {
   ListChecks,
   LogOut,
   Newspaper,
+  Shield,
   Trophy,
   UserCircle,
 } from "lucide-react";
@@ -21,13 +22,15 @@ type NavItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/noticias", label: "Notícias", icon: Newspaper },
+  { href: "/noticias", label: "Noticias", icon: Newspaper },
   { href: "/partidas", label: "Partidas", icon: ListChecks },
   { href: "/ranking", label: "Ranking", icon: Trophy },
-  { href: "/perfil", label: "Perfil", icon: UserCircle },
 ];
+
+const adminNavItem: NavItem = { href: "/admin", label: "Admin", icon: Shield };
+const profileNavItem: NavItem = { href: "/perfil", label: "Perfil", icon: UserCircle };
 
 export function AppShell({
   title,
@@ -42,11 +45,22 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, loading, logout, canAccessAdmin } = useAuth();
+
+  // Construir navItems dinamicamente baseado nas permissoes
+  const navItems = useMemo(() => {
+    const items = [...baseNavItems];
+    if (canAccessAdmin) {
+      items.push(adminNavItem);
+    }
+    items.push(profileNavItem);
+    return items;
+  }, [canAccessAdmin]);
+
   const active = useMemo(
     () => navItems.find((item) => pathname === item.href)?.href,
-    [pathname]
+    [pathname, navItems]
   );
-  const { user, loading, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
