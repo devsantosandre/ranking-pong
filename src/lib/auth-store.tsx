@@ -20,6 +20,7 @@ export type AuthUser = {
   rating?: number;
   role: UserRole;
   isActive: boolean;
+  hideFromRanking: boolean;
 };
 
 type AuthContextValue = {
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Buscar dados completos da tabela users
         const { data: profile, error } = await supabase
           .from("users")
-          .select("full_name, name, rating_atual, role, is_active")
+          .select("full_name, name, rating_atual, role, is_active, hide_from_ranking")
           .eq("id", authUser.id)
           .single();
 
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           rating: profile?.rating_atual ?? 250,
           role: (profile?.role as UserRole) || "player",
           isActive: profile?.is_active ?? true,
+          hideFromRanking: profile?.hide_from_ranking ?? false,
         });
       } catch (error) {
         console.error("Error in fetchUserProfile:", error);
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           rating: 250,
           role: "player",
           isActive: true,
+          hideFromRanking: false,
         });
       } finally {
         setLoading(false);

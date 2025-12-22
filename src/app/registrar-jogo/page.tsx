@@ -106,6 +106,29 @@ export default function RegistrarJogoPage() {
     );
   };
 
+  // Verificar se usuário é observador
+  if (user?.hideFromRanking) {
+    return (
+      <AppShell
+        title="Registrar jogo"
+        subtitle="Ação não permitida"
+        showBack
+      >
+        <div className="space-y-4">
+          <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-amber-800 mb-2">
+              Observadores não podem registrar partidas
+            </p>
+            <p className="text-xs text-amber-700">
+              Você está configurado como observador do ranking. Para participar de partidas,
+              um administrador precisa alterar sua configuração em "Admin → Jogadores".
+            </p>
+          </article>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell
       title="Registrar jogo"

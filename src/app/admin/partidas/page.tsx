@@ -2,6 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -28,6 +29,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminPartidasPage() {
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("todas");
   const [matches, setMatches] = useState<AdminMatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,6 +126,11 @@ export default function AdminPartidasPage() {
       setCancelReason("");
       setFieldError("");
       setError("");
+      // Invalidar queries de ranking se for partida validada (pontos foram revertidos)
+      if (confirmModal.isValidated) {
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+        queryClient.invalidateQueries({ queryKey: ["matches"] });
+      }
       loadMatches();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cancelar");

@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   Plus,
@@ -15,6 +16,8 @@ import {
   Shield,
   ChevronDown,
   ChevronUp,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +29,7 @@ import {
   adminResetPassword,
   adminUpdateUserRating,
   adminToggleUserStatus,
+  adminToggleHideFromRanking,
   adminResetUserStats,
   adminChangeUserRole,
   type AdminUser,
@@ -58,7 +62,7 @@ const roleFilters = [
 ];
 
 type ConfirmAction = {
-  type: "toggle_status" | "reset_stats" | "change_role" | "reset_password";
+  type: "toggle_status" | "reset_stats" | "change_role" | "reset_password" | "toggle_hide_from_ranking";
   userId: string;
   userName: string;
   extra?: string; // para role ou senha
@@ -66,6 +70,7 @@ type ConfirmAction = {
 
 export default function AdminJogadoresPage() {
   const { isAdmin, user: currentUser } = useAuth();
+  const queryClient = useQueryClient();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -263,6 +268,8 @@ export default function AdminJogadoresPage() {
       setNewRating("");
       setRatingReason("");
       setRatingErrors({ rating: "", reason: "" });
+      // Invalidar queries de ranking pois rating mudou
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       loadUsers();
     } catch (err) {
       setRatingErrors({
@@ -314,6 +321,18 @@ export default function AdminJogadoresPage() {
     });
   };
 
+  const handleToggleHideFromRankingClick = (user: AdminUser) => {
+    setConfirmModal({
+      isOpen: true,
+      action: {
+        type: "toggle_hide_from_ranking",
+        userId: user.id,
+        userName: user.full_name || user.name || "Jogador",
+        extra: user.hide_from_ranking ? "mostrar" : "ocultar",
+      },
+    });
+  };
+
   const handleConfirmAction = async () => {
     if (!confirmModal.action) return;
 
@@ -324,9 +343,18 @@ export default function AdminJogadoresPage() {
       switch (type) {
         case "toggle_status":
           await adminToggleUserStatus(userId);
+          // Invalidar queries de ranking pois status afeta quem aparece
+          queryClient.invalidateQueries({ queryKey: ["users"] });
+          break;
+        case "toggle_hide_from_ranking":
+          await adminToggleHideFromRanking(userId);
+          // Invalidar queries de ranking pois hide_from_ranking afeta quem aparece
+          queryClient.invalidateQueries({ queryKey: ["users"] });
           break;
         case "reset_stats":
           await adminResetUserStats(userId);
+          // Invalidar queries de ranking pois stats mudaram
+          queryClient.invalidateQueries({ queryKey: ["users"] });
           break;
         case "change_role":
           await adminChangeUserRole(userId, extra as "player" | "moderator" | "admin");
@@ -340,8 +368,10 @@ export default function AdminJogadoresPage() {
       }
 
       loadUsers();
-    } catch {
-      // Error handling
+    } catch (err) {
+      // Mostrar erro ao usuário
+      const errorMessage = err instanceof Error ? err.message : "Erro ao executar acao";
+      alert(errorMessage);
     } finally {
       setConfirmLoading(false);
       setConfirmModal({ isOpen: false, action: null });
@@ -364,6 +394,15 @@ export default function AdminJogadoresPage() {
               ? `Deseja desativar "${userName}"? O jogador nao podera fazer login e nao aparecera no ranking.`
               : `Deseja ativar "${userName}"? O jogador podera fazer login novamente.`,
           variant: extra === "desativar" ? ("danger" as const) : ("default" as const),
+        };
+      case "toggle_hide_from_ranking":
+        return {
+          title: extra === "ocultar" ? "Ocultar do ranking" : "Mostrar no ranking",
+          description:
+            extra === "ocultar"
+              ? `Deseja ocultar "${userName}" do ranking? O jogador continuara ativo e podera fazer login, mas nao aparecera na listagem do ranking e nao podera registrar partidas. Ideal para administradores que querem apenas observar. IMPORTANTE: Nao e possivel ocultar se houver partidas pendentes.`
+              : `Deseja mostrar "${userName}" no ranking? O jogador voltara a aparecer na listagem do ranking e podera registrar partidas novamente.`,
+          variant: "default" as const,
         };
       case "reset_stats":
         return {
@@ -585,6 +624,11 @@ export default function AdminJogadoresPage() {
                               Inativo
                             </span>
                           )}
+                          {player.hide_from_ranking && (
+                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-600">
+                              Observador
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -768,6 +812,25 @@ export default function AdminJogadoresPage() {
                           >
                             <Power className="mr-2 h-4 w-4" />
                             {player.is_active ? "Desativar" : "Ativar"}
+                          </Button>
+
+                          {/* Ocultar/Mostrar no Ranking */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`w-full ${
+                              player.hide_from_ranking
+                                ? "text-purple-600 hover:bg-purple-50"
+                                : "text-blue-600 hover:bg-blue-50"
+                            }`}
+                            onClick={() => handleToggleHideFromRankingClick(player)}
+                          >
+                            {player.hide_from_ranking ? (
+                              <Eye className="mr-2 h-4 w-4" />
+                            ) : (
+                              <EyeOff className="mr-2 h-4 w-4" />
+                            )}
+                            {player.hide_from_ranking ? "Mostrar no Ranking" : "Ocultar do Ranking"}
                           </Button>
 
                           {/* Resetar Stats */}

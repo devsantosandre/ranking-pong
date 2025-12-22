@@ -36,6 +36,7 @@ export type AdminUser = {
   email: string;
   role: string;
   is_active: boolean;
+  hide_from_ranking: boolean;
   rating_atual: number;
   vitorias: number;
   derrotas: number;
@@ -281,7 +282,7 @@ export async function adminGetAllUsers(
   let query = supabase
     .from("users")
     .select(
-      "id, name, full_name, email, role, is_active, rating_atual, vitorias, derrotas, jogos_disputados"
+      "id, name, full_name, email, role, is_active, hide_from_ranking, rating_atual, vitorias, derrotas, jogos_disputados"
     )
     .order("rating_atual", { ascending: false });
 
@@ -547,6 +548,66 @@ export async function adminToggleUserStatus(userId: string) {
     target_name: user.full_name || user.name,
     old_value: { is_active: user.is_active },
     new_value: { is_active: newStatus },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/ranking");
+
+  return { success: true, newStatus };
+}
+
+export async function adminToggleHideFromRanking(userId: string) {
+  await requireAdminOnly();
+  const supabase = await createClient();
+
+  // Buscar usuario
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id, name, full_name, hide_from_ranking")
+    .eq("id", userId)
+    .single();
+
+  if (userError || !user) {
+    throw new Error("Usuario nao encontrado");
+  }
+
+  const newStatus = !user.hide_from_ranking;
+
+  // Se está tentando ocultar (newStatus = true), verificar se há partidas pendentes
+  if (newStatus === true) {
+    const { data: pendingMatches, error: matchesError } = await supabase
+      .from("matches")
+      .select("id")
+      .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
+      .in("status", ["pendente", "edited"])
+      .limit(1);
+
+    if (matchesError) {
+      throw new Error("Erro ao verificar partidas pendentes");
+    }
+
+    if (pendingMatches && pendingMatches.length > 0) {
+      throw new Error(
+        "Nao e possivel ocultar do ranking enquanto houver partidas pendentes. Confirme ou cancele as partidas pendentes primeiro."
+      );
+    }
+  }
+
+  // Atualizar status
+  await supabase
+    .from("users")
+    .update({ hide_from_ranking: newStatus })
+    .eq("id", userId);
+
+  // Registrar log
+  await createAdminLog({
+    action: newStatus ? "user_hidden_from_ranking" : "user_shown_in_ranking",
+    action_description: newStatus ? "Jogador oculto do ranking" : "Jogador visível no ranking",
+    target_type: "user",
+    target_id: userId,
+    target_name: user.full_name || user.name,
+    old_value: { hide_from_ranking: user.hide_from_ranking },
+    new_value: { hide_from_ranking: newStatus },
   });
 
   revalidatePath("/admin");

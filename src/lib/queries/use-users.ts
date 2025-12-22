@@ -28,6 +28,7 @@ export function useUsers() {
         .from("users")
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
         .eq("is_active", true)
+        .eq("hide_from_ranking", false)
         .order("name");
 
       if (error) throw error;
@@ -50,6 +51,7 @@ export function useRanking() {
         .from("users")
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
         .eq("is_active", true)
+        .eq("hide_from_ranking", false)
         .order("rating_atual", { ascending: false })
         .range(from, to);
 
