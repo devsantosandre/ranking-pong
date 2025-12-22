@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/utils/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import type { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
 import {
   createContext,
   type ReactNode,
@@ -46,27 +46,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Buscar dados completos da tabela users
-      const { data: profile } = await supabase
-        .from("users")
-        .select("full_name, name, rating_atual, role, is_active")
-        .eq("id", authUser.id)
-        .single();
+      try {
+        // Buscar dados completos da tabela users
+        const { data: profile, error } = await supabase
+          .from("users")
+          .select("full_name, name, rating_atual, role, is_active")
+          .eq("id", authUser.id)
+          .single();
 
-      setUser({
-        id: authUser.id,
-        name:
-          profile?.full_name ||
-          profile?.name ||
-          authUser.user_metadata?.name ||
-          authUser.email?.split("@")[0] ||
-          "Usuario",
-        email: authUser.email,
-        rating: profile?.rating_atual ?? 250,
-        role: (profile?.role as UserRole) || "player",
-        isActive: profile?.is_active ?? true,
-      });
-      setLoading(false);
+        if (error) {
+          console.error("Error fetching user profile:", error);
+        }
+
+        setUser({
+          id: authUser.id,
+          name:
+            profile?.full_name ||
+            profile?.name ||
+            authUser.user_metadata?.name ||
+            authUser.email?.split("@")[0] ||
+            "Usuario",
+          email: authUser.email,
+          rating: profile?.rating_atual ?? 250,
+          role: (profile?.role as UserRole) || "player",
+          isActive: profile?.is_active ?? true,
+        });
+      } catch (error) {
+        console.error("Error in fetchUserProfile:", error);
+        // Set user with basic info even if profile fetch fails
+        setUser({
+          id: authUser.id,
+          name: authUser.email?.split("@")[0] || "Usuario",
+          email: authUser.email,
+          rating: 250,
+          role: "player",
+          isActive: true,
+        });
+      } finally {
+        setLoading(false);
+      }
     },
     [supabase]
   );
@@ -74,10 +92,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Get initial session
     const getUser = async () => {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-      await fetchUserProfile(authUser);
+      try {
+        const {
+          data: { user: authUser },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error) {
+          // AuthSessionMissingError é esperado quando não há usuário logado
+          if (error.name !== "AuthSessionMissingError") {
+            console.error("Error getting user:", error);
+          }
+          setLoading(false);
+          return;
+        }
+
+        await fetchUserProfile(authUser);
+      } catch (error) {
+        console.error("Error in getUser:", error);
+        setLoading(false);
+      }
     };
 
     getUser();
@@ -85,9 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      await fetchUserProfile(session?.user ?? null);
-    });
+    } = supabase.auth.onAuthStateChange(
+      async (_event: AuthChangeEvent, session: Session | null) => {
+        await fetchUserProfile(session?.user ?? null);
+      }
+    );
 
     return () => {
       subscription.unsubscribe();

@@ -42,9 +42,9 @@ function formatRelativeTime(dateStr: string): string {
   const diffDays = Math.floor(diffHours / 24);
 
   if (diffMinutes < 1) return "agora";
-  if (diffMinutes < 60) return `ha ${diffMinutes} min`;
-  if (diffHours < 24) return `ha ${diffHours}h`;
-  if (diffDays < 7) return `ha ${diffDays}d`;
+  if (diffMinutes < 60) return `há ${diffMinutes} min`;
+  if (diffHours < 24) return `há ${diffHours}h`;
+  if (diffDays < 7) return `há ${diffDays}d`;
 
   return date.toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -159,8 +159,8 @@ export default function AdminLogsPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatRelativeTime(log.created_at)}
                       </span>
                       {isExpanded ? (
@@ -194,18 +194,22 @@ export default function AdminLogsPage() {
                       {log.old_value && (
                         <div className="text-xs">
                           <span className="text-muted-foreground">Antes: </span>
-                          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                            {JSON.stringify(log.old_value)}
-                          </code>
+                          <div className="mt-1 max-w-full overflow-x-auto">
+                            <code className="inline-block min-w-full rounded bg-muted px-2 py-1 text-[10px] whitespace-nowrap">
+                              {JSON.stringify(log.old_value)}
+                            </code>
+                          </div>
                         </div>
                       )}
 
                       {log.new_value && (
                         <div className="text-xs">
                           <span className="text-muted-foreground">Depois: </span>
-                          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                            {JSON.stringify(log.new_value)}
-                          </code>
+                          <div className="mt-1 max-w-full overflow-x-auto">
+                            <code className="inline-block min-w-full rounded bg-muted px-2 py-1 text-[10px] whitespace-nowrap">
+                              {JSON.stringify(log.new_value)}
+                            </code>
+                          </div>
                         </div>
                       )}
 

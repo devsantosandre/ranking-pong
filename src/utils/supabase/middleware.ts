@@ -28,8 +28,26 @@ export const updateSession = async (request: NextRequest) => {
     },
   });
 
-  // Refresh the session if it exists
-  await supabase.auth.getUser();
+  // Verificar autenticação
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const isLoginPage = request.nextUrl.pathname === "/login";
+
+  // Se não está autenticado e não está na página de login, redireciona para login
+  if (!user && !isLoginPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Se está autenticado e está na página de login, redireciona para home
+  if (user && isLoginPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 };
