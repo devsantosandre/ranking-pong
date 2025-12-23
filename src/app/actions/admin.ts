@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import {
   requireModerator,
   requireAdminOnly,
@@ -327,6 +328,7 @@ export async function adminCreateUser(
   }
 
   const supabase = await createClient();
+  const adminClient = createAdminClient();
 
   // Verificar se email ja existe
   const { data: existingUser } = await supabase
@@ -348,9 +350,9 @@ export async function adminCreateUser(
 
   const ratingInicial = parseInt(ratingConfig?.value || "250", 10);
 
-  // Criar usuario no Supabase Auth
+  // Criar usuario no Supabase Auth (requer service_role_key)
   const { data: authData, error: authError } =
-    await supabase.auth.admin.createUser({
+    await adminClient.auth.admin.createUser({
       email: email.toLowerCase().trim(),
       password: tempPassword,
       email_confirm: true,
@@ -379,8 +381,8 @@ export async function adminCreateUser(
   });
 
   if (userError) {
-    // Tentar deletar o usuario do auth se falhar
-    await supabase.auth.admin.deleteUser(authData.user.id);
+    // Tentar deletar o usuario do auth se falhar (requer service_role_key)
+    await adminClient.auth.admin.deleteUser(authData.user.id);
     throw new Error(`Erro ao criar perfil: ${userError.message}`);
   }
 
@@ -411,6 +413,7 @@ export async function adminResetPassword(
   }
 
   const supabase = await createClient();
+  const adminClient = createAdminClient();
 
   // Buscar usuario
   const { data: user, error: userError } = await supabase
@@ -423,8 +426,8 @@ export async function adminResetPassword(
     throw new Error("Usuario nao encontrado");
   }
 
-  // Resetar senha
-  const { error: authError } = await supabase.auth.admin.updateUserById(
+  // Resetar senha (requer service_role_key)
+  const { error: authError } = await adminClient.auth.admin.updateUserById(
     userId,
     {
       password: newTempPassword,

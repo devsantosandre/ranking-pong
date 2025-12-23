@@ -105,7 +105,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // AuthSessionMissingError é esperado quando não há usuário logado
           if (error.name !== "AuthSessionMissingError") {
             console.error("Error getting user:", error);
+            // Limpar sessão inválida para evitar loops
+            try {
+              await supabase.auth.signOut();
+            } catch {
+              // Ignorar erros ao fazer signOut
+            }
           }
+          setUser(null);
           setLoading(false);
           return;
         }
@@ -113,6 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await fetchUserProfile(authUser);
       } catch (error) {
         console.error("Error in getUser:", error);
+        // Em caso de erro inesperado, limpar sessão
+        setUser(null);
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          // Ignorar erros ao fazer signOut
+        }
         setLoading(false);
       }
     };
