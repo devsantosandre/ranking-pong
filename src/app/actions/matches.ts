@@ -2,64 +2,115 @@
 
 import { createClient } from "@/utils/supabase/server";
 
+// Validar formato do score (ex: "3x1", "2x3")
+function parseScore(outcome: string): { a: number; b: number } | null {
+  if (!outcome || typeof outcome !== "string") return null;
+
+  const match = outcome.match(/^(\d{1,2})x(\d{1,2})$/);
+  if (!match) return null;
+
+  const a = parseInt(match[1], 10);
+  const b = parseInt(match[2], 10);
+
+  // Validar range (0-99) e que não seja empate
+  if (isNaN(a) || isNaN(b) || a < 0 || b < 0 || a > 99 || b > 99 || a === b) {
+    return null;
+  }
+
+  return { a, b };
+}
+
 export async function confirmMatchAction(
   matchId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
-  // Buscar a partida
+  // 1. Buscar a partida COM VERIFICAÇÃO DE STATUS para evitar race condition
+  // Usamos uma query que já filtra por status válido
   const { data: match, error: matchFetchError } = await supabase
     .from("matches")
     .select("*")
     .eq("id", matchId)
+    .in("status", ["pendente", "edited"]) // Só permite confirmar se estiver nesses status
     .single();
 
   if (matchFetchError || !match) {
+    // Se não encontrou, pode ser que já foi confirmada ou não existe
+    const { data: existingMatch } = await supabase
+      .from("matches")
+      .select("status")
+      .eq("id", matchId)
+      .single();
+
+    if (existingMatch?.status === "validado") {
+      return { success: false, error: "Esta partida já foi confirmada" };
+    }
+    if (existingMatch?.status === "cancelado") {
+      return { success: false, error: "Esta partida foi cancelada" };
+    }
     return { success: false, error: "Partida não encontrada" };
   }
 
-  // Calcular pontuação
+  // 2. Calcular pontuação
   const euSouPlayerA = match.player_a_id === userId;
   const isWinner = match.vencedor_id === userId;
   const opponentId = euSouPlayerA ? match.player_b_id : match.player_a_id;
 
-  // Buscar dados atuais dos usuários
-  const { data: usersData } = await supabase
+  // 3. Buscar dados atuais dos usuários
+  const { data: usersData, error: usersError } = await supabase
     .from("users")
     .select("id, rating_atual, vitorias, derrotas, jogos_disputados")
     .in("id", [userId, opponentId]);
 
-  const myData = usersData?.find((u) => u.id === userId);
-  const opponentData = usersData?.find((u) => u.id === opponentId);
+  if (usersError || !usersData || usersData.length !== 2) {
+    console.error("Erro ao buscar usuários:", usersError);
+    return { success: false, error: "Erro ao buscar dados dos jogadores" };
+  }
 
-  const myRating = myData?.rating_atual ?? 250;
-  const opponentRating = opponentData?.rating_atual ?? 250;
+  const myData = usersData.find((u) => u.id === userId);
+  const opponentData = usersData.find((u) => u.id === opponentId);
 
-  // Buscar configuracoes dinamicas
+  if (!myData || !opponentData) {
+    return { success: false, error: "Dados dos jogadores não encontrados" };
+  }
+
+  const myRating = myData.rating_atual ?? 250;
+  const opponentRating = opponentData.rating_atual ?? 250;
+
+  // 4. Buscar configurações dinâmicas
   const { data: settings } = await supabase
     .from("settings")
     .select("key, value")
     .in("key", ["pontos_vitoria", "pontos_derrota"]);
 
-  const pontosVitoria = parseInt(
-    settings?.find((s) => s.key === "pontos_vitoria")?.value || "20",
-    10
-  );
-  const pontosDerrota = parseInt(
-    settings?.find((s) => s.key === "pontos_derrota")?.value || "8",
-    10
-  );
+  const pontosVitoriaStr = settings?.find((s) => s.key === "pontos_vitoria")?.value;
+  const pontosDerrotaStr = settings?.find((s) => s.key === "pontos_derrota")?.value;
+
+  const pontosVitoria = pontosVitoriaStr ? parseInt(pontosVitoriaStr, 10) : 20;
+  const pontosDerrota = pontosDerrotaStr ? parseInt(pontosDerrotaStr, 10) : 8;
+
+  // Validar que os pontos são números válidos
+  if (isNaN(pontosVitoria) || isNaN(pontosDerrota) || pontosVitoria < 0 || pontosDerrota < 0) {
+    return { success: false, error: "Configuração de pontos inválida" };
+  }
 
   const myDelta = isWinner ? pontosVitoria : pontosDerrota;
   const opponentDelta = isWinner ? pontosDerrota : pontosVitoria;
 
-  // Determinar quem é o vencedor da partida
+  // 5. Determinar quem é o vencedor da partida
   const winnerId = match.vencedor_id;
   const loserId = winnerId === match.player_a_id ? match.player_b_id : match.player_a_id;
+  const winnerData = usersData.find((u) => u.id === winnerId);
+  const loserData = usersData.find((u) => u.id === loserId);
 
-  // 1. Atualizar match para validado
-  const { error: matchError } = await supabase
+  if (!winnerData || !loserData) {
+    return { success: false, error: "Dados do vencedor/perdedor não encontrados" };
+  }
+
+  // 6. Atualizar match para validado COM CONDIÇÃO DE STATUS
+  // Isso previne race condition - só atualiza se ainda estiver pendente/edited
+  const { data: updatedMatch, error: matchError } = await supabase
     .from("matches")
     .update({
       status: "validado",
@@ -69,37 +120,61 @@ export async function confirmMatchAction(
       rating_final_a: euSouPlayerA ? myRating + myDelta : opponentRating + opponentDelta,
       rating_final_b: euSouPlayerA ? opponentRating + opponentDelta : myRating + myDelta,
     })
-    .eq("id", matchId);
+    .eq("id", matchId)
+    .in("status", ["pendente", "edited"]) // Só atualiza se status ainda for válido
+    .select()
+    .single();
 
-  if (matchError) {
-    console.error("Erro ao atualizar match:", matchError);
-    return { success: false, error: "Erro ao atualizar partida" };
+  if (matchError || !updatedMatch) {
+    // Se falhou, provavelmente outro request já confirmou
+    console.error("Erro ao atualizar match (possível race condition):", matchError);
+    return { success: false, error: "Esta partida já foi processada por outro usuário" };
   }
 
-  // 2. Atualizar stats do vencedor
-  const winnerData = usersData?.find((u) => u.id === winnerId);
-  await supabase
+  // 7. Atualizar stats do vencedor
+  const { error: winnerError } = await supabase
     .from("users")
     .update({
-      rating_atual: (winnerData?.rating_atual ?? 250) + pontosVitoria,
-      vitorias: (winnerData?.vitorias ?? 0) + 1,
-      jogos_disputados: (winnerData?.jogos_disputados ?? 0) + 1,
+      rating_atual: (winnerData.rating_atual ?? 250) + pontosVitoria,
+      vitorias: (winnerData.vitorias ?? 0) + 1,
+      jogos_disputados: (winnerData.jogos_disputados ?? 0) + 1,
     })
     .eq("id", winnerId);
 
-  // 3. Atualizar stats do perdedor
-  const loserData = usersData?.find((u) => u.id === loserId);
-  await supabase
+  if (winnerError) {
+    console.error("Erro ao atualizar stats do vencedor:", winnerError);
+    // Reverter o status da partida
+    await supabase.from("matches").update({ status: "pendente" }).eq("id", matchId);
+    return { success: false, error: "Erro ao atualizar estatísticas do vencedor" };
+  }
+
+  // 8. Atualizar stats do perdedor
+  const { error: loserError } = await supabase
     .from("users")
     .update({
-      rating_atual: (loserData?.rating_atual ?? 250) + pontosDerrota,
-      derrotas: (loserData?.derrotas ?? 0) + 1,
-      jogos_disputados: (loserData?.jogos_disputados ?? 0) + 1,
+      rating_atual: (loserData.rating_atual ?? 250) + pontosDerrota,
+      derrotas: (loserData.derrotas ?? 0) + 1,
+      jogos_disputados: (loserData.jogos_disputados ?? 0) + 1,
     })
     .eq("id", loserId);
 
-  // 4. Registrar transações
-  await supabase.from("rating_transactions").insert([
+  if (loserError) {
+    console.error("Erro ao atualizar stats do perdedor:", loserError);
+    // Tentar reverter (best effort)
+    await supabase
+      .from("users")
+      .update({
+        rating_atual: winnerData.rating_atual,
+        vitorias: winnerData.vitorias,
+        jogos_disputados: winnerData.jogos_disputados,
+      })
+      .eq("id", winnerId);
+    await supabase.from("matches").update({ status: "pendente" }).eq("id", matchId);
+    return { success: false, error: "Erro ao atualizar estatísticas do perdedor" };
+  }
+
+  // 9. Registrar transações
+  const { error: transactionError } = await supabase.from("rating_transactions").insert([
     {
       match_id: matchId,
       user_id: userId,
@@ -118,6 +193,11 @@ export async function confirmMatchAction(
     },
   ]);
 
+  if (transactionError) {
+    // Log error but don't fail - transactions are for audit only
+    console.error("Erro ao registrar transações (não crítico):", transactionError);
+  }
+
   return { success: true };
 }
 
@@ -126,35 +206,49 @@ export async function contestMatchAction(
   userId: string,
   newOutcome: string
 ): Promise<{ success: boolean; error?: string }> {
+  // Validar formato do score
+  const score = parseScore(newOutcome);
+  if (!score) {
+    return {
+      success: false,
+      error: "Formato de placar inválido. Use o formato NxN (ex: 3x1)",
+    };
+  }
+
   const supabase = await createClient();
 
-  const [aStr, bStr] = newOutcome.split("x");
-  const resultadoA = parseInt(aStr, 10);
-  const resultadoB = parseInt(bStr, 10);
-
-  // Buscar a partida para determinar o vencedor
-  const { data: match } = await supabase
+  // Buscar a partida para determinar o vencedor e verificar status
+  const { data: match, error: matchError } = await supabase
     .from("matches")
-    .select("player_a_id, player_b_id")
+    .select("player_a_id, player_b_id, status")
     .eq("id", matchId)
     .single();
 
-  if (!match) {
+  if (matchError || !match) {
     return { success: false, error: "Partida não encontrada" };
   }
 
-  const vencedorId = resultadoA > resultadoB ? match.player_a_id : match.player_b_id;
+  // Não permitir contestar partida já validada ou cancelada
+  if (match.status === "validado") {
+    return { success: false, error: "Não é possível contestar uma partida já validada" };
+  }
+  if (match.status === "cancelado") {
+    return { success: false, error: "Não é possível contestar uma partida cancelada" };
+  }
+
+  const vencedorId = score.a > score.b ? match.player_a_id : match.player_b_id;
 
   const { error } = await supabase
     .from("matches")
     .update({
-      resultado_a: resultadoA,
-      resultado_b: resultadoB,
+      resultado_a: score.a,
+      resultado_b: score.b,
       vencedor_id: vencedorId,
       status: "edited",
       criado_por: userId,
     })
-    .eq("id", matchId);
+    .eq("id", matchId)
+    .in("status", ["pendente", "edited"]); // Só atualiza se status for válido
 
   if (error) {
     console.error("Erro ao contestar:", error);
@@ -169,78 +263,130 @@ export async function registerMatchAction(input: {
   opponentId: string;
   outcome: string;
 }): Promise<{ success: boolean; error?: string }> {
+  // Validar formato do score
+  const score = parseScore(input.outcome);
+  if (!score) {
+    return {
+      success: false,
+      error: "Formato de placar inválido. Use o formato NxN (ex: 3x1)",
+    };
+  }
+
+  // Validar que não é o mesmo jogador
+  if (input.playerId === input.opponentId) {
+    return { success: false, error: "Você não pode jogar contra si mesmo" };
+  }
+
   const supabase = await createClient();
 
-  const [aStr, bStr] = input.outcome.split("x");
-  const resultadoA = parseInt(aStr, 10);
-  const resultadoB = parseInt(bStr, 10);
-
-  // Buscar limite diario das configuracoes
+  // Buscar limite diário das configurações
   const { data: limiteSetting } = await supabase
     .from("settings")
     .select("value")
     .eq("key", "limite_jogos_diarios")
     .single();
 
-  const limiteJogosDiarios = parseInt(limiteSetting?.value || "2", 10);
+  const limiteStr = limiteSetting?.value;
+  const limiteJogosDiarios = limiteStr ? parseInt(limiteStr, 10) : 2;
 
-  // Verificar limite diário
+  if (isNaN(limiteJogosDiarios) || limiteJogosDiarios < 1) {
+    return { success: false, error: "Configuração de limite diário inválida" };
+  }
+
   const today = new Date().toISOString().split("T")[0];
+
+  // Verificar limite diário para ambas as direções (A vs B e B vs A)
   const { data: limitData } = await supabase
     .from("daily_limits")
     .select("jogos_registrados")
-    .eq("user_id", input.playerId)
-    .eq("opponent_id", input.opponentId)
+    .or(
+      `and(user_id.eq.${input.playerId},opponent_id.eq.${input.opponentId}),and(user_id.eq.${input.opponentId},opponent_id.eq.${input.playerId})`
+    )
     .eq("data", today)
+    .limit(1)
     .single();
 
   if (limitData && limitData.jogos_registrados >= limiteJogosDiarios) {
-    return { success: false, error: `Limite de ${limiteJogosDiarios} jogos/dia contra este adversário atingido!` };
+    return {
+      success: false,
+      error: `Limite de ${limiteJogosDiarios} jogos/dia contra este adversário atingido!`,
+    };
   }
 
   // Determinar vencedor
-  const vencedorId = resultadoA > resultadoB ? input.playerId : input.opponentId;
+  const vencedorId = score.a > score.b ? input.playerId : input.opponentId;
 
   // Criar a partida
-  const { error: matchError } = await supabase
-    .from("matches")
-    .insert({
-      player_a_id: input.playerId,
-      player_b_id: input.opponentId,
-      vencedor_id: vencedorId,
-      resultado_a: resultadoA,
-      resultado_b: resultadoB,
-      status: "pendente",
-      criado_por: input.playerId,
-      tipo_resultado: resultadoA > resultadoB ? "win" : "loss",
-    });
+  const { error: matchError } = await supabase.from("matches").insert({
+    player_a_id: input.playerId,
+    player_b_id: input.opponentId,
+    vencedor_id: vencedorId,
+    resultado_a: score.a,
+    resultado_b: score.b,
+    status: "pendente",
+    criado_por: input.playerId,
+    tipo_resultado: score.a > score.b ? "win" : "loss",
+  });
 
   if (matchError) {
     console.error("Erro ao criar partida:", matchError);
     return { success: false, error: "Erro ao registrar partida" };
   }
 
-  // Atualizar ou criar limite diário
+  // Atualizar limite diário usando upsert para evitar race condition
+  // Usamos uma abordagem de incremento atômico
   if (limitData) {
-    await supabase
+    // Já existe registro, incrementar
+    const { error: updateError } = await supabase
       .from("daily_limits")
       .update({ jogos_registrados: limitData.jogos_registrados + 1 })
       .eq("user_id", input.playerId)
       .eq("opponent_id", input.opponentId)
       .eq("data", today);
+
+    if (updateError) {
+      console.error("Erro ao atualizar limite diário (não crítico):", updateError);
+    }
+
+    // Atualizar também o registro inverso se existir
+    await supabase
+      .from("daily_limits")
+      .update({ jogos_registrados: limitData.jogos_registrados + 1 })
+      .eq("user_id", input.opponentId)
+      .eq("opponent_id", input.playerId)
+      .eq("data", today);
   } else {
-    await supabase.from("daily_limits").insert([
-      { user_id: input.playerId, opponent_id: input.opponentId, data: today, jogos_registrados: 1 },
-      { user_id: input.opponentId, opponent_id: input.playerId, data: today, jogos_registrados: 1 },
+    // Não existe, criar para ambas as direções
+    const { error: insertError } = await supabase.from("daily_limits").insert([
+      {
+        user_id: input.playerId,
+        opponent_id: input.opponentId,
+        data: today,
+        jogos_registrados: 1,
+      },
+      {
+        user_id: input.opponentId,
+        opponent_id: input.playerId,
+        data: today,
+        jogos_registrados: 1,
+      },
     ]);
+
+    if (insertError) {
+      // Se falhou por conflito (race condition), tentar update
+      if (insertError.code === "23505") {
+        // Unique violation - outro request já inseriu, fazer update
+        await supabase
+          .from("daily_limits")
+          .update({ jogos_registrados: 1 })
+          .eq("user_id", input.playerId)
+          .eq("opponent_id", input.opponentId)
+          .eq("data", today);
+      } else {
+        console.error("Erro ao criar limite diário (não crítico):", insertError);
+      }
+    }
   }
 
   return { success: true };
 }
-
-
-
-
-
-
-

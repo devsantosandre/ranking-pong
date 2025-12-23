@@ -72,6 +72,15 @@ export type AdminLog = {
 // HELPERS
 // ============================================================
 
+const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
+
+function validatePage(page: number): number {
+  if (typeof page !== "number" || isNaN(page)) return 0;
+  if (page < 0) return 0;
+  if (page > MAX_PAGE) return MAX_PAGE;
+  return Math.floor(page);
+}
+
 async function createAdminLog(params: {
   action: string;
   action_description: string;
@@ -82,23 +91,34 @@ async function createAdminLog(params: {
   new_value?: Record<string, unknown>;
   reason?: string;
 }) {
-  const supabase = await createClient();
-  const admin = await getCurrentUser();
+  try {
+    const supabase = await createClient();
+    const admin = await getCurrentUser();
 
-  if (!admin) throw new Error("Usuario nao autenticado");
+    if (!admin) {
+      console.error("createAdminLog: Usuario nao autenticado");
+      return; // Não falhar a operação principal por causa do log
+    }
 
-  await supabase.from("admin_logs").insert({
-    admin_id: admin.id,
-    admin_role: admin.role,
-    action: params.action,
-    action_description: params.action_description,
-    target_type: params.target_type,
-    target_id: params.target_id || null,
-    target_name: params.target_name || null,
-    old_value: params.old_value || null,
-    new_value: params.new_value || null,
-    reason: params.reason || null,
-  });
+    const { error } = await supabase.from("admin_logs").insert({
+      admin_id: admin.id,
+      admin_role: admin.role,
+      action: params.action,
+      action_description: params.action_description,
+      target_type: params.target_type,
+      target_id: params.target_id || null,
+      target_name: params.target_name || null,
+      old_value: params.old_value || null,
+      new_value: params.new_value || null,
+      reason: params.reason || null,
+    });
+
+    if (error) {
+      console.error("Erro ao criar log de admin (não crítico):", error);
+    }
+  } catch (error) {
+    console.error("Erro inesperado ao criar log de admin:", error);
+  }
 }
 
 // ============================================================
@@ -114,7 +134,8 @@ export async function adminGetAllMatches(
   await requireModerator();
   const supabase = await createClient();
 
-  const from = page * PAGE_SIZE;
+  const validPage = validatePage(page);
+  const from = validPage * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
   let query = supabase
@@ -198,7 +219,7 @@ export async function adminCancelMatch(matchId: string, reason: string) {
       : 8;
 
     // Reverter pontos do vencedor
-    await supabase
+    const { error: winnerError } = await supabase
       .from("users")
       .update({
         rating_atual: winner.rating_atual - pontosVitoria,
@@ -207,8 +228,12 @@ export async function adminCancelMatch(matchId: string, reason: string) {
       })
       .eq("id", winnerId);
 
+    if (winnerError) {
+      throw new Error("Erro ao reverter pontos do vencedor");
+    }
+
     // Reverter pontos do perdedor
-    await supabase
+    const { error: loserError } = await supabase
       .from("users")
       .update({
         rating_atual: loser.rating_atual - pontosDerrota,
@@ -217,8 +242,12 @@ export async function adminCancelMatch(matchId: string, reason: string) {
       })
       .eq("id", loserId);
 
+    if (loserError) {
+      throw new Error("Erro ao reverter pontos do perdedor");
+    }
+
     // Registrar transacoes de reversao
-    await supabase.from("rating_transactions").insert([
+    const { error: transactionError } = await supabase.from("rating_transactions").insert([
       {
         match_id: matchId,
         user_id: winnerId,
@@ -236,13 +265,21 @@ export async function adminCancelMatch(matchId: string, reason: string) {
         rating_depois: loser.rating_atual - pontosDerrota,
       },
     ]);
+
+    if (transactionError) {
+      console.error("Erro ao registrar transações de reversão (não crítico):", transactionError);
+    }
   }
 
   // Atualizar status da partida
-  await supabase
+  const { error: cancelError } = await supabase
     .from("matches")
     .update({ status: "cancelado" })
     .eq("id", matchId);
+
+  if (cancelError) {
+    throw new Error("Erro ao cancelar partida");
+  }
 
   // Registrar log
   await createAdminLog({
@@ -277,7 +314,8 @@ export async function adminGetAllUsers(
   await requireModerator();
   const supabase = await createClient();
 
-  const from = page * PAGE_SIZE;
+  const validPage = validatePage(page);
+  const from = validPage * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
   let query = supabase
@@ -487,19 +525,27 @@ export async function adminUpdateUserRating(
   const oldRating = user.rating_atual;
 
   // Atualizar rating
-  await supabase
+  const { error: updateError } = await supabase
     .from("users")
     .update({ rating_atual: newRating })
     .eq("id", userId);
 
+  if (updateError) {
+    throw new Error("Erro ao atualizar rating do usuário");
+  }
+
   // Registrar transacao
-  await supabase.from("rating_transactions").insert({
+  const { error: transactionError } = await supabase.from("rating_transactions").insert({
     user_id: userId,
     motivo: `ajuste_admin: ${reason.trim()}`,
     valor: newRating - oldRating,
     rating_antes: oldRating,
     rating_depois: newRating,
   });
+
+  if (transactionError) {
+    console.error("Erro ao registrar transação (não crítico):", transactionError);
+  }
 
   // Registrar log
   await createAdminLog({
@@ -537,10 +583,14 @@ export async function adminToggleUserStatus(userId: string) {
   const newStatus = !user.is_active;
 
   // Atualizar status
-  await supabase
+  const { error: updateError } = await supabase
     .from("users")
     .update({ is_active: newStatus })
     .eq("id", userId);
+
+  if (updateError) {
+    throw new Error("Erro ao atualizar status do usuário");
+  }
 
   // Registrar log
   await createAdminLog({
@@ -597,10 +647,14 @@ export async function adminToggleHideFromRanking(userId: string) {
   }
 
   // Atualizar status
-  await supabase
+  const { error: updateError } = await supabase
     .from("users")
     .update({ hide_from_ranking: newStatus })
     .eq("id", userId);
+
+  if (updateError) {
+    throw new Error("Erro ao atualizar visibilidade no ranking");
+  }
 
   // Registrar log
   await createAdminLog({
@@ -644,7 +698,7 @@ export async function adminResetUserStats(userId: string) {
   const ratingInicial = parseInt(ratingConfig?.value || "250", 10);
 
   // Resetar estatisticas
-  await supabase
+  const { error: resetError } = await supabase
     .from("users")
     .update({
       rating_atual: ratingInicial,
@@ -654,6 +708,10 @@ export async function adminResetUserStats(userId: string) {
       streak: 0,
     })
     .eq("id", userId);
+
+  if (resetError) {
+    throw new Error("Erro ao resetar estatísticas do usuário");
+  }
 
   // Registrar log
   await createAdminLog({
@@ -709,7 +767,14 @@ export async function adminChangeUserRole(
   const oldRole = user.role;
 
   // Atualizar role
-  await supabase.from("users").update({ role: newRole }).eq("id", userId);
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({ role: newRole })
+    .eq("id", userId);
+
+  if (updateError) {
+    throw new Error("Erro ao atualizar role do usuário");
+  }
 
   // Registrar log
   await createAdminLog({
@@ -761,7 +826,7 @@ export async function adminUpdateSetting(key: string, value: string) {
   }
 
   // Atualizar configuracao
-  await supabase
+  const { error: updateError } = await supabase
     .from("settings")
     .update({
       value,
@@ -769,6 +834,10 @@ export async function adminUpdateSetting(key: string, value: string) {
       updated_by: admin?.id,
     })
     .eq("key", key);
+
+  if (updateError) {
+    throw new Error("Erro ao atualizar configuração");
+  }
 
   // Registrar log
   await createAdminLog({
@@ -793,7 +862,8 @@ export async function adminGetLogs(page = 0) {
   await requireModerator();
   const supabase = await createClient();
 
-  const from = page * PAGE_SIZE;
+  const validPage = validatePage(page);
+  const from = validPage * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
   const { data, error } = await supabase
