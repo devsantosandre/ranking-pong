@@ -13,6 +13,7 @@ import {
 } from "@/lib/queries";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import { PendingMatchListSkeleton } from "@/components/skeletons";
+import { useAchievementToast } from "@/components/achievement-unlock-toast";
 
 const statusBadge: Record<string, { label: string; className: string }> = {
   pendente: { label: "Aguardando confirmação", className: "bg-amber-100 text-amber-700" },
@@ -28,6 +29,9 @@ export default function PartidasPage() {
   const [activeTab, setActiveTab] = useState<"recentes" | "pendentes">("pendentes");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftOutcome, setDraftOutcome] = useState<Record<string, string>>({});
+
+  // Achievement toast hook
+  const { showAchievements, ToastComponent } = useAchievementToast();
 
   // React Query hooks
   const {
@@ -51,7 +55,17 @@ export default function PartidasPage() {
 
   const handleConfirm = (matchId: string) => {
     if (!user) return;
-    confirmMutation.mutate({ matchId, userId: user.id });
+    confirmMutation.mutate(
+      { matchId, userId: user.id },
+      {
+        onSuccess: (result) => {
+          // Mostrar toast de conquistas desbloqueadas
+          if (result.unlockedAchievements && result.unlockedAchievements.length > 0) {
+            showAchievements(result.unlockedAchievements);
+          }
+        },
+      }
+    );
   };
 
   const handleContest = (matchId: string, newOutcome: string) => {
@@ -210,6 +224,9 @@ export default function PartidasPage() {
           />
         </div>
       </div>
+
+      {/* Toast de conquistas desbloqueadas */}
+      {ToastComponent}
     </AppShell>
   );
 }

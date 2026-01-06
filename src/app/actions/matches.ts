@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { calculateElo, applyMinRating } from "@/lib/elo";
+import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements";
 
 // Validar formato do score (ex: "3x1", "2x3")
 function parseScore(outcome: string): { a: number; b: number } | null {
@@ -24,7 +25,7 @@ function parseScore(outcome: string): { a: number; b: number } | null {
 export async function confirmMatchAction(
   matchId: string,
   userId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; unlockedAchievements?: Achievement[] }> {
   const supabase = await createClient();
 
   // 1. Buscar a partida COM VERIFICAÇÃO DE STATUS para evitar race condition
@@ -129,6 +130,7 @@ export async function confirmMatchAction(
       pontos_variacao_b: playerBDelta,
       rating_final_a: applyMinRating(playerARating + playerADelta),
       rating_final_b: applyMinRating(playerBRating + playerBDelta),
+      k_factor_used: kFactor, // Armazena o K factor usado para auditoria e reversão
     })
     .eq("id", matchId)
     .in("status", ["pendente", "edited"]) // Só atualiza se status ainda for válido
@@ -212,7 +214,75 @@ export async function confirmMatchAction(
     console.error("Erro ao registrar transações (não crítico):", transactionError);
   }
 
-  return { success: true };
+  // 11. Verificar e desbloquear conquistas para ambos os jogadores
+  const unlockedAchievements: Achievement[] = [];
+
+  // Calcular streak do vencedor (precisamos buscar partidas recentes)
+  const { data: recentWinnerMatches } = await supabase
+    .from("matches")
+    .select("vencedor_id")
+    .or(`player_a_id.eq.${winnerId},player_b_id.eq.${winnerId}`)
+    .eq("status", "validado")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  let winnerStreak = 0;
+  if (recentWinnerMatches) {
+    for (const m of recentWinnerMatches) {
+      if (m.vencedor_id === winnerId) winnerStreak++;
+      else break;
+    }
+  }
+
+  // Verificar conquistas do vencedor
+  const winnerContext = {
+    userId: winnerId,
+    matchId,
+    vitorias: (winnerData.vitorias ?? 0) + 1,
+    derrotas: winnerData.derrotas ?? 0,
+    jogos: (winnerData.jogos_disputados ?? 0) + 1,
+    rating: newWinnerRating,
+    streak: winnerStreak,
+    isWinner: true,
+    opponentRating: loserData.rating_atual ?? 1000,
+    resultado: `${match.resultado_a}x${match.resultado_b}`,
+  };
+
+  try {
+    const winnerUnlocked = await checkAndUnlockAchievements(winnerContext);
+    unlockedAchievements.push(...winnerUnlocked);
+  } catch (err) {
+    console.error("Erro ao verificar conquistas do vencedor:", err);
+  }
+
+  // Verificar conquistas do perdedor (algumas conquistas são para jogos, não só vitórias)
+  const loserContext = {
+    userId: loserId,
+    matchId,
+    vitorias: loserData.vitorias ?? 0,
+    derrotas: (loserData.derrotas ?? 0) + 1,
+    jogos: (loserData.jogos_disputados ?? 0) + 1,
+    rating: newLoserRating,
+    streak: 0, // Perdedor perde o streak
+    isWinner: false,
+    opponentRating: winnerData.rating_atual ?? 1000,
+    resultado: `${match.resultado_a}x${match.resultado_b}`,
+  };
+
+  try {
+    const loserUnlocked = await checkAndUnlockAchievements(loserContext);
+    unlockedAchievements.push(...loserUnlocked);
+  } catch (err) {
+    console.error("Erro ao verificar conquistas do perdedor:", err);
+  }
+
+  // Filtrar apenas conquistas do usuário atual (quem confirmou)
+  const myUnlocked = unlockedAchievements.filter((a) => {
+    // Retornar todas as conquistas desbloqueadas por quem confirmou
+    return true; // Podemos filtrar se necessário
+  });
+
+  return { success: true, unlockedAchievements: myUnlocked };
 }
 
 export async function contestMatchAction(

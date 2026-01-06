@@ -269,6 +269,56 @@ export async function adminCancelMatch(matchId: string, reason: string) {
     if (transactionError) {
       console.error("Erro ao registrar transações de reversão (não crítico):", transactionError);
     }
+
+    // Recalcular streak de ambos os jogadores após cancelamento
+    // (a partida cancelada não deve mais contar)
+    async function recalculateStreak(playerId: string): Promise<number> {
+      const { data: recentMatches } = await supabase
+        .from("matches")
+        .select("vencedor_id")
+        .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+        .eq("status", "validado")
+        .neq("id", matchId) // Exclui a partida que está sendo cancelada
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      let streak = 0;
+      if (recentMatches) {
+        for (const m of recentMatches) {
+          if (m.vencedor_id === playerId) streak++;
+          else break;
+        }
+      }
+      return streak;
+    }
+
+    // Atualizar streak do vencedor
+    const newWinnerStreak = await recalculateStreak(winnerId);
+    await supabase
+      .from("users")
+      .update({ streak: newWinnerStreak })
+      .eq("id", winnerId);
+
+    // Atualizar streak do perdedor
+    const newLoserStreak = await recalculateStreak(loserId);
+    await supabase
+      .from("users")
+      .update({ streak: newLoserStreak })
+      .eq("id", loserId);
+  }
+
+  // Revogar conquistas que foram desbloqueadas por esta partida
+  // O jogador poderá reconquistá-las na próxima partida se ainda tiver os requisitos
+  const { data: revokedAchievements, error: revokeError } = await supabase
+    .from("user_achievements")
+    .delete()
+    .eq("match_id", matchId)
+    .select("achievement_id, user_id");
+
+  if (revokeError) {
+    console.error("Erro ao revogar conquistas (não crítico):", revokeError);
+  } else if (revokedAchievements && revokedAchievements.length > 0) {
+    console.log(`Conquistas revogadas: ${revokedAchievements.length} para partida ${matchId}`);
   }
 
   // Atualizar status da partida
@@ -282,11 +332,12 @@ export async function adminCancelMatch(matchId: string, reason: string) {
   }
 
   // Registrar log
+  const achievementsRevoked = revokedAchievements?.length || 0;
   await createAdminLog({
     action: "match_cancelled",
     action_description:
       oldStatus === "validado"
-        ? "Partida cancelada e pontos revertidos"
+        ? `Partida cancelada, pontos revertidos${achievementsRevoked > 0 ? ` e ${achievementsRevoked} conquista(s) revogada(s)` : ""}`
         : "Partida cancelada",
     target_type: "match",
     target_id: matchId,

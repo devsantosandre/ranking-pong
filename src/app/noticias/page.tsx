@@ -110,12 +110,12 @@ export default function NoticiasPage() {
                 <div className="flex items-center justify-center gap-6 rounded-xl bg-muted/60 p-2">
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">{item.winner.name}</p>
-                    <p className="text-sm font-semibold text-green-600">+{item.pointsWinner} pts</p>
+                    <p className="text-sm font-semibold text-green-600">+{Math.abs(item.pointsWinner)} pts</p>
                   </div>
                   <div className="h-6 w-px bg-border" />
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">{item.loser.name}</p>
-                    <p className="text-sm font-semibold text-blue-600">+{item.pointsLoser} pts</p>
+                    <p className="text-sm font-semibold text-red-500">-{Math.abs(item.pointsLoser)} pts</p>
                   </div>
                 </div>
               </article>

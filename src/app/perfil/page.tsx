@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProfilePageSkeleton, MatchListSkeleton } from "@/components/skeletons";
 import { getPlayerStyle, getDivisionName, isTopThree } from "@/lib/divisions";
+import { AchievementsSection } from "@/components/achievements-section";
 
 export default function PerfilPage() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -263,8 +264,8 @@ export default function PerfilPage() {
             <p className="text-[10px] text-muted-foreground">win rate</p>
           </article>
           <article className={`rounded-2xl border p-3 shadow-sm text-center ${
-            streak > 0 
-              ? "border-amber-200 bg-amber-50" 
+            streak > 0
+              ? "border-amber-200 bg-amber-50"
               : "border-border bg-card"
           }`}>
             <p className={`text-xl font-bold ${streak > 0 ? "text-amber-600" : "text-foreground"}`}>
@@ -273,6 +274,9 @@ export default function PerfilPage() {
             <p className="text-[10px] text-muted-foreground">streak</p>
           </article>
         </div>
+
+        {/* Conquistas */}
+        <AchievementsSection userId={user.id} />
 
         {/* Histórico dos últimos 7 dias */}
         <div className="space-y-3">

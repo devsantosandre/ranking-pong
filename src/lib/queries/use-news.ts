@@ -109,8 +109,8 @@ export function useNews() {
           winner,
           loser,
           score: `${match.resultado_a} x ${match.resultado_b}`,
-          pointsWinner: pointsWinner || 20,
-          pointsLoser: pointsLoser || 8,
+          pointsWinner: pointsWinner ?? 0,
+          pointsLoser: pointsLoser ?? 0,
           createdAt: match.created_at,
         };
       });

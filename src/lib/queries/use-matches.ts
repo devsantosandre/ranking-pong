@@ -122,9 +122,10 @@ export function useConfirmMatch() {
       return result;
     },
     onSuccess: () => {
-      // Invalida cache de partidas e usuários para atualizar dados
+      // Invalida cache de partidas, usuários e conquistas para atualizar dados
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
     },
   });
 }

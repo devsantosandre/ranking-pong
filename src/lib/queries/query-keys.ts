@@ -28,6 +28,12 @@ export const queryKeys = {
 
   // Settings
   settings: ["settings"] as const,
+
+  // Achievements
+  achievements: {
+    all: ["achievements"] as const,
+    user: (userId: string) => ["achievements", "user", userId] as const,
+  },
 };
 
 
