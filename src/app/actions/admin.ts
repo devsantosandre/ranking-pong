@@ -367,12 +367,13 @@ export async function adminCreateUser(
 
   const supabase = await createClient();
   const adminClient = createAdminClient();
+  const normalizedEmail = email.toLowerCase().trim();
 
-  // Verificar se email ja existe
+  // Verificar se email ja existe na tabela users
   const { data: existingUser } = await supabase
     .from("users")
     .select("id")
-    .eq("email", email.toLowerCase().trim())
+    .eq("email", normalizedEmail)
     .single();
 
   if (existingUser) {
@@ -388,10 +389,12 @@ export async function adminCreateUser(
 
   const ratingInicial = parseInt(ratingConfig?.value || "250", 10);
 
-  // Criar usuario no Supabase Auth (requer service_role_key)
+  // Tentar criar usuario no Supabase Auth (requer service_role_key)
+  let userId: string;
+
   const { data: authData, error: authError } =
     await adminClient.auth.admin.createUser({
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password: tempPassword,
       email_confirm: true,
       user_metadata: {
@@ -401,26 +404,48 @@ export async function adminCreateUser(
     });
 
   if (authError) {
-    throw new Error(`Erro ao criar usuario: ${authError.message}`);
+    // Se o erro for de email já existente, tentar obter o usuário existente
+    if (authError.message.includes("already been registered") ||
+        authError.message.includes("already exists")) {
+      // Buscar usuário existente no Auth por email
+      const { data: listData } = await adminClient.auth.admin.listUsers();
+      const existingAuthUser = listData?.users?.find(
+        (u) => u.email?.toLowerCase() === normalizedEmail
+      );
+
+      if (existingAuthUser) {
+        userId = existingAuthUser.id;
+        // Atualizar a senha do usuário existente
+        await adminClient.auth.admin.updateUserById(userId, {
+          password: tempPassword,
+        });
+      } else {
+        throw new Error(`Erro ao criar usuario: ${authError.message}`);
+      }
+    } else {
+      throw new Error(`Erro ao criar usuario: ${authError.message}`);
+    }
+  } else {
+    userId = authData.user.id;
   }
 
-  // Criar registro na tabela users
-  const { error: userError } = await supabase.from("users").insert({
-    id: authData.user.id,
+  // Criar ou atualizar registro na tabela users (upsert)
+  const { error: userError } = await supabase.from("users").upsert({
+    id: userId,
     name: name.trim(),
     full_name: name.trim(),
-    email: email.toLowerCase().trim(),
+    email: normalizedEmail,
     role: "player",
     is_active: true,
     rating_atual: ratingInicial,
     vitorias: 0,
     derrotas: 0,
     jogos_disputados: 0,
-  });
+  }, { onConflict: "id" });
 
   if (userError) {
     // Tentar deletar o usuario do auth se falhar (requer service_role_key)
-    await adminClient.auth.admin.deleteUser(authData.user.id);
+    await adminClient.auth.admin.deleteUser(userId);
     throw new Error(`Erro ao criar perfil: ${userError.message}`);
   }
 
@@ -429,7 +454,7 @@ export async function adminCreateUser(
     action: "user_created",
     action_description: "Novo jogador criado",
     target_type: "user",
-    target_id: authData.user.id,
+    target_id: userId,
     target_name: name.trim(),
     new_value: { name: name.trim(), email: email.toLowerCase().trim() },
   });
@@ -437,7 +462,7 @@ export async function adminCreateUser(
   revalidatePath("/admin");
   revalidatePath("/ranking");
 
-  return { success: true, userId: authData.user.id };
+  return { success: true, userId };
 }
 
 export async function adminResetPassword(
