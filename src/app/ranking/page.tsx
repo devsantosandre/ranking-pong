@@ -6,6 +6,14 @@ import { useState, useMemo } from "react";
 import { useRanking } from "@/lib/queries";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import { PlayerListSkeleton } from "@/components/skeletons";
+import {
+  getPlayerStyle,
+  getDivisionStyle,
+  getDivisionNumber,
+  getDivisionName,
+  isFirstOfDivision,
+  isTopThree,
+} from "@/lib/divisions";
 
 export default function RankingPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,81 +100,88 @@ export default function RankingPage() {
             </p>
           ) : (
             <>
-              {filteredPlayers.map((player) => {
-                // Estilos para medalhas (top 3)
-                const medalStyles = {
-                  1: {
-                    badge: "bg-gradient-to-br from-yellow-400 to-amber-500",
-                    border: "border-amber-300",
-                    bg: "bg-amber-50",
-                    text: "text-amber-700",
-                    emoji: "🥇",
-                  },
-                  2: {
-                    badge: "bg-gradient-to-br from-gray-300 to-gray-400",
-                    border: "border-gray-300",
-                    bg: "bg-gray-50",
-                    text: "text-gray-600",
-                    emoji: "🥈",
-                  },
-                  3: {
-                    badge: "bg-gradient-to-br from-orange-400 to-orange-600",
-                    border: "border-orange-300",
-                    bg: "bg-orange-50",
-                    text: "text-orange-700",
-                    emoji: "🥉",
-                  },
-                };
+              {filteredPlayers.map((player, index) => {
+                const playerStyle = getPlayerStyle(player.position);
+                const divisionStyle = getDivisionStyle(player.position);
+                const divisionNumber = getDivisionNumber(player.position);
+                const divisionName = getDivisionName(player.position);
+                const isTop3 = isTopThree(player.position);
 
-                const medal = medalStyles[player.position as 1 | 2 | 3];
-                const isTopThree = player.position <= 3;
+                // Mostra separador na primeira posição OU quando muda de divisão
+                const isFirstPlayer = index === 0;
+                const showDivisionSeparator =
+                  !searchQuery && (isFirstPlayer || isFirstOfDivision(player.position));
+
+                // Verifica se a divisão anterior é diferente (para o separador com busca)
+                const prevPlayer = index > 0 ? filteredPlayers[index - 1] : null;
+                const showSeparatorAfterSearch =
+                  searchQuery &&
+                  (isFirstPlayer || (prevPlayer && getDivisionNumber(prevPlayer.position) !== divisionNumber));
 
                 return (
-                  <article
-                    key={player.id}
-                    className={`flex items-center justify-between rounded-2xl border p-3 shadow-sm ${
-                      isTopThree && medal
-                        ? `${medal.border} ${medal.bg}`
-                        : "border-border bg-card"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Posição / Medalha */}
-                      {isTopThree && medal ? (
-                        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${medal.badge} shadow-md`}>
-                          <span className="text-lg">{medal.emoji}</span>
-                        </div>
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                          <span className="text-sm font-bold text-muted-foreground">#{player.position}</span>
-                        </div>
-                      )}
-
-                      {/* Info do jogador */}
-                      <div>
-                        <p className={`text-sm font-semibold ${isTopThree && medal ? medal.text : "text-foreground"}`}>
-                          {player.displayName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          <span className="text-green-600 font-semibold">
-                            {player.vitorias || 0}V
-                          </span>
-                          {" / "}
-                          <span className="text-red-500 font-semibold">
-                            {player.derrotas || 0}D
-                          </span>
-                        </p>
+                  <div key={player.id}>
+                    {/* Separador de divisão */}
+                    {(showDivisionSeparator || showSeparatorAfterSearch) && (
+                      <div className="flex items-center gap-2 py-2">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {divisionStyle.emoji} {divisionName}
+                        </span>
+                        <div className="h-px flex-1 bg-border" />
                       </div>
-                    </div>
+                    )}
 
-                    {/* Pontuação */}
-                    <div className="text-right">
-                      <p className={`text-lg font-bold ${isTopThree && medal ? medal.text : "text-primary"}`}>
-                        {player.rating_atual || 250}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">pontos</p>
-                    </div>
-                  </article>
+                    <article
+                      className={`flex items-center justify-between rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Badge com posição */}
+                        <div
+                          className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} ${isTop3 ? 'shadow-lg shadow-orange-500/50' : 'shadow-md'}`}
+                        >
+                          {isTop3 && (
+                            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
+                          )}
+                          <span className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? 'text-white drop-shadow-md' : 'text-muted-foreground'}`}>
+                            {player.position}º
+                          </span>
+                        </div>
+
+                        {/* Info do jogador */}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm font-semibold ${playerStyle.text}`}>
+                              {player.displayName}
+                            </p>
+                            {isTop3 && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${playerStyle.badge} text-white shadow-sm`}>
+                                🔥 TOP {player.position}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-medium">{player.position}º</span>
+                            {" · "}
+                            <span className="text-green-600 font-semibold">
+                              {player.vitorias || 0}V
+                            </span>
+                            {" / "}
+                            <span className="text-red-500 font-semibold">
+                              {player.derrotas || 0}D
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Pontuação */}
+                      <div className="text-right">
+                        <p className={`text-lg font-bold ${playerStyle.text}`}>
+                          {player.rating_atual || 250}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">pontos</p>
+                      </div>
+                    </article>
+                  </div>
                 );
               })}
 

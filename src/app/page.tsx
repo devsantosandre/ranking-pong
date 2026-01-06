@@ -4,9 +4,9 @@ import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useRanking, useMatches } from "@/lib/queries";
 import { HomePageSkeleton, PendingMatchListSkeleton } from "@/components/skeletons";
-import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
+import { getPlayerStyle } from "@/lib/divisions";
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
@@ -88,7 +88,7 @@ export default function Home() {
           </div>
         </article>
 
-        {/* Top 3 Ranking */}
+        {/* Top 3 Ranking (Divisão Ouro) */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <p className="text-sm font-semibold text-foreground">Top Ranking</p>
@@ -98,42 +98,25 @@ export default function Home() {
           </div>
           {topRanking.length > 0 ? (
             topRanking.map((player) => {
-              const medalStyles = {
-                1: {
-                  badge: "bg-gradient-to-br from-yellow-400 to-amber-500",
-                  border: "border-amber-300",
-                  bg: "bg-amber-50",
-                  text: "text-amber-700",
-                  emoji: "🥇",
-                },
-                2: {
-                  badge: "bg-gradient-to-br from-gray-300 to-gray-400",
-                  border: "border-gray-300",
-                  bg: "bg-gray-50",
-                  text: "text-gray-600",
-                  emoji: "🥈",
-                },
-                3: {
-                  badge: "bg-gradient-to-br from-orange-400 to-orange-600",
-                  border: "border-orange-300",
-                  bg: "bg-orange-50",
-                  text: "text-orange-700",
-                  emoji: "🥉",
-                },
-              };
-              const medal = medalStyles[player.pos as 1 | 2 | 3];
+              const playerStyle = getPlayerStyle(player.pos);
 
               return (
                 <article
                   key={player.pos}
-                  className={`flex items-center justify-between rounded-2xl border p-3 shadow-sm ${medal.border} ${medal.bg}`}
+                  className={`flex items-center justify-between rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-full ${medal.badge} shadow-md`}>
-                      <span className="text-lg">{medal.emoji}</span>
+                    <div className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} shadow-lg shadow-orange-500/50`}>
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
+                      <span className="relative text-sm font-bold text-white drop-shadow-md">{player.pos}º</span>
                     </div>
                     <div>
-                      <p className={`text-sm font-semibold ${medal.text}`}>{player.nome}</p>
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-semibold ${playerStyle.text}`}>{player.nome}</p>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${playerStyle.badge} text-white shadow-sm`}>
+                          🔥 TOP {player.pos}
+                        </span>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         <span className="text-green-600">{player.vitorias}V</span>
                         {" / "}
@@ -141,7 +124,7 @@ export default function Home() {
                       </p>
                     </div>
                   </div>
-                  <p className={`text-lg font-bold ${medal.text}`}>{player.pts}</p>
+                  <p className={`text-lg font-bold ${playerStyle.text}`}>{player.pts}</p>
                 </article>
               );
             })

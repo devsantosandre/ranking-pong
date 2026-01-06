@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProfilePageSkeleton, MatchListSkeleton } from "@/components/skeletons";
+import { getPlayerStyle, getDivisionName, isTopThree } from "@/lib/divisions";
 
 export default function PerfilPage() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -197,68 +198,46 @@ export default function PerfilPage() {
   const totalJogos = vitorias + derrotas;
   const winRate = totalJogos > 0 ? Math.round((vitorias / totalJogos) * 100) : 0;
 
-  // Estilos de medalha para top 3
-  const medalStyles = {
-    1: {
-      badge: "bg-gradient-to-br from-yellow-400 to-amber-500",
-      border: "border-amber-300",
-      bg: "bg-amber-50",
-      text: "text-amber-700",
-      emoji: "🥇",
-    },
-    2: {
-      badge: "bg-gradient-to-br from-gray-300 to-gray-400",
-      border: "border-gray-300",
-      bg: "bg-gray-50",
-      text: "text-gray-600",
-      emoji: "🥈",
-    },
-    3: {
-      badge: "bg-gradient-to-br from-orange-400 to-orange-600",
-      border: "border-orange-300",
-      bg: "bg-orange-50",
-      text: "text-orange-700",
-      emoji: "🥉",
-    },
-  };
-
-  const isTopThree = userPosition > 0 && userPosition <= 3;
-  const medal = isTopThree ? medalStyles[userPosition as 1 | 2 | 3] : null;
+  // Estilos baseados na posição do usuário
+  const isTop3 = userPosition > 0 && isTopThree(userPosition);
+  const playerStyle = userPosition > 0 ? getPlayerStyle(userPosition) : null;
+  const divisionName = userPosition > 0 ? getDivisionName(userPosition) : null;
 
   return (
     <AppShell title="Perfil" subtitle="Seus dados e estatísticas" showBack>
       <div className="space-y-4">
         {/* Card do perfil */}
         <article className={`space-y-4 rounded-2xl border p-4 shadow-sm ${
-          isTopThree && medal ? `${medal.border} ${medal.bg}` : "border-border bg-card"
+          playerStyle ? `${playerStyle.border} ${playerStyle.bg}` : "border-border bg-card"
         }`}>
           <div className="flex items-center gap-4">
-            {isTopThree && medal ? (
-              <div className={`flex h-14 w-14 items-center justify-center rounded-full ${medal.badge} shadow-lg`}>
-                <span className="text-2xl">{medal.emoji}</span>
-              </div>
-            ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15 text-lg font-bold text-primary">
-                {getInitials(userName)}
-              </div>
-            )}
-            <div className="flex-1">
-              <p className={`text-lg font-semibold ${isTopThree && medal ? medal.text : "text-foreground"}`}>
-                {userName}
-              </p>
-              <p className="text-sm text-muted-foreground">{user.email}</p>
+            {/* Avatar/Badge */}
+            <div className={`relative flex h-14 w-14 items-center justify-center rounded-full ${
+              playerStyle ? playerStyle.badge : "bg-primary/15"
+            } ${isTop3 ? 'shadow-lg shadow-orange-500/50' : 'shadow-md'}`}>
+              {isTop3 && (
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
+              )}
+              <span className={`relative text-lg font-bold ${playerStyle ? 'text-white drop-shadow-md' : 'text-primary'}`}>
+                {userPosition > 0 ? `${userPosition}º` : getInitials(userName)}
+              </span>
             </div>
-            {userPosition > 0 && (
-              <div className="text-right">
-                <span className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                  isTopThree && medal 
-                    ? `${medal.badge} text-white shadow-md` 
-                    : "bg-primary/15 text-primary"
-                }`}>
-                  #{userPosition}
-                </span>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className={`text-lg font-semibold ${playerStyle ? playerStyle.text : "text-foreground"}`}>
+                  {userName}
+                </p>
+                {isTop3 && playerStyle && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${playerStyle.badge} text-white shadow-sm`}>
+                    🔥 TOP {userPosition}
+                  </span>
+                )}
               </div>
-            )}
+              <p className="text-sm text-muted-foreground">{user.email}</p>
+              {divisionName && (
+                <p className="text-xs text-muted-foreground">{divisionName}</p>
+              )}
+            </div>
           </div>
         </article>
 
