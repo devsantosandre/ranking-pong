@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { useUsers, useRegisterMatch } from "@/lib/queries";
+import { useUsers, useRegisterMatch, useSettings } from "@/lib/queries";
+import { calculateElo } from "@/lib/elo";
 
 type SetScore = { numero: number; winner: "" | "a" | "b" };
 
@@ -26,7 +27,14 @@ export default function RegistrarJogoPage() {
 
   // React Query hooks
   const { data: users = [], isLoading: loadingUsers } = useUsers();
+  const { data: settings } = useSettings();
   const registerMutation = useRegisterMatch();
+
+  // K factor para cálculo ELO
+  const kFactor = useMemo(() => {
+    const kSetting = settings?.find((s) => s.key === "k_factor");
+    return kSetting ? parseInt(kSetting.value, 10) : 24;
+  }, [settings]);
 
   // Filtrar para não mostrar o usuário logado como adversário
   const opponentOptions = users.filter((u) => u.id !== user?.id);
@@ -53,12 +61,26 @@ export default function RegistrarJogoPage() {
     };
   }, [sets]);
 
-  const previsao =
-    winsA === winsB
-      ? null
-      : winsA > winsB
-        ? { text: "Vitória: +20 pts", color: "text-green-600" }
-        : { text: "Derrota: +8 pts", color: "text-blue-600" };
+  // Calcular previsão ELO baseada nos ratings reais
+  const previsao = useMemo(() => {
+    if (winsA === winsB) return null;
+
+    // Ratings dos jogadores
+    const myRating = user?.rating || 1000;
+    const oppRating = selectedOpponent?.rating_atual || 1000;
+
+    const isWin = winsA > winsB;
+
+    if (isWin) {
+      // Eu venci
+      const { winnerDelta } = calculateElo(myRating, oppRating, kFactor);
+      return { text: `Vitória: +${winnerDelta} pts`, color: "text-green-600" };
+    } else {
+      // Eu perdi
+      const { loserDelta } = calculateElo(oppRating, myRating, kFactor);
+      return { text: `Derrota: ${loserDelta} pts`, color: "text-red-500" };
+    }
+  }, [winsA, winsB, user?.rating, selectedOpponent?.rating_atual, kFactor]);
 
   const applyOutcome = (outcome: string) => {
     const [aStr, bStr] = outcome.split("x");
@@ -208,7 +230,7 @@ export default function RegistrarJogoPage() {
         {/* Card de informações */}
         <article className="rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Regras: vitória +20 pts, derrota +8 pts</span>
+            <span className="text-muted-foreground">Sistema ELO • Pontos variam por nível</span>
             <span className="font-semibold text-amber-600">Máx. 2 jogos/dia</span>
           </div>
         </article>

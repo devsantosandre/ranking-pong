@@ -25,6 +25,9 @@ export const queryKeys = {
     check: (userId: string, opponentId: string, date: string) =>
       [...queryKeys.dailyLimits.all, userId, opponentId, date] as const,
   },
+
+  // Settings
+  settings: ["settings"] as const,
 };
 
 

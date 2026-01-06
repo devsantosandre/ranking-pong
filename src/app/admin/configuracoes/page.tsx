@@ -6,6 +6,9 @@ import { Loader2, Save, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queries";
+import { calculateElo } from "@/lib/elo";
 import {
   adminGetSettings,
   adminUpdateSetting,
@@ -13,13 +16,9 @@ import {
 } from "@/app/actions/admin";
 
 const settingLabels: Record<string, { label: string; description: string }> = {
-  pontos_vitoria: {
-    label: "Pontos por Vitoria",
-    description: "Quantidade de pontos ganhos ao vencer uma partida",
-  },
-  pontos_derrota: {
-    label: "Pontos por Derrota",
-    description: "Quantidade de pontos ganhos ao perder uma partida",
+  k_factor: {
+    label: "Fator K (ELO)",
+    description: "Intensidade das mudancas de pontuacao (16-32 recomendado)",
   },
   limite_jogos_diarios: {
     label: "Limite de Jogos Diarios",
@@ -31,7 +30,54 @@ const settingLabels: Record<string, { label: string; description: string }> = {
   },
 };
 
+// Componente de preview da tabela ELO
+function EloPreview({ kFactor }: { kFactor: number }) {
+  if (isNaN(kFactor) || kFactor < 1) return null;
+
+  // Calcular exemplos
+  const vsStrongerWin = calculateElo(800, 1200, kFactor);
+  const vsStrongerLose = calculateElo(1200, 800, kFactor);
+  const vsEqual = calculateElo(1000, 1000, kFactor);
+  const vsWeakerWin = calculateElo(1200, 800, kFactor);
+  const vsWeakerLose = calculateElo(800, 1200, kFactor);
+
+  return (
+    <div className="mt-4 rounded-xl border border-border/50 bg-muted/30 p-3">
+      <p className="text-xs font-semibold text-muted-foreground mb-2">
+        Distribuicao de pontos (K={kFactor})
+      </p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border/50">
+            <th className="text-left py-1 font-medium text-muted-foreground">Situacao</th>
+            <th className="text-center py-1 font-medium text-green-600">Vitoria</th>
+            <th className="text-center py-1 font-medium text-red-500">Derrota</th>
+          </tr>
+        </thead>
+        <tbody className="text-muted-foreground">
+          <tr className="border-b border-border/30">
+            <td className="py-1.5">vs Mais forte</td>
+            <td className="text-center py-1.5 text-green-600 font-semibold">+{vsStrongerWin.winnerDelta}</td>
+            <td className="text-center py-1.5 text-red-500 font-semibold">{vsStrongerLose.loserDelta}</td>
+          </tr>
+          <tr className="border-b border-border/30">
+            <td className="py-1.5">vs Mesmo nivel</td>
+            <td className="text-center py-1.5 text-green-600 font-semibold">+{vsEqual.winnerDelta}</td>
+            <td className="text-center py-1.5 text-red-500 font-semibold">{vsEqual.loserDelta}</td>
+          </tr>
+          <tr>
+            <td className="py-1.5">vs Mais fraco</td>
+            <td className="text-center py-1.5 text-green-600 font-semibold">+{vsWeakerWin.winnerDelta}</td>
+            <td className="text-center py-1.5 text-red-500 font-semibold">{vsWeakerLose.loserDelta}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function AdminConfiguracoesPage() {
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<AdminSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -134,6 +180,8 @@ export default function AdminConfiguracoesPage() {
       setSuccess("Configuracao atualizada com sucesso!");
       setTimeout(() => setSuccess(""), 3000);
       loadSettings();
+      // Invalidar cache para atualizar outras paginas (ex: /regras)
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     } catch {
       setFieldError("Erro ao salvar configuracao");
     } finally {
@@ -246,6 +294,11 @@ export default function AdminConfiguracoesPage() {
                       Atualizado em:{" "}
                       {new Date(setting.updated_at).toLocaleDateString("pt-BR")}
                     </p>
+                  )}
+
+                  {/* Preview da tabela ELO para k_factor */}
+                  {setting.key === "k_factor" && (
+                    <EloPreview kFactor={isEditing ? parseInt(editValue, 10) || 24 : parseInt(setting.value, 10)} />
                   )}
                 </div>
               );

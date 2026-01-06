@@ -4,8 +4,9 @@ import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useMatches, useRanking } from "@/lib/queries";
 import { changePassword } from "@/app/actions/profile";
-import { Loader2, Key, Check, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { Loader2, Key, Check, AlertTriangle, Eye, EyeOff, BookOpen } from "lucide-react";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProfilePageSkeleton, MatchListSkeleton } from "@/components/skeletons";
@@ -345,10 +346,13 @@ export default function PerfilPage() {
                   </div>
                   <span
                     className={`text-sm font-semibold ${
-                      euVenci ? "text-green-600" : "text-blue-600"
+                      euVenci ? "text-green-600" : "text-red-500"
                     }`}
                   >
-                    +{meusPoints || (euVenci ? 20 : 8)} pts
+                    {meusPoints !== undefined && meusPoints !== null
+                      ? (meusPoints >= 0 ? `+${meusPoints}` : meusPoints)
+                      : (euVenci ? "+12" : "-12")
+                    } pts
                   </span>
                 </article>
               );
@@ -359,6 +363,21 @@ export default function PerfilPage() {
             </p>
           )}
         </div>
+
+        {/* Link para Regras */}
+        <Link
+          href="/regras"
+          className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary"
+        >
+          <div className="flex items-center gap-3">
+            <BookOpen className="h-5 w-5 text-primary" />
+            <div>
+              <p className="font-semibold text-foreground">Regras do Ranking</p>
+              <p className="text-xs text-muted-foreground">Como funciona a pontuacao ELO</p>
+            </div>
+          </div>
+          <span className="text-muted-foreground">→</span>
+        </Link>
 
         {/* Seguranca - Alterar Senha */}
         <div className="space-y-3">

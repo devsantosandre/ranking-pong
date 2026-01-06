@@ -25,6 +25,7 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import {
   adminGetAllUsers,
+  adminSearchUsers,
   adminCreateUser,
   adminResetPassword,
   adminUpdateUserRating,
@@ -76,10 +77,15 @@ export default function AdminJogadoresPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResults, setSearchResults] = useState<AdminUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("todos");
   const [roleFilter, setRoleFilter] = useState("todos");
+
+  // Determina se está em modo de busca
+  const isSearching = searchInput.length >= 2;
 
   // Estados para formulario de adicionar
   const [showAddForm, setShowAddForm] = useState(false);
@@ -144,13 +150,36 @@ export default function AdminJogadoresPage() {
     loadUsers(true);
   }, [statusFilter, roleFilter]);
 
-  // Busca por texto (filtros de status/role ja vem do backend)
-  const filteredUsers = users.filter(
-    (u) =>
-      u.name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Busca server-side quando tem 2+ caracteres
+  useEffect(() => {
+    if (!isSearching) {
+      setSearchResults([]);
+      return;
+    }
+
+    const searchUsers = async () => {
+      setSearchLoading(true);
+      try {
+        const filters = {
+          status: statusFilter !== "todos" ? statusFilter : undefined,
+          role: roleFilter !== "todos" ? roleFilter : undefined,
+        };
+        const results = await adminSearchUsers(searchInput, filters);
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    };
+
+    // Debounce de 300ms
+    const timeoutId = setTimeout(searchUsers, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchInput, statusFilter, roleFilter, isSearching]);
+
+  // Escolhe qual lista mostrar
+  const displayUsers = isSearching ? searchResults : users;
 
   // Validacoes
   const validateAddUser = (): boolean => {
@@ -517,12 +546,28 @@ export default function AdminJogadoresPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar jogador..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            placeholder="Buscar jogador (min. 2 letras)..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-9 pr-9"
           />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-full"
+              type="button"
+            >
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
         </div>
+
+        {/* Indicador de busca */}
+        {isSearching && (
+          <p className="text-xs text-muted-foreground text-center">
+            {searchLoading ? "Buscando..." : `${displayUsers.length} resultado(s) para "${searchInput}"`}
+          </p>
+        )}
 
         {/* Filtros */}
         <div className="space-y-2">
@@ -562,15 +607,19 @@ export default function AdminJogadoresPage() {
         </div>
 
         {/* Loading */}
-        {loading ? (
+        {loading && !isSearching ? (
           <PlayerListSkeleton count={6} />
-        ) : filteredUsers.length === 0 ? (
+        ) : displayUsers.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Nenhum jogador encontrado
+            {isSearching
+              ? searchLoading
+                ? "Buscando..."
+                : "Nenhum jogador encontrado"
+              : "Nenhum jogador encontrado"}
           </p>
         ) : (
           <div className="space-y-3">
-            {filteredUsers.map((player) => {
+            {displayUsers.map((player) => {
               const isExpanded = expandedUser === player.id;
               const isCurrentUser = currentUser?.id === player.id;
 
@@ -883,12 +932,14 @@ export default function AdminJogadoresPage() {
               );
             })}
 
-            {/* Botao Carregar mais */}
-            <LoadMoreButton
-              onClick={() => loadUsers(false)}
-              isLoading={loadingMore}
-              hasMore={hasMore}
-            />
+            {/* Botao Carregar mais (só quando não está buscando) */}
+            {!isSearching && (
+              <LoadMoreButton
+                onClick={() => loadUsers(false)}
+                isLoading={loadingMore}
+                hasMore={hasMore}
+              />
+            )}
           </div>
         )}
       </div>

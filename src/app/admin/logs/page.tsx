@@ -27,6 +27,93 @@ const actionLabels: Record<string, { label: string; color: string }> = {
   setting_changed: { label: "Config alterada", color: "bg-amber-100 text-amber-700" },
 };
 
+// Labels para configuracoes
+const settingNames: Record<string, string> = {
+  k_factor: "Fator K (ELO)",
+  limite_jogos_diarios: "Limite jogos diarios",
+  rating_inicial: "Rating inicial",
+  pontos_vitoria: "Pontos vitoria",
+  pontos_derrota: "Pontos derrota",
+};
+
+// Formatar valor para exibicao
+function formatValue(value: unknown, action: string): React.ReactNode {
+  if (value === null || value === undefined) return null;
+
+  // Para alteracoes de configuracao
+  if (action === "setting_changed" && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if ("key" in obj && "value" in obj) {
+      const key = String(obj.key);
+      const settingName = settingNames[key] || key;
+      return (
+        <span>
+          <span className="font-medium">{settingName}</span>: {String(obj.value)}
+        </span>
+      );
+    }
+  }
+
+  // Para cancelamento de partida
+  if (action === "match_cancelled" && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (obj.player_a && obj.player_b) {
+      parts.push(`${obj.player_a} vs ${obj.player_b}`);
+    }
+    if (obj.resultado_a !== undefined && obj.resultado_b !== undefined) {
+      parts.push(`Placar: ${obj.resultado_a} x ${obj.resultado_b}`);
+    }
+    if (obj.pontos_revertidos_a !== undefined || obj.pontos_revertidos_b !== undefined) {
+      const ptsA = Number(obj.pontos_revertidos_a) || 0;
+      const ptsB = Number(obj.pontos_revertidos_b) || 0;
+      parts.push(`Pontos revertidos: ${ptsA > 0 ? `-${ptsA}` : `+${Math.abs(ptsA)}`} / ${ptsB > 0 ? `-${ptsB}` : `+${Math.abs(ptsB)}`}`);
+    }
+
+    if (parts.length > 0) {
+      return (
+        <div className="space-y-0.5">
+          {parts.map((part, i) => (
+            <div key={i}>{part}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  // Para alteracao de rating
+  if (action === "user_rating_changed" && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if ("rating" in obj) {
+      return <span className="font-semibold text-primary">{String(obj.rating)} pts</span>;
+    }
+  }
+
+  // Para reset de stats
+  if (action === "user_stats_reset" && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+    if (obj.rating !== undefined) parts.push(`Rating: ${obj.rating}`);
+    if (obj.vitorias !== undefined) parts.push(`V: ${obj.vitorias}`);
+    if (obj.derrotas !== undefined) parts.push(`D: ${obj.derrotas}`);
+    if (parts.length > 0) {
+      return <span>{parts.join(" | ")}</span>;
+    }
+  }
+
+  // Fallback para JSON
+  if (typeof value === "object") {
+    return (
+      <code className="inline-block rounded bg-muted px-2 py-1 text-[10px]">
+        {JSON.stringify(value)}
+      </code>
+    );
+  }
+
+  return String(value);
+}
+
 const targetIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
   match: Gamepad2,
@@ -194,10 +281,8 @@ export default function AdminLogsPage() {
                       {log.old_value && (
                         <div className="text-xs">
                           <span className="text-muted-foreground">Antes: </span>
-                          <div className="mt-1 max-w-full overflow-x-auto">
-                            <code className="inline-block min-w-full rounded bg-muted px-2 py-1 text-[10px] whitespace-nowrap">
-                              {JSON.stringify(log.old_value)}
-                            </code>
+                          <div className="mt-1">
+                            {formatValue(log.old_value, log.action)}
                           </div>
                         </div>
                       )}
@@ -205,10 +290,8 @@ export default function AdminLogsPage() {
                       {log.new_value && (
                         <div className="text-xs">
                           <span className="text-muted-foreground">Depois: </span>
-                          <div className="mt-1 max-w-full overflow-x-auto">
-                            <code className="inline-block min-w-full rounded bg-muted px-2 py-1 text-[10px] whitespace-nowrap">
-                              {JSON.stringify(log.new_value)}
-                            </code>
+                          <div className="mt-1">
+                            {formatValue(log.new_value, log.action)}
                           </div>
                         </div>
                       )}

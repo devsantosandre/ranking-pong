@@ -346,6 +346,47 @@ export async function adminGetAllUsers(
   };
 }
 
+// Busca de usuários por texto (sem paginação - para busca completa)
+export async function adminSearchUsers(
+  search: string,
+  filters?: { status?: string; role?: string }
+): Promise<AdminUser[]> {
+  await requireModerator();
+  const supabase = await createClient();
+
+  if (!search || search.trim().length < 2) {
+    return [];
+  }
+
+  const searchTerm = `%${search.trim()}%`;
+
+  let query = supabase
+    .from("users")
+    .select(
+      "id, name, full_name, email, role, is_active, hide_from_ranking, rating_atual, vitorias, derrotas, jogos_disputados"
+    )
+    .or(`name.ilike.${searchTerm},full_name.ilike.${searchTerm},email.ilike.${searchTerm}`)
+    .order("rating_atual", { ascending: false })
+    .limit(50); // Limita a 50 resultados na busca
+
+  // Filtro de status
+  if (filters?.status === "ativos") {
+    query = query.eq("is_active", true);
+  } else if (filters?.status === "inativos") {
+    query = query.eq("is_active", false);
+  }
+
+  // Filtro de role
+  if (filters?.role && filters.role !== "todos") {
+    query = query.eq("role", filters.role);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw new Error(error.message);
+  return data as AdminUser[];
+}
+
 export async function adminCreateUser(
   name: string,
   email: string,

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { calculateElo, applyMinRating } from "@/lib/elo";
 
 // Validar formato do score (ex: "3x1", "2x3")
 function parseScore(outcome: string): { a: number; b: number } | null {
@@ -78,25 +79,28 @@ export async function confirmMatchAction(
   const myRating = myData.rating_atual ?? 250;
   const opponentRating = opponentData.rating_atual ?? 250;
 
-  // 4. Buscar configurações dinâmicas
+  // 4. Buscar configurações dinâmicas (K factor para ELO)
   const { data: settings } = await supabase
     .from("settings")
     .select("key, value")
-    .in("key", ["pontos_vitoria", "pontos_derrota"]);
+    .in("key", ["k_factor"]);
 
-  const pontosVitoriaStr = settings?.find((s) => s.key === "pontos_vitoria")?.value;
-  const pontosDerrotaStr = settings?.find((s) => s.key === "pontos_derrota")?.value;
+  const kFactorStr = settings?.find((s) => s.key === "k_factor")?.value;
+  const kFactor = kFactorStr ? parseInt(kFactorStr, 10) : 24;
 
-  const pontosVitoria = pontosVitoriaStr ? parseInt(pontosVitoriaStr, 10) : 20;
-  const pontosDerrota = pontosDerrotaStr ? parseInt(pontosDerrotaStr, 10) : 8;
-
-  // Validar que os pontos são números válidos
-  if (isNaN(pontosVitoria) || isNaN(pontosDerrota) || pontosVitoria < 0 || pontosDerrota < 0) {
-    return { success: false, error: "Configuração de pontos inválida" };
+  // Validar que o K factor é válido
+  if (isNaN(kFactor) || kFactor < 1 || kFactor > 100) {
+    return { success: false, error: "Configuração de K factor inválida" };
   }
 
-  const myDelta = isWinner ? pontosVitoria : pontosDerrota;
-  const opponentDelta = isWinner ? pontosDerrota : pontosVitoria;
+  // 5. Calcular ELO baseado nos ratings atuais
+  const winnerRating = isWinner ? myRating : opponentRating;
+  const loserRating = isWinner ? opponentRating : myRating;
+  const { winnerDelta, loserDelta } = calculateElo(winnerRating, loserRating, kFactor);
+
+  // myDelta e opponentDelta baseados em quem venceu
+  const myDelta = isWinner ? winnerDelta : loserDelta;
+  const opponentDelta = isWinner ? loserDelta : winnerDelta;
 
   // 5. Determinar quem é o vencedor da partida
   const winnerId = match.vencedor_id;
@@ -108,17 +112,23 @@ export async function confirmMatchAction(
     return { success: false, error: "Dados do vencedor/perdedor não encontrados" };
   }
 
-  // 6. Atualizar match para validado COM CONDIÇÃO DE STATUS
+  // 6. Calcular ratings finais com proteção de mínimo
+  const playerARating = euSouPlayerA ? myRating : opponentRating;
+  const playerBRating = euSouPlayerA ? opponentRating : myRating;
+  const playerADelta = euSouPlayerA ? myDelta : opponentDelta;
+  const playerBDelta = euSouPlayerA ? opponentDelta : myDelta;
+
+  // 7. Atualizar match para validado COM CONDIÇÃO DE STATUS
   // Isso previne race condition - só atualiza se ainda estiver pendente/edited
   const { data: updatedMatch, error: matchError } = await supabase
     .from("matches")
     .update({
       status: "validado",
       aprovado_por: userId,
-      pontos_variacao_a: euSouPlayerA ? myDelta : opponentDelta,
-      pontos_variacao_b: euSouPlayerA ? opponentDelta : myDelta,
-      rating_final_a: euSouPlayerA ? myRating + myDelta : opponentRating + opponentDelta,
-      rating_final_b: euSouPlayerA ? opponentRating + opponentDelta : myRating + myDelta,
+      pontos_variacao_a: playerADelta,
+      pontos_variacao_b: playerBDelta,
+      rating_final_a: applyMinRating(playerARating + playerADelta),
+      rating_final_b: applyMinRating(playerBRating + playerBDelta),
     })
     .eq("id", matchId)
     .in("status", ["pendente", "edited"]) // Só atualiza se status ainda for válido
@@ -131,11 +141,12 @@ export async function confirmMatchAction(
     return { success: false, error: "Esta partida já foi processada por outro usuário" };
   }
 
-  // 7. Atualizar stats do vencedor
+  // 8. Atualizar stats do vencedor (ganha pontos)
+  const newWinnerRating = applyMinRating((winnerData.rating_atual ?? 1000) + winnerDelta);
   const { error: winnerError } = await supabase
     .from("users")
     .update({
-      rating_atual: (winnerData.rating_atual ?? 250) + pontosVitoria,
+      rating_atual: newWinnerRating,
       vitorias: (winnerData.vitorias ?? 0) + 1,
       jogos_disputados: (winnerData.jogos_disputados ?? 0) + 1,
     })
@@ -148,11 +159,12 @@ export async function confirmMatchAction(
     return { success: false, error: "Erro ao atualizar estatísticas do vencedor" };
   }
 
-  // 8. Atualizar stats do perdedor
+  // 9. Atualizar stats do perdedor (perde pontos - loserDelta é negativo)
+  const newLoserRating = applyMinRating((loserData.rating_atual ?? 1000) + loserDelta);
   const { error: loserError } = await supabase
     .from("users")
     .update({
-      rating_atual: (loserData.rating_atual ?? 250) + pontosDerrota,
+      rating_atual: newLoserRating,
       derrotas: (loserData.derrotas ?? 0) + 1,
       jogos_disputados: (loserData.jogos_disputados ?? 0) + 1,
     })
@@ -173,7 +185,9 @@ export async function confirmMatchAction(
     return { success: false, error: "Erro ao atualizar estatísticas do perdedor" };
   }
 
-  // 9. Registrar transações
+  // 10. Registrar transações
+  const myNewRating = isWinner ? newWinnerRating : newLoserRating;
+  const opponentNewRating = isWinner ? newLoserRating : newWinnerRating;
   const { error: transactionError } = await supabase.from("rating_transactions").insert([
     {
       match_id: matchId,
@@ -181,7 +195,7 @@ export async function confirmMatchAction(
       motivo: isWinner ? "vitoria" : "derrota",
       valor: myDelta,
       rating_antes: myRating,
-      rating_depois: myRating + myDelta,
+      rating_depois: myNewRating,
     },
     {
       match_id: matchId,
@@ -189,7 +203,7 @@ export async function confirmMatchAction(
       motivo: isWinner ? "derrota" : "vitoria",
       valor: opponentDelta,
       rating_antes: opponentRating,
-      rating_depois: opponentRating + opponentDelta,
+      rating_depois: opponentNewRating,
     },
   ]);
 

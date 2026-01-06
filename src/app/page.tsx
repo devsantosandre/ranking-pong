@@ -229,9 +229,9 @@ export default function Home() {
                     </span>{" "}
                     {getPlayerName(match.player_b)}
                   </p>
-                  {meusPoints && (
-                    <p className={`text-xs font-semibold ${euVenci ? "text-green-600" : "text-blue-600"}`}>
-                      +{meusPoints} pts
+                  {meusPoints !== undefined && meusPoints !== null && (
+                    <p className={`text-xs font-semibold ${euVenci ? "text-green-600" : "text-red-500"}`}>
+                      {meusPoints >= 0 ? `+${meusPoints}` : meusPoints} pts
                     </p>
                   )}
                 </article>
