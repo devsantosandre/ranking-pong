@@ -106,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let isInitialized = false;
 
     // Get initial session
     const getUser = async () => {
@@ -145,6 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Ignorar erros ao fazer signOut
         }
         setLoading(false);
+      } finally {
+        isInitialized = true;
       }
     };
 
@@ -154,8 +157,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         if (!isMounted) return;
+
+        // Ignorar INITIAL_SESSION pois getUser() já tratou a inicialização
+        if (event === "INITIAL_SESSION") return;
+
+        // Para outros eventos, só processar depois que a inicialização completou
+        if (!isInitialized) return;
+
         await fetchUserProfile(session?.user ?? null);
       }
     );
