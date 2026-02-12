@@ -143,9 +143,10 @@ As conquistas possuem diferentes níveis de raridade, indicando sua dificuldade:
 1. Jogador A registra uma partida
 2. Jogador B confirma o resultado
 3. Sistema atualiza estatísticas (vitórias, rating, streak)
-4. Sistema verifica todas as conquistas não desbloqueadas
-5. Conquistas atingidas são salvas em `user_achievements`
-6. Toast de celebração é exibido para o jogador
+4. Sistema verifica conquistas do jogador que confirmou (fluxo síncrono)
+5. Sistema verifica conquistas do adversário em background (best-effort)
+6. Conquistas atingidas são salvas em `user_achievements`
+7. Toast de celebração é exibido para o jogador que confirmou
 
 ### Fluxo Técnico
 
@@ -154,13 +155,20 @@ confirmMatchAction()
     ↓
 Atualiza stats do vencedor e perdedor
     ↓
-checkAndUnlockAchievements(winnerContext)
-checkAndUnlockAchievements(loserContext)
+checkAndUnlockAchievements(meuContext)      [aguardado]
+checkAndUnlockAchievements(opponentContext) [background]
     ↓
-Retorna conquistas desbloqueadas
+Retorna apenas conquistas do usuário que confirmou
     ↓
 Frontend exibe toast de celebração
 ```
+
+### Execução e Segurança
+
+- Em server action, o módulo usa `service_role` quando disponível para evitar falha de RLS ao desbloquear conquista para outro usuário.
+- Se houver falha ao gravar alguma conquista, o fluxo principal da confirmação continua.
+- O desbloqueio usa `upsert` com `onConflict (user_id, achievement_id)` para evitar duplicação em concorrência.
+- A verificação usa cache curto de conquistas ativas e cache por execução para reduzir consultas repetidas.
 
 ---
 
@@ -276,6 +284,6 @@ src/
 4. **Cache otimizado**: Conquistas usam React Query com staleTime configurado
 5. **Suporte a múltiplas conquistas**: Várias podem ser desbloqueadas na mesma partida
 6. **Auto-recuperação**: Se ocorrer erro ao desbloquear, a conquista será verificada novamente na próxima partida
-7. **Race condition safe**: Usa upsert com ignoreDuplicates para evitar duplicação
+7. **Race condition safe**: Usa upsert com `onConflict` para evitar duplicação
 8. **Cancelamento de partida**: Conquistas vinculadas à partida cancelada são revogadas automaticamente
 9. **K factor registrado**: O K factor do ELO usado no momento da confirmação é armazenado na partida para auditoria

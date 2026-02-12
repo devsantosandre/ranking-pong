@@ -197,6 +197,7 @@ Configurações dinâmicas do sistema.
 |-----|--------------|-----------|
 | `k_factor` | "24" | Fator K do ELO |
 | `limite_jogos_diarios` | "2" | Limite de jogos/dia vs mesmo oponente |
+| `rating_inicial` | "250" | Rating inicial usado na criação de jogadores |
 
 ---
 
@@ -300,6 +301,21 @@ Notificações dos usuários.
 
 **Tipos:** desafio, ranking_update, news, confirmacao
 
+**Índice importante (Realtime V1):**
+- `idx_notifications_user_lida_created_at (user_id, lida, created_at DESC)`
+
+**Payload usado em `tipo = 'confirmacao'` (V1):**
+- `event`: `pending_created` | `pending_transferred` | `pending_resolved`
+- `match_id`: UUID da partida
+- `status`: `pendente` | `edited` | `validado` | `cancelado`
+- `actor_id`: UUID de quem disparou o evento
+- `actor_name`: Nome exibível de quem disparou o evento
+- `created_by`: UUID de quem criou/ajustou o registro principal da pendência
+
+**Policies relevantes (RLS):**
+- `Users can view own notifications` (`SELECT` em `user_id = auth.uid()`)
+- `Users can update own notifications` (`UPDATE` em `user_id = auth.uid()`)
+
 ---
 
 ### live_updates
@@ -312,6 +328,20 @@ Atualizações em tempo real de partidas.
 | `match_id` | uuid | - | Não | FK -> matches.id |
 | `payload` | jsonb | '{}' | Sim | Dados da atualização |
 | `created_at` | timestamptz | now() | Sim | Data de criação |
+
+---
+
+## Realtime (publication `supabase_realtime`)
+
+Tabelas críticas para o fluxo atual:
+
+| Tabela | Uso |
+|--------|-----|
+| `users` | Sincronização de ranking, home, perfil e notícias |
+| `notifications` | Barramento de eventos de pendência entre sessões/dispositivos |
+
+Observação:
+- A migration `20260212193000_realtime_notifications_pending_v1` adiciona `notifications` à publication.
 
 ---
 
@@ -328,7 +358,15 @@ CREATE TYPE match_status AS ENUM ('pendente', 'validado', 'in_progress', 'cancel
 CREATE TYPE resultado_tipo AS ENUM ('win', 'loss', 'wo');
 
 -- Motivo de transação de rating
-CREATE TYPE transaction_motivo AS ENUM ('vitoria', 'derrota', 'bonus', 'inatividade', 'wo');
+CREATE TYPE transaction_motivo AS ENUM (
+  'vitoria',
+  'derrota',
+  'bonus',
+  'inatividade',
+  'wo',
+  'reversao_admin',
+  'ajuste_admin'
+);
 
 -- Tipo de notícia
 CREATE TYPE news_tipo AS ENUM ('resultado');
@@ -379,6 +417,7 @@ Row Level Security está **habilitado** nas seguintes tabelas:
 | 20251222132851 | add_hide_from_ranking_to_users | Campo hide_from_ranking |
 | 20260106044411 | create_achievements_tables | Tabelas de conquistas |
 | 20260106053336 | add_k_factor_to_matches | Campo k_factor_used |
+| 20260212193000 | realtime_notifications_pending_v1 | Publication + policies + índice em notifications |
 
 ---
 

@@ -175,7 +175,9 @@ Pontos ganhos/perdidos com K = 24:
    │   ├── vitorias/derrotas
    │   └── jogos_disputados
    ├── Registra transações em rating_transactions
-   ├── Verifica conquistas
+   ├── Verifica conquistas do confirmador (síncrono)
+   ├── Verifica conquistas do adversário (background)
+   ├── Emite evento de pendência resolvida em notifications
    └── Status: "validado"
 ```
 
