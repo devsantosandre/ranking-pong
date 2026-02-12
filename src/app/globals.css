@@ -120,3 +120,273 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* TV Ranking Animations */
+@keyframes tv-highlight {
+  0% {
+    background-color: rgba(234, 179, 8, 0.3);
+    transform: scale(1.02);
+  }
+  50% {
+    background-color: rgba(234, 179, 8, 0.5);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+@keyframes tv-slide-up {
+  0% {
+    transform: translateY(20px);
+    opacity: 0.5;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.7);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+    box-shadow: none;
+  }
+}
+
+@keyframes tv-slide-down {
+  0% {
+    transform: translateY(-20px);
+    opacity: 0.5;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.7);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+    box-shadow: none;
+  }
+}
+
+.animate-tv-highlight {
+  animation: tv-highlight 1.5s ease-out;
+}
+
+.animate-tv-slide-up {
+  animation: tv-slide-up 1s ease-out;
+}
+
+.animate-tv-slide-down {
+  animation: tv-slide-down 1s ease-out;
+}
+
+/* TV Ranking Grid - Vertical ordering with auto columns */
+.tv-ranking-grid-vertical {
+  column-width: 280px;
+  column-gap: 1.5rem;
+  column-fill: balance;
+  column-rule: 1px solid var(--border);
+}
+
+.tv-ranking-grid-vertical .tv-ranking-item {
+  break-inside: avoid;
+  margin-bottom: 0.25rem;
+  display: inline-block;
+  width: 100%;
+}
+
+/* Small screens - narrower columns */
+@media (max-width: 639px) {
+  .tv-ranking-grid-vertical {
+    column-width: 260px;
+    column-gap: 1rem;
+  }
+  .tv-ranking-grid-vertical .tv-ranking-item {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Large screens - wider columns */
+@media (min-width: 1024px) {
+  .tv-ranking-grid-vertical {
+    column-width: 300px;
+    column-gap: 2rem;
+  }
+}
+
+/* Extra large screens */
+@media (min-width: 1536px) {
+  .tv-ranking-grid-vertical {
+    column-width: 320px;
+    column-gap: 2.5rem;
+  }
+}
+
+/* ========================================
+   TV Table Mode - Compact Rows
+   ======================================== */
+
+.tv-table {
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.tv-table-th {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: var(--muted-foreground);
+}
+
+.tv-table-td {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.tv-table-row {
+  height: 1.75rem;
+}
+
+.tv-table-position {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.625rem;
+}
+
+.tv-change-badge-sm {
+  font-size: 0.5rem;
+  padding: 0.0625rem 0.1875rem;
+}
+
+/* Table mode - Tiny screens */
+@media (max-width: 400px) {
+  .tv-table {
+    font-size: 0.625rem;
+  }
+  .tv-table-th {
+    padding: 0.25rem 0.25rem;
+    font-size: 0.5rem;
+  }
+  .tv-table-td {
+    padding: 0.125rem 0.25rem;
+    font-size: 0.625rem;
+  }
+  .tv-table-row {
+    height: 1.5rem;
+  }
+  .tv-table-position {
+    width: 1rem;
+    height: 1rem;
+    font-size: 0.5rem;
+  }
+  .tv-change-badge-sm {
+    font-size: 0.4375rem;
+    padding: 0.0625rem 0.125rem;
+  }
+}
+
+/* Table mode - Small screens */
+@media (min-width: 401px) and (max-width: 639px) {
+  .tv-table {
+    font-size: 0.6875rem;
+  }
+  .tv-table-th {
+    padding: 0.3125rem 0.375rem;
+    font-size: 0.5625rem;
+  }
+  .tv-table-td {
+    padding: 0.1875rem 0.375rem;
+    font-size: 0.6875rem;
+  }
+  .tv-table-row {
+    height: 1.625rem;
+  }
+  .tv-table-position {
+    width: 1.125rem;
+    height: 1.125rem;
+    font-size: 0.5625rem;
+  }
+}
+
+/* Table mode - Medium screens */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .tv-table {
+    font-size: 0.8125rem;
+  }
+  .tv-table-th {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.625rem;
+  }
+  .tv-table-td {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+  }
+  .tv-table-row {
+    height: 2rem;
+  }
+  .tv-table-position {
+    width: 1.375rem;
+    height: 1.375rem;
+    font-size: 0.6875rem;
+  }
+  .tv-change-badge-sm {
+    font-size: 0.5625rem;
+    padding: 0.0625rem 0.25rem;
+  }
+}
+
+/* Table mode - Large screens */
+@media (min-width: 1024px) and (max-width: 1535px) {
+  .tv-table {
+    font-size: 0.875rem;
+  }
+  .tv-table-th {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.6875rem;
+  }
+  .tv-table-td {
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.875rem;
+  }
+  .tv-table-row {
+    height: 2.25rem;
+  }
+  .tv-table-position {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.75rem;
+  }
+  .tv-change-badge-sm {
+    font-size: 0.625rem;
+    padding: 0.0625rem 0.3125rem;
+  }
+}
+
+/* Table mode - Extra large screens */
+@media (min-width: 1536px) {
+  .tv-table {
+    font-size: 1rem;
+  }
+  .tv-table-th {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  .tv-table-td {
+    padding: 0.375rem 0.75rem;
+    font-size: 1rem;
+  }
+  .tv-table-row {
+    height: 2.5rem;
+  }
+  .tv-table-position {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.875rem;
+  }
+  .tv-change-badge-sm {
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.375rem;
+  }
+}
