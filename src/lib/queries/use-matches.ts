@@ -1,6 +1,11 @@
 "use client";
 
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
 import {
@@ -35,6 +40,11 @@ export type UserInfo = {
 export type MatchWithUsers = MatchData & {
   player_a: UserInfo;
   player_b: UserInfo;
+};
+
+type MatchesPage = {
+  matches: MatchWithUsers[];
+  nextPage: number | undefined;
 };
 
 // Hook para buscar partidas do usuário com paginacao
@@ -121,6 +131,33 @@ export function useConfirmMatch() {
       }
       return result;
     },
+    onMutate: async ({ matchId, userId }) => {
+      const matchesQueryKey = queryKeys.matches.list(userId);
+      await queryClient.cancelQueries({ queryKey: matchesQueryKey });
+
+      const previousMatches =
+        queryClient.getQueryData<InfiniteData<MatchesPage>>(matchesQueryKey);
+
+      queryClient.setQueryData<InfiniteData<MatchesPage>>(matchesQueryKey, (oldData) => {
+        if (!oldData) return oldData;
+
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page) => ({
+            ...page,
+            matches: page.matches.map((match) =>
+              match.id === matchId ? { ...match, status: "validado" } : match
+            ),
+          })),
+        };
+      });
+
+      return { previousMatches, matchesQueryKey };
+    },
+    onError: (_error, _variables, context) => {
+      if (!context?.previousMatches || !context.matchesQueryKey) return;
+      queryClient.setQueryData(context.matchesQueryKey, context.previousMatches);
+    },
     onSuccess: () => {
       // Invalida cache de partidas, usuários e conquistas para atualizar dados
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
@@ -178,8 +215,6 @@ export function useRegisterMatch() {
     },
   });
 }
-
-
 
 
 

@@ -3,7 +3,8 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useState, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import {
   useMatches,
   useConfirmMatch,
@@ -26,9 +27,12 @@ const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
 
 export default function PartidasPage() {
   const { user, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"recentes" | "pendentes">("pendentes");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftOutcome, setDraftOutcome] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [previewAlertDismissed, setPreviewAlertDismissed] = useState(false);
 
   // Achievement toast hook
   const { showAchievements, ToastComponent } = useAchievementToast();
@@ -38,12 +42,19 @@ export default function PartidasPage() {
     data,
     isLoading,
     error,
+    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useMatches(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
+  const previewAlertEnabled = searchParams.get("previewAlert") === "1";
+  const visibleActionError =
+    actionError ||
+    (!previewAlertDismissed && previewAlertEnabled
+      ? "Exemplo de erro ao confirmar partida. Tente novamente."
+      : null);
 
   // Flatten paginated data
   const matches = useMemo(() => {
@@ -55,6 +66,7 @@ export default function PartidasPage() {
 
   const handleConfirm = (matchId: string) => {
     if (!user) return;
+    setActionError(null);
     confirmMutation.mutate(
       { matchId, userId: user.id },
       {
@@ -64,15 +76,30 @@ export default function PartidasPage() {
             showAchievements(result.unlockedAchievements);
           }
         },
+        onError: (err) => {
+          const message =
+            err instanceof Error ? err.message : "Erro ao confirmar partida. Tente novamente.";
+          setActionError(message);
+          void refetch();
+        },
       }
     );
   };
 
   const handleContest = (matchId: string, newOutcome: string) => {
     if (!user) return;
+    setActionError(null);
     contestMutation.mutate(
       { matchId, userId: user.id, newOutcome },
-      { onSuccess: () => setEditingId(null) }
+      {
+        onSuccess: () => setEditingId(null),
+        onError: (err) => {
+          const message =
+            err instanceof Error ? err.message : "Erro ao contestar partida. Tente novamente.";
+          setActionError(message);
+          void refetch();
+        },
+      }
     );
   };
 
@@ -162,6 +189,30 @@ export default function PartidasPage() {
           </button>
         </div>
 
+        {visibleActionError && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            <p className="flex items-center gap-2 font-medium">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {visibleActionError}
+            </p>
+            <button
+              onClick={() => {
+                if (actionError) {
+                  setActionError(null);
+                } else {
+                  setPreviewAlertDismissed(true);
+                }
+              }}
+              className="rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
         {/* Lista de partidas */}
         <div className="space-y-3">
           {activeTab === "pendentes" && pendentes.length === 0 && (
@@ -184,7 +235,6 @@ export default function PartidasPage() {
                 user={user}
                 editingId={editingId}
                 draftOutcome={draftOutcome}
-                isLoading={confirmMutation.isPending || contestMutation.isPending}
                 loadingMatchId={
                   confirmMutation.isPending || contestMutation.isPending
                     ? (confirmMutation.variables?.matchId || contestMutation.variables?.matchId)
@@ -237,7 +287,6 @@ function PendingMatchCard({
   user,
   editingId,
   draftOutcome,
-  isLoading,
   loadingMatchId,
   onConfirm,
   onContest,
@@ -251,7 +300,6 @@ function PendingMatchCard({
   user: { id: string };
   editingId: string | null;
   draftOutcome: Record<string, string>;
-  isLoading: boolean;
   loadingMatchId: string | null | undefined;
   onConfirm: (id: string) => void;
   onContest: (id: string, outcome: string) => void;
@@ -266,7 +314,7 @@ function PendingMatchCard({
   const selected = draftOutcome[match.id] ?? `${match.resultado_a}x${match.resultado_b}`;
   const euCriei = match.criado_por === user.id;
   const opponent = match.player_a_id === user.id ? match.player_b : match.player_a;
-  const euDevoAgir = !euCriei || match.status === "edited";
+  const euDevoAgir = match.criado_por !== user.id;
   const isThisLoading = loadingMatchId === match.id;
 
   return (
