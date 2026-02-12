@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useMatches, useRanking } from "@/lib/queries";
+import { useMatches, useUser, useUserRankingPosition } from "@/lib/queries";
 import { changePassword } from "@/app/actions/profile";
 import { Loader2, Key, Check, AlertTriangle, Eye, EyeOff, BookOpen } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -10,18 +10,19 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProfilePageSkeleton, MatchListSkeleton } from "@/components/skeletons";
-import { getPlayerStyle, getDivisionName, isTopThree } from "@/lib/divisions";
+import {
+  getPlayerStyle,
+  getDivisionName,
+  getDivisionNumber,
+  isTopThree,
+} from "@/lib/divisions";
 import { AchievementsSection } from "@/components/achievements-section";
 
 export default function PerfilPage() {
   const { user, loading: authLoading, logout } = useAuth();
-  const { data: rankingData, isLoading: rankingLoading } = useRanking();
+  const { data: userStats, isLoading: userStatsLoading } = useUser(user?.id);
+  const { data: rankingPosition, isLoading: rankingPositionLoading } = useUserRankingPosition(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
-
-  // Flatten paginated data
-  const ranking = useMemo(() => {
-    return rankingData?.pages.flatMap((page) => page.users) ?? [];
-  }, [rankingData]);
 
   const matches = useMemo(() => {
     return matchesData?.pages.flatMap((page) => page.matches) ?? [];
@@ -38,11 +39,8 @@ export default function PerfilPage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
-  const isLoading = authLoading || rankingLoading;
-
-  // Dados do usuário no ranking
-  const userStats = ranking.find((p) => p.id === user?.id);
-  const userPosition = ranking.findIndex((p) => p.id === user?.id) + 1;
+  const isLoading = authLoading || userStatsLoading || rankingPositionLoading;
+  const userPosition = rankingPosition ?? 0;
 
   // Partidas validadas do usuário
   const validatedMatches = useMemo(() => {
@@ -194,7 +192,7 @@ export default function PerfilPage() {
     );
   }
 
-  const userName = user.name || "Usuário";
+  const userName = userStats?.full_name || userStats?.name || user.name || "Usuário";
   const vitorias = userStats?.vitorias || 0;
   const derrotas = userStats?.derrotas || 0;
   const totalJogos = vitorias + derrotas;
@@ -203,7 +201,9 @@ export default function PerfilPage() {
   // Estilos baseados na posição do usuário
   const isTop3 = userPosition > 0 && isTopThree(userPosition);
   const playerStyle = userPosition > 0 ? getPlayerStyle(userPosition) : null;
+  const divisionNumber = userPosition > 0 ? getDivisionNumber(userPosition) : null;
   const divisionName = userPosition > 0 ? getDivisionName(userPosition) : null;
+  const useLightBadgeText = isTop3 || (divisionNumber !== null && divisionNumber <= 3);
 
   return (
     <AppShell title="Perfil" subtitle="Seus dados e estatísticas" showBack>
@@ -220,7 +220,15 @@ export default function PerfilPage() {
               {isTop3 && (
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
               )}
-              <span className={`relative text-lg font-bold ${playerStyle ? 'text-white drop-shadow-md' : 'text-primary'}`}>
+              <span
+                className={`relative text-lg font-bold ${
+                  playerStyle
+                    ? useLightBadgeText
+                      ? "text-white drop-shadow-md"
+                      : "text-foreground"
+                    : "text-primary"
+                }`}
+              >
                 {userPosition > 0 ? `${userPosition}º` : getInitials(userName)}
               </span>
             </div>

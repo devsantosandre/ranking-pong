@@ -248,14 +248,14 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-3 pt-2">
           <Link
             href="/registrar-jogo"
-            className="rounded-2xl border border-border bg-primary p-4 text-center shadow-sm transition hover:scale-[1.01]"
+            className="block rounded-2xl border border-border bg-primary p-4 text-center shadow-sm transition hover:scale-[1.01]"
           >
             <p className="text-sm font-semibold text-primary-foreground">Registrar Jogo</p>
             <p className="text-xs text-primary-foreground/70">Nova partida</p>
           </Link>
           <Link
             href="/ranking"
-            className="rounded-2xl border border-border bg-card p-4 text-center shadow-sm transition hover:border-primary"
+            className="block rounded-2xl border border-border bg-card p-4 text-center shadow-sm transition hover:border-primary"
           >
             <p className="text-sm font-semibold text-foreground">Ver Ranking</p>
             <p className="text-xs text-muted-foreground">Classificação</p>

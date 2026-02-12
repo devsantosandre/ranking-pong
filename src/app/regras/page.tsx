@@ -16,6 +16,18 @@ export default function RegrasPage() {
     return kSetting ? parseInt(kSetting.value, 10) : 24;
   }, [settings]);
 
+  const limiteJogosDiarios = useMemo(() => {
+    const limiteSetting = settings?.find((s) => s.key === "limite_jogos_diarios");
+    const limite = limiteSetting ? parseInt(limiteSetting.value, 10) : 2;
+    return !isNaN(limite) && limite > 0 ? limite : 2;
+  }, [settings]);
+
+  const ratingInicial = useMemo(() => {
+    const ratingSetting = settings?.find((s) => s.key === "rating_inicial");
+    const rating = ratingSetting ? parseInt(ratingSetting.value, 10) : 250;
+    return !isNaN(rating) && rating > 0 ? rating : 250;
+  }, [settings]);
+
   // Calcular exemplos de pontuacao com o K factor atual
   const eloExamples = useMemo(() => {
     // vs Mais forte (800 vs 1200) - diferenca de 400 pontos
@@ -193,7 +205,9 @@ export default function RegrasPage() {
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
-              <span>Limite de 2 partidas por dia contra o mesmo adversario</span>
+              <span>
+                Limite de {limiteJogosDiarios} partidas por dia contra o mesmo adversario
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
@@ -201,7 +215,7 @@ export default function RegrasPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
-              <span>Rating inicial: 1000 pontos</span>
+              <span>Rating inicial: {ratingInicial} pontos</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>

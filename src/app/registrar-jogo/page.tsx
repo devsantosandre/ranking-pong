@@ -36,6 +36,12 @@ export default function RegistrarJogoPage() {
     return kSetting ? parseInt(kSetting.value, 10) : 24;
   }, [settings]);
 
+  const limiteJogosDiarios = useMemo(() => {
+    const limiteSetting = settings?.find((s) => s.key === "limite_jogos_diarios");
+    const limite = limiteSetting ? parseInt(limiteSetting.value, 10) : 2;
+    return !isNaN(limite) && limite > 0 ? limite : 2;
+  }, [settings]);
+
   // Filtrar para não mostrar o usuário logado como adversário
   const opponentOptions = users.filter((u) => u.id !== user?.id);
   const comboboxOptions = opponentOptions.map((opt) => ({
@@ -143,7 +149,7 @@ export default function RegistrarJogoPage() {
             </p>
             <p className="text-xs text-amber-700">
               Você está configurado como observador do ranking. Para participar de partidas,
-              um administrador precisa alterar sua configuração em "Admin → Jogadores".
+              um administrador precisa alterar sua configuração em Admin → Jogadores.
             </p>
           </article>
         </div>
@@ -154,7 +160,7 @@ export default function RegistrarJogoPage() {
   return (
     <AppShell
       title="Registrar jogo"
-      subtitle="Melhor de 5 • Máx. 2 jogos/dia"
+      subtitle={`Melhor de 5 • Máx. ${limiteJogosDiarios} jogos/dia`}
       showBack
     >
       <div className="space-y-4">
@@ -231,7 +237,9 @@ export default function RegistrarJogoPage() {
         <article className="rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Sistema ELO • Pontos variam por nível</span>
-            <span className="font-semibold text-amber-600">Máx. 2 jogos/dia</span>
+            <span className="font-semibold text-amber-600">
+              Máx. {limiteJogosDiarios} jogos/dia
+            </span>
           </div>
         </article>
 
