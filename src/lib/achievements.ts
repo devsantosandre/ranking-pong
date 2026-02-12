@@ -1,6 +1,8 @@
 // Sistema de Conquistas/Medalhas
 // Verifica e desbloqueia conquistas baseado em stats e eventos
 
+import { hasAdminConfig } from "@/lib/env";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
 export type Achievement = {
@@ -41,23 +43,69 @@ export type AchievementContext = {
   resultado?: string; // "3x0", "3x1", etc.
 };
 
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+type ValidatedMatch = {
+  player_a_id: string;
+  player_b_id: string;
+  created_at: string;
+  vencedor_id: string | null;
+};
+
+type AchievementEvaluationCache = {
+  validatedMatchesPromise?: Promise<ValidatedMatch[]>;
+  userCreatedAtPromise?: Promise<string | null>;
+  matchesInCurrentDayCountPromise?: Promise<number>;
+  rankingIdsByLimit: Map<number, Promise<string[]>>;
+  conditionResultByKey: Map<string, Promise<boolean>>;
+};
+
+const ACTIVE_ACHIEVEMENTS_CACHE_TTL_MS = 30_000;
+let cachedActiveAchievements: { data: Achievement[]; fetchedAt: number } | null = null;
+
+async function getAchievementsSupabaseClient(): Promise<ServerSupabaseClient> {
+  if (hasAdminConfig()) {
+    // Service role evita erro de RLS ao desbloquear conquistas para o outro jogador.
+    return createAdminClient() as unknown as ServerSupabaseClient;
+  }
+
+  return createClient();
+}
+
+async function getActiveAchievements(
+  supabase: ServerSupabaseClient
+): Promise<Achievement[]> {
+  const now = Date.now();
+  if (cachedActiveAchievements && now - cachedActiveAchievements.fetchedAt < ACTIVE_ACHIEVEMENTS_CACHE_TTL_MS) {
+    return cachedActiveAchievements.data;
+  }
+
+  const { data: achievements, error } = await supabase
+    .from("achievements")
+    .select("*")
+    .eq("is_active", true);
+
+  if (error || !achievements) {
+    return [];
+  }
+
+  const normalized = achievements as Achievement[];
+  cachedActiveAchievements = { data: normalized, fetchedAt: now };
+  return normalized;
+}
+
 // Verifica conquistas e retorna as que foram desbloqueadas
 // IMPORTANTE: Esta função NUNCA deve lançar exceções para não quebrar a confirmação de partida
 export async function checkAndUnlockAchievements(
   context: AchievementContext
 ): Promise<Achievement[]> {
   try {
-    const supabase = await createClient();
+    const supabase = await getAchievementsSupabaseClient();
     const unlockedAchievements: Achievement[] = [];
 
-    // 1. Buscar todas as conquistas ativas
-    const { data: allAchievements, error: achievementsError } = await supabase
-      .from("achievements")
-      .select("*")
-      .eq("is_active", true);
-
-    if (achievementsError || !allAchievements) {
-      console.error("Erro ao buscar conquistas:", achievementsError);
+    // 1. Buscar todas as conquistas ativas (com cache curto)
+    const allAchievements = await getActiveAchievements(supabase);
+    if (allAchievements.length === 0) {
       return [];
     }
 
@@ -68,21 +116,27 @@ export async function checkAndUnlockAchievements(
       .eq("user_id", context.userId);
 
     if (userAchievementsError) {
-      console.error("Erro ao buscar conquistas do usuário:", userAchievementsError);
       return [];
     }
 
     const unlockedIds = new Set(userAchievements?.map((ua) => ua.achievement_id) || []);
+    const evaluationCache: AchievementEvaluationCache = {
+      rankingIdsByLimit: new Map(),
+      conditionResultByKey: new Map(),
+    };
 
     // 3. Verificar cada conquista não desbloqueada
     for (const achievement of allAchievements) {
       if (unlockedIds.has(achievement.id)) continue;
 
-      const shouldUnlock = await checkAchievementCondition(
-        achievement,
-        context,
-        supabase
-      );
+      const conditionCacheKey = `${achievement.condition_type}:${achievement.condition_value}`;
+      if (!evaluationCache.conditionResultByKey.has(conditionCacheKey)) {
+        evaluationCache.conditionResultByKey.set(
+          conditionCacheKey,
+          checkAchievementCondition(achievement, context, supabase, evaluationCache)
+        );
+      }
+      const shouldUnlock = await evaluationCache.conditionResultByKey.get(conditionCacheKey)!;
 
       if (shouldUnlock) {
         // Desbloquear conquista usando upsert para evitar erros de duplicação
@@ -101,22 +155,16 @@ export async function checkAndUnlockAchievements(
             }
           );
 
-        if (insertError) {
-          // Log do erro mas não interrompe o processo
-          console.error(
-            `Erro ao desbloquear conquista ${achievement.key} para usuário ${context.userId}:`,
-            insertError.message
-          );
-        } else {
+        if (!insertError) {
           unlockedAchievements.push(achievement as Achievement);
+          unlockedIds.add(achievement.id);
         }
       }
     }
 
     return unlockedAchievements;
-  } catch (error) {
-    // Log do erro mas retorna array vazio para não quebrar a confirmação de partida
-    console.error("Erro crítico ao verificar conquistas:", error);
+  } catch {
+    // Retorna array vazio para não quebrar a confirmação de partida
     return [];
   }
 }
@@ -125,7 +173,8 @@ export async function checkAndUnlockAchievements(
 async function checkAchievementCondition(
   achievement: Achievement,
   context: AchievementContext,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
   const { condition_type, condition_value } = achievement;
 
@@ -145,7 +194,7 @@ async function checkAchievementCondition(
 
     // Conquistas de posição no ranking
     case "posicao":
-      return await checkRankingPosition(context.userId, condition_value, supabase);
+      return checkRankingPosition(context.userId, condition_value, supabase, cache);
 
     // Conquistas especiais de partida
     case "underdog":
@@ -157,39 +206,39 @@ async function checkAchievementCondition(
 
     case "winrate":
       if (context.jogos < 20) return false;
-      const winRate = (context.vitorias / context.jogos) * 100;
+      const winRate = (context.vitorias / Math.max(context.jogos, 1)) * 100;
       return winRate >= condition_value;
 
     case "jogos_dia":
-      return await checkMatchesInDay(context.userId, condition_value, supabase);
+      return checkMatchesInDay(context.userId, condition_value, supabase, cache);
 
     // Conquistas sociais
     case "h2h":
-      return await checkHeadToHead(context.userId, condition_value, supabase);
+      return checkHeadToHead(context.userId, condition_value, supabase, cache);
 
     case "oponentes_unicos":
-      return await checkUniqueOpponents(context.userId, condition_value, supabase);
+      return checkUniqueOpponents(context.userId, condition_value, supabase, cache);
 
     // Conquistas de veterania
     case "dias_escola":
-      return await checkDaysInSchool(context.userId, condition_value, supabase);
+      return checkDaysInSchool(context.userId, condition_value, supabase, cache);
 
     // Conquistas de atividade
     case "semanas_consecutivas":
-      return await checkConsecutiveWeeks(context.userId, condition_value, supabase);
+      return checkConsecutiveWeeks(context.userId, condition_value, supabase, cache);
 
     case "meses_ativos":
-      return await checkActiveMonths(context.userId, condition_value, supabase);
+      return checkActiveMonths(context.userId, condition_value, supabase, cache);
 
     // Marcos temporais
     case "primeira_semana":
-      return await checkFirstWeekActivity(context.userId, supabase);
+      return checkFirstWeekActivity(context.userId, supabase, cache);
 
     case "jogos_primeiro_mes":
-      return await checkFirstMonthMatches(context.userId, condition_value, supabase);
+      return checkFirstMonthMatches(context.userId, condition_value, supabase, cache);
 
     case "retorno":
-      return await checkComeback(context.userId, condition_value, supabase);
+      return checkComeback(context.userId, condition_value, supabase, cache);
 
     default:
       return false;
@@ -198,58 +247,130 @@ async function checkAchievementCondition(
 
 // Helpers para verificações complexas
 
+async function getValidatedMatchesForUser(
+  userId: string,
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
+): Promise<ValidatedMatch[]> {
+  if (!cache.validatedMatchesPromise) {
+    cache.validatedMatchesPromise = (async () => {
+      const { data, error } = await supabase
+        .from("matches")
+        .select("player_a_id, player_b_id, created_at, vencedor_id")
+        .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
+        .eq("status", "validado")
+        .order("created_at", { ascending: false });
+
+      if (error || !data) return [];
+      return data as ValidatedMatch[];
+    })();
+  }
+
+  return cache.validatedMatchesPromise;
+}
+
+async function getUserCreatedAt(
+  userId: string,
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
+): Promise<string | null> {
+  if (!cache.userCreatedAtPromise) {
+    cache.userCreatedAtPromise = (async () => {
+      const { data: user, error } = await supabase
+        .from("users")
+        .select("created_at")
+        .eq("id", userId)
+        .single();
+
+      if (error || !user?.created_at) return null;
+      return user.created_at as string;
+    })();
+  }
+
+  return cache.userCreatedAtPromise;
+}
+
+async function getRankingUserIdsByLimit(
+  maxPosition: number,
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
+): Promise<string[]> {
+  if (maxPosition <= 0) return [];
+  if (!cache.rankingIdsByLimit.has(maxPosition)) {
+    const rankingPromise = (async () => {
+      const { data: users, error } = await supabase
+        .from("users")
+        .select("id")
+        .eq("is_active", true)
+        .eq("hide_from_ranking", false)
+        .order("rating_atual", { ascending: false })
+        .limit(maxPosition);
+
+      if (error || !users) return [];
+      return users.map((u) => u.id as string);
+    })();
+    cache.rankingIdsByLimit.set(maxPosition, rankingPromise);
+  }
+
+  return cache.rankingIdsByLimit.get(maxPosition)!;
+}
+
+async function getMatchesInCurrentDayCount(
+  userId: string,
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
+): Promise<number> {
+  if (!cache.matchesInCurrentDayCountPromise) {
+    cache.matchesInCurrentDayCountPromise = (async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const { count, error } = await supabase
+        .from("matches")
+        .select("*", { count: "exact", head: true })
+        .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
+        .eq("status", "validado")
+        .gte("created_at", `${today}T00:00:00`)
+        .lte("created_at", `${today}T23:59:59`);
+
+      if (error) return 0;
+      return count || 0;
+    })();
+  }
+
+  return cache.matchesInCurrentDayCountPromise;
+}
+
 async function checkRankingPosition(
   userId: string,
   maxPosition: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data: users, error } = await supabase
-    .from("users")
-    .select("id")
-    .eq("is_active", true)
-    .eq("hide_from_ranking", false)
-    .order("rating_atual", { ascending: false })
-    .limit(maxPosition);
-
-  if (error || !users) return false;
-  return users.some((u) => u.id === userId);
+  const rankingUserIds = await getRankingUserIdsByLimit(maxPosition, supabase, cache);
+  const userPositionIndex = rankingUserIds.indexOf(userId);
+  return userPositionIndex !== -1 && userPositionIndex < maxPosition;
 }
 
 async function checkMatchesInDay(
   userId: string,
   minMatches: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const today = new Date().toISOString().split("T")[0];
-
-  const { count, error } = await supabase
-    .from("matches")
-    .select("*", { count: "exact", head: true })
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado")
-    .gte("created_at", `${today}T00:00:00`)
-    .lte("created_at", `${today}T23:59:59`);
-
-  if (error) return false;
-  return (count || 0) >= minMatches;
+  const matchesCount = await getMatchesInCurrentDayCount(userId, supabase, cache);
+  return matchesCount >= minMatches;
 }
 
 async function checkHeadToHead(
   userId: string,
   minMatches: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  // Buscar contagem de jogos por adversário
-  const { data, error } = await supabase
-    .from("matches")
-    .select("player_a_id, player_b_id")
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado");
-
-  if (error || !data) return false;
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  if (matches.length === 0) return false;
 
   const opponentCounts: Record<string, number> = {};
-  for (const match of data) {
+  for (const match of matches) {
     const opponentId = match.player_a_id === userId ? match.player_b_id : match.player_a_id;
     opponentCounts[opponentId] = (opponentCounts[opponentId] || 0) + 1;
   }
@@ -260,18 +381,14 @@ async function checkHeadToHead(
 async function checkUniqueOpponents(
   userId: string,
   minOpponents: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select("player_a_id, player_b_id")
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado");
-
-  if (error || !data) return false;
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  if (matches.length === 0) return false;
 
   const opponents = new Set<string>();
-  for (const match of data) {
+  for (const match of matches) {
     const opponentId = match.player_a_id === userId ? match.player_b_id : match.player_a_id;
     opponents.add(opponentId);
   }
@@ -282,17 +399,13 @@ async function checkUniqueOpponents(
 async function checkDaysInSchool(
   userId: string,
   minDays: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("created_at")
-    .eq("id", userId)
-    .single();
+  const userCreatedAt = await getUserCreatedAt(userId, supabase, cache);
+  if (!userCreatedAt) return false;
 
-  if (error || !user?.created_at) return false;
-
-  const createdAt = new Date(user.created_at);
+  const createdAt = new Date(userCreatedAt);
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -302,20 +415,15 @@ async function checkDaysInSchool(
 async function checkConsecutiveWeeks(
   userId: string,
   minWeeks: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select("created_at")
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado")
-    .order("created_at", { ascending: false });
-
-  if (error || !data || data.length === 0) return false;
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  if (matches.length === 0) return false;
 
   // Agrupar por semana ISO
   const weeks = new Set<string>();
-  for (const match of data) {
+  for (const match of matches) {
     const date = new Date(match.created_at);
     const week = getISOWeek(date);
     weeks.add(week);
@@ -341,18 +449,14 @@ async function checkConsecutiveWeeks(
 async function checkActiveMonths(
   userId: string,
   minMonths: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select("created_at")
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado");
-
-  if (error || !data) return false;
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  if (matches.length === 0) return false;
 
   const months = new Set<string>();
-  for (const match of data) {
+  for (const match of matches) {
     const date = new Date(match.created_at);
     months.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
   }
@@ -362,74 +466,47 @@ async function checkActiveMonths(
 
 async function checkFirstWeekActivity(
   userId: string,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("created_at")
-    .eq("id", userId)
-    .single();
+  const userCreatedAt = await getUserCreatedAt(userId, supabase, cache);
+  if (!userCreatedAt) return false;
 
-  if (userError || !user?.created_at) return false;
-
-  const createdAt = new Date(user.created_at);
+  const createdAt = new Date(userCreatedAt);
   const oneWeekLater = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  const { count, error } = await supabase
-    .from("matches")
-    .select("*", { count: "exact", head: true })
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado")
-    .lte("created_at", oneWeekLater.toISOString());
-
-  if (error) return false;
-  return (count || 0) >= 1;
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  return matches.some((match) => new Date(match.created_at) <= oneWeekLater);
 }
 
 async function checkFirstMonthMatches(
   userId: string,
   minMatches: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("created_at")
-    .eq("id", userId)
-    .single();
+  const userCreatedAt = await getUserCreatedAt(userId, supabase, cache);
+  if (!userCreatedAt) return false;
 
-  if (userError || !user?.created_at) return false;
-
-  const createdAt = new Date(user.created_at);
+  const createdAt = new Date(userCreatedAt);
   const oneMonthLater = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-  const { count, error } = await supabase
-    .from("matches")
-    .select("*", { count: "exact", head: true })
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado")
-    .lte("created_at", oneMonthLater.toISOString());
-
-  if (error) return false;
-  return (count || 0) >= minMatches;
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  const matchesInFirstMonth = matches.filter(
+    (match) => new Date(match.created_at) <= oneMonthLater
+  ).length;
+  return matchesInFirstMonth >= minMatches;
 }
 
 async function checkComeback(
   userId: string,
   inactiveDays: number,
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select("created_at")
-    .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-    .eq("status", "validado")
-    .order("created_at", { ascending: false })
-    .limit(2);
+  const matches = await getValidatedMatchesForUser(userId, supabase, cache);
+  if (matches.length < 2) return false;
 
-  if (error || !data || data.length < 2) return false;
-
-  const lastMatch = new Date(data[0].created_at);
-  const previousMatch = new Date(data[1].created_at);
+  const lastMatch = new Date(matches[0].created_at);
+  const previousMatch = new Date(matches[1].created_at);
   const diffDays = Math.floor((lastMatch.getTime() - previousMatch.getTime()) / (1000 * 60 * 60 * 24));
 
   return diffDays >= inactiveDays;

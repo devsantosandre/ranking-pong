@@ -3,6 +3,33 @@
 import { createClient } from "@/utils/supabase/server";
 import { calculateElo, applyMinRating } from "@/lib/elo";
 import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements";
+import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
+
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
+
+function createMatchActionTelemetry() {
+  return {
+    step(...args: unknown[]) {
+      void args;
+    },
+    finish(...args: unknown[]) {
+      void args;
+    },
+  };
+}
+
+function createConfirmMatchTelemetry() {
+  return createMatchActionTelemetry();
+}
+
+function createContestMatchTelemetry() {
+  return createMatchActionTelemetry();
+}
+
+function createRegisterMatchTelemetry() {
+  return createMatchActionTelemetry();
+}
 
 // Validar formato do score (ex: "3x1", "2x3")
 function parseScore(outcome: string): { a: number; b: number } | null {
@@ -22,20 +49,98 @@ function parseScore(outcome: string): { a: number; b: number } | null {
   return { a, b };
 }
 
+function getUserDisplayName(user: {
+  full_name?: string | null;
+  name?: string | null;
+  email?: string | null;
+}): string | null {
+  return user.full_name || user.name || user.email?.split("@")[0] || null;
+}
+
+function getCurrentDateInTimezone(timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    // Fallback para UTC caso a timezone não seja suportada no runtime
+    return new Date().toISOString().split("T")[0];
+  }
+}
+
+async function getActorName(
+  supabase: ServerSupabaseClient,
+  userId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("users")
+    .select("full_name, name, email")
+    .eq("id", userId)
+    .single();
+
+  if (!data) return null;
+
+  return data.full_name || data.name || data.email?.split("@")[0] || null;
+}
+
+async function emitPendingNotification(
+  supabase: ServerSupabaseClient,
+  userId: string,
+  payload: PendingNotificationPayloadV1
+) {
+  const { error } = await supabase.from("notifications").insert({
+    user_id: userId,
+    tipo: "confirmacao",
+    payload,
+    lida: false,
+  });
+
+  if (error) return;
+}
+
+async function emitPendingNotifications(
+  supabase: ServerSupabaseClient,
+  userIds: string[],
+  payload: PendingNotificationPayloadV1
+) {
+  const uniqueUserIds = Array.from(new Set(userIds));
+  if (uniqueUserIds.length === 0) return;
+
+  const { error } = await supabase.from("notifications").insert(
+    uniqueUserIds.map((userId) => ({
+      user_id: userId,
+      tipo: "confirmacao",
+      payload,
+      lida: false,
+    }))
+  );
+
+  if (error) return;
+}
+
 export async function confirmMatchAction(
   matchId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string; unlockedAchievements?: Achievement[] }> {
   const supabase = await createClient();
+  const telemetry = createConfirmMatchTelemetry();
+  const fail = (errorMessage: string, reason: string) => {
+    telemetry.finish("error", reason);
+    return { success: false, error: errorMessage };
+  };
 
   // 1. Buscar a partida COM VERIFICAÇÃO DE STATUS para evitar race condition
   // Usamos uma query que já filtra por status válido
   const { data: match, error: matchFetchError } = await supabase
     .from("matches")
-    .select("*")
+    .select("id, player_a_id, player_b_id, vencedor_id, resultado_a, resultado_b, criado_por, status")
     .eq("id", matchId)
     .in("status", ["pendente", "edited"]) // Só permite confirmar se estiver nesses status
     .single();
+  telemetry.step("fetch_match");
 
   if (matchFetchError || !match) {
     // Se não encontrou, pode ser que já foi confirmada ou não existe
@@ -44,14 +149,15 @@ export async function confirmMatchAction(
       .select("status")
       .eq("id", matchId)
       .single();
+    telemetry.step("fetch_existing_status");
 
     if (existingMatch?.status === "validado") {
-      return { success: false, error: "Esta partida já foi confirmada" };
+      return fail("Esta partida já foi confirmada", "already_validated");
     }
     if (existingMatch?.status === "cancelado") {
-      return { success: false, error: "Esta partida foi cancelada" };
+      return fail("Esta partida foi cancelada", "already_canceled");
     }
-    return { success: false, error: "Partida não encontrada" };
+    return fail("Partida não encontrada", "match_not_found");
   }
 
   // 2. Calcular pontuação
@@ -59,39 +165,42 @@ export async function confirmMatchAction(
   const isWinner = match.vencedor_id === userId;
   const opponentId = euSouPlayerA ? match.player_b_id : match.player_a_id;
 
-  // 3. Buscar dados atuais dos usuários
-  const { data: usersData, error: usersError } = await supabase
-    .from("users")
-    .select("id, rating_atual, vitorias, derrotas, jogos_disputados")
-    .in("id", [userId, opponentId]);
+  // 3. Buscar dados atuais dos usuários e settings em paralelo
+  const [
+    { data: usersData, error: usersError },
+    { data: settings },
+  ] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id, full_name, name, email, rating_atual, vitorias, derrotas, jogos_disputados")
+      .in("id", [userId, opponentId]),
+    supabase
+      .from("settings")
+      .select("key, value")
+      .in("key", ["k_factor"]),
+  ]);
+  telemetry.step("fetch_users_and_settings");
 
   if (usersError || !usersData || usersData.length !== 2) {
-    console.error("Erro ao buscar usuários:", usersError);
-    return { success: false, error: "Erro ao buscar dados dos jogadores" };
+    return fail("Erro ao buscar dados dos jogadores", "users_query_failed");
   }
 
   const myData = usersData.find((u) => u.id === userId);
   const opponentData = usersData.find((u) => u.id === opponentId);
 
   if (!myData || !opponentData) {
-    return { success: false, error: "Dados dos jogadores não encontrados" };
+    return fail("Dados dos jogadores não encontrados", "users_missing");
   }
 
   const myRating = myData.rating_atual ?? 250;
   const opponentRating = opponentData.rating_atual ?? 250;
-
-  // 4. Buscar configurações dinâmicas (K factor para ELO)
-  const { data: settings } = await supabase
-    .from("settings")
-    .select("key, value")
-    .in("key", ["k_factor"]);
 
   const kFactorStr = settings?.find((s) => s.key === "k_factor")?.value;
   const kFactor = kFactorStr ? parseInt(kFactorStr, 10) : 24;
 
   // Validar que o K factor é válido
   if (isNaN(kFactor) || kFactor < 1 || kFactor > 100) {
-    return { success: false, error: "Configuração de K factor inválida" };
+    return fail("Configuração de K factor inválida", "invalid_k_factor");
   }
 
   // 5. Calcular ELO baseado nos ratings atuais
@@ -110,7 +219,7 @@ export async function confirmMatchAction(
   const loserData = usersData.find((u) => u.id === loserId);
 
   if (!winnerData || !loserData) {
-    return { success: false, error: "Dados do vencedor/perdedor não encontrados" };
+    return fail("Dados do vencedor/perdedor não encontrados", "winner_or_loser_data_missing");
   }
 
   // 6. Calcular ratings finais com proteção de mínimo
@@ -121,7 +230,7 @@ export async function confirmMatchAction(
 
   // 7. Atualizar match para validado COM CONDIÇÃO DE STATUS
   // Isso previne race condition - só atualiza se ainda estiver pendente/edited
-  const { data: updatedMatch, error: matchError } = await supabase
+  const { data: validatedMatch, error: matchError } = await supabase
     .from("matches")
     .update({
       status: "validado",
@@ -134,63 +243,69 @@ export async function confirmMatchAction(
     })
     .eq("id", matchId)
     .in("status", ["pendente", "edited"]) // Só atualiza se status ainda for válido
-    .select()
+    .select("id")
     .single();
+  telemetry.step("validate_and_update_match");
 
-  if (matchError || !updatedMatch) {
-    // Se falhou, provavelmente outro request já confirmou
-    console.error("Erro ao atualizar match (possível race condition):", matchError);
-    return { success: false, error: "Esta partida já foi processada por outro usuário" };
+  if (matchError || !validatedMatch) {
+    // Se falhou, provavelmente outro request já confirmou.
+    return fail("Esta partida já foi processada por outro usuário", "match_already_processed");
   }
 
-  // 8. Atualizar stats do vencedor (ganha pontos)
+  // 8. Atualizar stats dos jogadores em paralelo
   const newWinnerRating = applyMinRating((winnerData.rating_atual ?? 1000) + winnerDelta);
-  const { error: winnerError } = await supabase
-    .from("users")
-    .update({
-      rating_atual: newWinnerRating,
-      vitorias: (winnerData.vitorias ?? 0) + 1,
-      jogos_disputados: (winnerData.jogos_disputados ?? 0) + 1,
-    })
-    .eq("id", winnerId);
-
-  if (winnerError) {
-    console.error("Erro ao atualizar stats do vencedor:", winnerError);
-    // Reverter o status da partida
-    await supabase.from("matches").update({ status: "pendente" }).eq("id", matchId);
-    return { success: false, error: "Erro ao atualizar estatísticas do vencedor" };
-  }
-
-  // 9. Atualizar stats do perdedor (perde pontos - loserDelta é negativo)
   const newLoserRating = applyMinRating((loserData.rating_atual ?? 1000) + loserDelta);
-  const { error: loserError } = await supabase
-    .from("users")
-    .update({
-      rating_atual: newLoserRating,
-      derrotas: (loserData.derrotas ?? 0) + 1,
-      jogos_disputados: (loserData.jogos_disputados ?? 0) + 1,
-    })
-    .eq("id", loserId);
 
-  if (loserError) {
-    console.error("Erro ao atualizar stats do perdedor:", loserError);
-    // Tentar reverter (best effort)
-    await supabase
+  const [winnerUpdateResult, loserUpdateResult] = await Promise.all([
+    supabase
       .from("users")
       .update({
-        rating_atual: winnerData.rating_atual,
-        vitorias: winnerData.vitorias,
-        jogos_disputados: winnerData.jogos_disputados,
+        rating_atual: newWinnerRating,
+        vitorias: (winnerData.vitorias ?? 0) + 1,
+        jogos_disputados: (winnerData.jogos_disputados ?? 0) + 1,
       })
-      .eq("id", winnerId);
-    await supabase.from("matches").update({ status: "pendente" }).eq("id", matchId);
-    return { success: false, error: "Erro ao atualizar estatísticas do perdedor" };
+      .eq("id", winnerId),
+    supabase
+      .from("users")
+      .update({
+        rating_atual: newLoserRating,
+        derrotas: (loserData.derrotas ?? 0) + 1,
+        jogos_disputados: (loserData.jogos_disputados ?? 0) + 1,
+      })
+      .eq("id", loserId),
+  ]);
+  telemetry.step("update_players");
+
+  if (winnerUpdateResult.error || loserUpdateResult.error) {
+    // Reverte para estado anterior (best effort)
+    await Promise.allSettled([
+      supabase
+        .from("users")
+        .update({
+          rating_atual: winnerData.rating_atual,
+          vitorias: winnerData.vitorias,
+          jogos_disputados: winnerData.jogos_disputados,
+        })
+        .eq("id", winnerId),
+      supabase
+        .from("users")
+        .update({
+          rating_atual: loserData.rating_atual,
+          derrotas: loserData.derrotas,
+          jogos_disputados: loserData.jogos_disputados,
+      })
+      .eq("id", loserId),
+      supabase.from("matches").update({ status: "pendente" }).eq("id", matchId),
+    ]);
+    telemetry.step("rollback_after_player_update_error");
+
+    return fail("Erro ao atualizar estatísticas dos jogadores", "player_update_failed");
   }
 
-  // 10. Registrar transações
+  // 10. Registrar transações (não crítico) - inicia em paralelo
   const myNewRating = isWinner ? newWinnerRating : newLoserRating;
   const opponentNewRating = isWinner ? newLoserRating : newWinnerRating;
-  const { error: transactionError } = await supabase.from("rating_transactions").insert([
+  const transactionPromise = supabase.from("rating_transactions").insert([
     {
       match_id: matchId,
       user_id: userId,
@@ -209,22 +324,18 @@ export async function confirmMatchAction(
     },
   ]);
 
-  if (transactionError) {
-    // Log error but don't fail - transactions are for audit only
-    console.error("Erro ao registrar transações (não crítico):", transactionError);
-  }
-
-  // 11. Verificar e desbloquear conquistas para ambos os jogadores
-  const unlockedAchievements: Achievement[] = [];
-
-  // Calcular streak do vencedor (precisamos buscar partidas recentes)
-  const { data: recentWinnerMatches } = await supabase
+  // 11. Operações não críticas em paralelo (transações, conquistas e notificações)
+  const actorNamePromise = Promise.resolve(getUserDisplayName(myData));
+  const recentWinnerMatchesPromise = supabase
     .from("matches")
     .select("vencedor_id")
     .or(`player_a_id.eq.${winnerId},player_b_id.eq.${winnerId}`)
     .eq("status", "validado")
     .order("created_at", { ascending: false })
     .limit(20);
+
+  const { data: recentWinnerMatches } = await recentWinnerMatchesPromise;
+  telemetry.step("fetch_winner_streak_history");
 
   let winnerStreak = 0;
   if (recentWinnerMatches) {
@@ -234,7 +345,6 @@ export async function confirmMatchAction(
     }
   }
 
-  // Verificar conquistas do vencedor
   const winnerContext = {
     userId: winnerId,
     matchId,
@@ -248,14 +358,6 @@ export async function confirmMatchAction(
     resultado: `${match.resultado_a}x${match.resultado_b}`,
   };
 
-  try {
-    const winnerUnlocked = await checkAndUnlockAchievements(winnerContext);
-    unlockedAchievements.push(...winnerUnlocked);
-  } catch (err) {
-    console.error("Erro ao verificar conquistas do vencedor:", err);
-  }
-
-  // Verificar conquistas do perdedor (algumas conquistas são para jogos, não só vitórias)
   const loserContext = {
     userId: loserId,
     matchId,
@@ -269,18 +371,39 @@ export async function confirmMatchAction(
     resultado: `${match.resultado_a}x${match.resultado_b}`,
   };
 
-  try {
-    const loserUnlocked = await checkAndUnlockAchievements(loserContext);
-    unlockedAchievements.push(...loserUnlocked);
-  } catch (err) {
-    console.error("Erro ao verificar conquistas do perdedor:", err);
-  }
+  const myContext = userId === winnerId ? winnerContext : loserContext;
+  const opponentContext = userId === winnerId ? loserContext : winnerContext;
 
-  // Filtrar apenas conquistas do usuário atual (quem confirmou)
-  const myUnlocked = unlockedAchievements.filter((a) => {
-    // Retornar todas as conquistas desbloqueadas por quem confirmou
-    return true; // Podemos filtrar se necessário
-  });
+  // Conquistas do adversário são best-effort em background para reduzir latência da confirmação.
+  void checkAndUnlockAchievements(opponentContext).catch(() => undefined);
+
+  const [myUnlockedResult, , actorNameResult] = await Promise.allSettled([
+    checkAndUnlockAchievements(myContext),
+    transactionPromise,
+    actorNamePromise,
+  ]);
+  telemetry.step("run_async_post_processing");
+
+  const myUnlocked = myUnlockedResult.status === "fulfilled" ? myUnlockedResult.value : [];
+  const actorName =
+    actorNameResult.status === "fulfilled" ? actorNameResult.value : null;
+
+  const resolvedPayload: PendingNotificationPayloadV1 = {
+    event: "pending_resolved",
+    match_id: matchId,
+    status: "validado",
+    actor_id: userId,
+    actor_name: actorName,
+    created_by: match.criado_por || userId,
+  };
+
+  await emitPendingNotifications(
+    supabase,
+    [match.player_a_id, match.player_b_id],
+    resolvedPayload
+  );
+  telemetry.step("emit_resolved_notifications");
+  telemetry.finish("success");
 
   return { success: true, unlockedAchievements: myUnlocked };
 }
@@ -290,13 +413,16 @@ export async function contestMatchAction(
   userId: string,
   newOutcome: string
 ): Promise<{ success: boolean; error?: string }> {
+  const telemetry = createContestMatchTelemetry();
+  const fail = (errorMessage: string, reason: string) => {
+    telemetry.finish("error", reason);
+    return { success: false, error: errorMessage };
+  };
+
   // Validar formato do score
   const score = parseScore(newOutcome);
   if (!score) {
-    return {
-      success: false,
-      error: "Formato de placar inválido. Use o formato NxN (ex: 3x1)",
-    };
+    return fail("Formato de placar inválido. Use o formato NxN (ex: 3x1)", "invalid_score");
   }
 
   const supabase = await createClient();
@@ -307,17 +433,24 @@ export async function contestMatchAction(
     .select("player_a_id, player_b_id, status")
     .eq("id", matchId)
     .single();
+  telemetry.step("fetch_match");
 
   if (matchError || !match) {
-    return { success: false, error: "Partida não encontrada" };
+    return fail("Partida não encontrada", "match_not_found");
   }
 
   // Não permitir contestar partida já validada ou cancelada
   if (match.status === "validado") {
-    return { success: false, error: "Não é possível contestar uma partida já validada" };
+    return fail(
+      "Não é possível contestar uma partida já validada",
+      "match_already_validated"
+    );
   }
   if (match.status === "cancelado") {
-    return { success: false, error: "Não é possível contestar uma partida cancelada" };
+    return fail(
+      "Não é possível contestar uma partida cancelada",
+      "match_already_canceled"
+    );
   }
 
   const vencedorId = score.a > score.b ? match.player_a_id : match.player_b_id;
@@ -333,11 +466,26 @@ export async function contestMatchAction(
     })
     .eq("id", matchId)
     .in("status", ["pendente", "edited"]); // Só atualiza se status for válido
+  telemetry.step("update_match");
 
   if (error) {
-    console.error("Erro ao contestar:", error);
-    return { success: false, error: "Erro ao contestar partida" };
+    return fail("Erro ao contestar partida", "update_match_failed");
   }
+
+  const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
+  const actorName = await getActorName(supabase, userId);
+  const transferPayload: PendingNotificationPayloadV1 = {
+    event: "pending_transferred",
+    match_id: matchId,
+    status: "edited",
+    actor_id: userId,
+    actor_name: actorName,
+    created_by: userId,
+  };
+
+  await emitPendingNotification(supabase, recipientId, transferPayload);
+  telemetry.step("emit_transfer_notification");
+  telemetry.finish("success");
 
   return { success: true };
 }
@@ -347,18 +495,21 @@ export async function registerMatchAction(input: {
   opponentId: string;
   outcome: string;
 }): Promise<{ success: boolean; error?: string }> {
+  const telemetry = createRegisterMatchTelemetry();
+  const fail = (errorMessage: string, reason: string) => {
+    telemetry.finish("error", reason);
+    return { success: false, error: errorMessage };
+  };
+
   // Validar formato do score
   const score = parseScore(input.outcome);
   if (!score) {
-    return {
-      success: false,
-      error: "Formato de placar inválido. Use o formato NxN (ex: 3x1)",
-    };
+    return fail("Formato de placar inválido. Use o formato NxN (ex: 3x1)", "invalid_score");
   }
 
   // Validar que não é o mesmo jogador
   if (input.playerId === input.opponentId) {
-    return { success: false, error: "Você não pode jogar contra si mesmo" };
+    return fail("Você não pode jogar contra si mesmo", "same_player");
   }
 
   const supabase = await createClient();
@@ -369,15 +520,16 @@ export async function registerMatchAction(input: {
     .select("value")
     .eq("key", "limite_jogos_diarios")
     .single();
+  telemetry.step("fetch_daily_limit_setting");
 
   const limiteStr = limiteSetting?.value;
   const limiteJogosDiarios = limiteStr ? parseInt(limiteStr, 10) : 2;
 
   if (isNaN(limiteJogosDiarios) || limiteJogosDiarios < 1) {
-    return { success: false, error: "Configuração de limite diário inválida" };
+    return fail("Configuração de limite diário inválida", "invalid_daily_limit_setting");
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getCurrentDateInTimezone(BUSINESS_TIMEZONE);
 
   // Verificar limite diário para ambas as direções (A vs B e B vs A)
   const { data: limitData } = await supabase
@@ -389,48 +541,49 @@ export async function registerMatchAction(input: {
     .eq("data", today)
     .limit(1)
     .single();
+  telemetry.step("check_daily_limit");
 
   if (limitData && limitData.jogos_registrados >= limiteJogosDiarios) {
-    return {
-      success: false,
-      error: `Limite de ${limiteJogosDiarios} jogos/dia contra este adversário atingido!`,
-    };
+    return fail(
+      `Limite de ${limiteJogosDiarios} jogos/dia contra este adversário atingido!`,
+      "daily_limit_reached"
+    );
   }
 
   // Determinar vencedor
   const vencedorId = score.a > score.b ? input.playerId : input.opponentId;
 
   // Criar a partida
-  const { error: matchError } = await supabase.from("matches").insert({
-    player_a_id: input.playerId,
-    player_b_id: input.opponentId,
-    vencedor_id: vencedorId,
-    resultado_a: score.a,
-    resultado_b: score.b,
-    status: "pendente",
-    criado_por: input.playerId,
-    tipo_resultado: score.a > score.b ? "win" : "loss",
-  });
+  const { data: createdMatch, error: matchError } = await supabase
+    .from("matches")
+    .insert({
+      player_a_id: input.playerId,
+      player_b_id: input.opponentId,
+      vencedor_id: vencedorId,
+      resultado_a: score.a,
+      resultado_b: score.b,
+      status: "pendente",
+      criado_por: input.playerId,
+      tipo_resultado: score.a > score.b ? "win" : "loss",
+    })
+    .select("id, criado_por")
+    .single();
+  telemetry.step("insert_match");
 
-  if (matchError) {
-    console.error("Erro ao criar partida:", matchError);
-    return { success: false, error: "Erro ao registrar partida" };
+  if (matchError || !createdMatch) {
+    return fail("Erro ao registrar partida", "insert_match_failed");
   }
 
   // Atualizar limite diário usando upsert para evitar race condition
   // Usamos uma abordagem de incremento atômico
   if (limitData) {
     // Já existe registro, incrementar
-    const { error: updateError } = await supabase
+    await supabase
       .from("daily_limits")
       .update({ jogos_registrados: limitData.jogos_registrados + 1 })
       .eq("user_id", input.playerId)
       .eq("opponent_id", input.opponentId)
       .eq("data", today);
-
-    if (updateError) {
-      console.error("Erro ao atualizar limite diário (não crítico):", updateError);
-    }
 
     // Atualizar também o registro inverso se existir
     await supabase
@@ -466,15 +619,24 @@ export async function registerMatchAction(input: {
           .eq("user_id", input.playerId)
           .eq("opponent_id", input.opponentId)
           .eq("data", today);
-      } else {
-        console.error("Erro ao criar limite diário (não crítico):", insertError);
       }
     }
   }
+  telemetry.step("update_daily_limit_counters");
+
+  const actorName = await getActorName(supabase, input.playerId);
+  const createdPayload: PendingNotificationPayloadV1 = {
+    event: "pending_created",
+    match_id: createdMatch.id,
+    status: "pendente",
+    actor_id: input.playerId,
+    actor_name: actorName,
+    created_by: createdMatch.criado_por || input.playerId,
+  };
+
+  await emitPendingNotification(supabase, input.opponentId, createdPayload);
+  telemetry.step("emit_pending_notification");
+  telemetry.finish("success");
 
   return { success: true };
 }
-
-
-
-

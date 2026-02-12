@@ -8,6 +8,7 @@ import {
   getCurrentUser,
 } from "@/lib/admin";
 import { revalidatePath } from "next/cache";
+import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 
 // ============================================================
 // TIPOS
@@ -73,6 +74,7 @@ export type AdminLog = {
 // ============================================================
 
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 function validatePage(page: number): number {
   if (typeof page !== "number" || isNaN(page)) return 0;
@@ -96,7 +98,6 @@ async function createAdminLog(params: {
     const admin = await getCurrentUser();
 
     if (!admin) {
-      console.error("createAdminLog: Usuario nao autenticado");
       return; // Não falhar a operação principal por causa do log
     }
 
@@ -113,12 +114,25 @@ async function createAdminLog(params: {
       reason: params.reason || null,
     });
 
-    if (error) {
-      console.error("Erro ao criar log de admin (não crítico):", error);
-    }
-  } catch (error) {
-    console.error("Erro inesperado ao criar log de admin:", error);
+    if (error) return;
+  } catch {
+    return;
   }
+}
+
+async function emitPendingNotification(
+  supabase: ServerSupabaseClient,
+  userId: string,
+  payload: PendingNotificationPayloadV1
+) {
+  const { error } = await supabase.from("notifications").insert({
+    user_id: userId,
+    tipo: "confirmacao",
+    payload,
+    lida: false,
+  });
+
+  if (error) return;
 }
 
 // ============================================================
@@ -195,6 +209,7 @@ export async function adminCancelMatch(matchId: string, reason: string) {
 
   const oldStatus = match.status;
   const targetName = `${match.player_a.full_name || match.player_a.name} vs ${match.player_b.full_name || match.player_b.name} (${match.resultado_a}x${match.resultado_b})`;
+  const adminActor = await getCurrentUser();
 
   // Se a partida estava validada, reverter pontos
   if (match.status === "validado" && match.vencedor_id) {
@@ -247,7 +262,7 @@ export async function adminCancelMatch(matchId: string, reason: string) {
     }
 
     // Registrar transacoes de reversao
-    const { error: transactionError } = await supabase.from("rating_transactions").insert([
+    await supabase.from("rating_transactions").insert([
       {
         match_id: matchId,
         user_id: winnerId,
@@ -265,10 +280,6 @@ export async function adminCancelMatch(matchId: string, reason: string) {
         rating_depois: loser.rating_atual - pontosDerrota,
       },
     ]);
-
-    if (transactionError) {
-      console.error("Erro ao registrar transações de reversão (não crítico):", transactionError);
-    }
 
     // Recalcular streak de ambos os jogadores após cancelamento
     // (a partida cancelada não deve mais contar)
@@ -309,17 +320,11 @@ export async function adminCancelMatch(matchId: string, reason: string) {
 
   // Revogar conquistas que foram desbloqueadas por esta partida
   // O jogador poderá reconquistá-las na próxima partida se ainda tiver os requisitos
-  const { data: revokedAchievements, error: revokeError } = await supabase
+  const { data: revokedAchievements } = await supabase
     .from("user_achievements")
     .delete()
     .eq("match_id", matchId)
     .select("achievement_id, user_id");
-
-  if (revokeError) {
-    console.error("Erro ao revogar conquistas (não crítico):", revokeError);
-  } else if (revokedAchievements && revokedAchievements.length > 0) {
-    console.log(`Conquistas revogadas: ${revokedAchievements.length} para partida ${matchId}`);
-  }
 
   // Atualizar status da partida
   const { error: cancelError } = await supabase
@@ -329,6 +334,25 @@ export async function adminCancelMatch(matchId: string, reason: string) {
 
   if (cancelError) {
     throw new Error("Erro ao cancelar partida");
+  }
+
+  if (oldStatus === "pendente" || oldStatus === "edited") {
+    const actorId = adminActor?.id || match.criado_por || match.player_a_id;
+    const resolvedPayload: PendingNotificationPayloadV1 = {
+      event: "pending_resolved",
+      match_id: matchId,
+      status: "cancelado",
+      actor_id: actorId,
+      actor_name: adminActor?.full_name || adminActor?.name || null,
+      created_by: match.criado_por || actorId,
+    };
+
+    const recipients = Array.from(new Set([match.player_a_id, match.player_b_id]));
+    await Promise.all(
+      recipients.map((recipientId) =>
+        emitPendingNotification(supabase, recipientId, resolvedPayload)
+      )
+    );
   }
 
   // Registrar log
@@ -652,17 +676,13 @@ export async function adminUpdateUserRating(
   }
 
   // Registrar transacao
-  const { error: transactionError } = await supabase.from("rating_transactions").insert({
+  await supabase.from("rating_transactions").insert({
     user_id: userId,
     motivo: `ajuste_admin: ${reason.trim()}`,
     valor: newRating - oldRating,
     rating_antes: oldRating,
     rating_depois: newRating,
   });
-
-  if (transactionError) {
-    console.error("Erro ao registrar transação (não crítico):", transactionError);
-  }
 
   // Registrar log
   await createAdminLog({
