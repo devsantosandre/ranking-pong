@@ -1,8 +1,55 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { X, ChevronRight } from "lucide-react";
 import { rarityColors, type Achievement } from "@/lib/queries/use-achievements";
+
+// ⚠️ PREVIEW MODE - Remover após ajustes
+const PREVIEW_MODE = false;
+const PREVIEW_ACHIEVEMENTS: Achievement[] = [
+  {
+    id: "preview-1",
+    key: "first_win",
+    name: "Primeira Vitória",
+    description: "Vença sua primeira partida no ranking",
+    category: "primeiros_passos",
+    rarity: "ouro",
+    icon: "🏆",
+    points: 10,
+    condition_type: "wins",
+    condition_value: 1,
+    is_active: true,
+  },
+  {
+    id: "preview-2",
+    key: "winning_streak_3",
+    name: "Sequência de Fogo",
+    description: "Vença 3 partidas consecutivas",
+    category: "sequencias",
+    rarity: "prata",
+    icon: "🔥",
+    points: 25,
+    condition_type: "streak",
+    condition_value: 3,
+    is_active: true,
+  },
+  {
+    id: "preview-3",
+    key: "legend",
+    name: "Lenda do Ping Pong",
+    description: "Alcance o rating de 1500 pontos",
+    category: "rating",
+    rarity: "diamante",
+    icon: "💎",
+    points: 100,
+    condition_type: "rating",
+    condition_value: 1500,
+    is_active: true,
+  },
+];
+
+// Raridades que mostram confete
+const CONFETTI_RARITIES = ["diamante", "platina", "especial"];
 
 type AchievementUnlockToastProps = {
   achievements: Achievement[];
@@ -11,123 +58,210 @@ type AchievementUnlockToastProps = {
   autoCloseDelay?: number;
 };
 
+// Componente de partícula de confete
+function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
+  return (
+    <div
+      className="absolute w-2 h-2 rounded-full"
+      style={{
+        backgroundColor: color,
+        left: `${Math.random() * 100}%`,
+        top: "-10px",
+        animation: `confetti-fall 1.5s ease-out ${delay}ms forwards`,
+        opacity: 0,
+      }}
+    />
+  );
+}
+
 export function AchievementUnlockToast({
-  achievements,
+  achievements: propAchievements,
   onClose,
   autoClose = true,
-  autoCloseDelay = 5000,
+  autoCloseDelay = 4000,
 }: AchievementUnlockToastProps) {
-  const [isVisible, setIsVisible] = useState(false);
+  const achievements = PREVIEW_MODE ? PREVIEW_ACHIEVEMENTS : propAchievements;
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [animationPhase, setAnimationPhase] = useState<"enter" | "visible" | "exit">("enter");
+  const [key, setKey] = useState(0); // Para forçar re-render da animação
 
+  const achievement = achievements[currentIndex];
+  const colors = rarityColors[achievement?.rarity] || rarityColors.bronze;
+  const showConfetti = achievement && CONFETTI_RARITIES.includes(achievement.rarity);
+
+  const goToNext = useCallback(() => {
+    if (currentIndex < achievements.length - 1) {
+      setAnimationPhase("exit");
+      setTimeout(() => {
+        setCurrentIndex((i) => i + 1);
+        setKey((k) => k + 1);
+        setAnimationPhase("enter");
+        setTimeout(() => setAnimationPhase("visible"), 50);
+      }, 300);
+    } else {
+      setAnimationPhase("exit");
+      setTimeout(onClose, 300);
+    }
+  }, [currentIndex, achievements.length, onClose]);
+
+  // Animação de entrada inicial
   useEffect(() => {
-    // Animação de entrada
-    const timer = setTimeout(() => setIsVisible(true), 100);
+    const timer = setTimeout(() => setAnimationPhase("visible"), 50);
     return () => clearTimeout(timer);
   }, []);
 
+  // Auto-close timer
   useEffect(() => {
-    if (autoClose && achievements.length > 0) {
-      const timer = setTimeout(() => {
-        if (currentIndex < achievements.length - 1) {
-          setCurrentIndex((i) => i + 1);
-        } else {
-          handleClose();
-        }
-      }, autoCloseDelay);
+    if (autoClose && animationPhase === "visible") {
+      const timer = setTimeout(goToNext, autoCloseDelay);
       return () => clearTimeout(timer);
     }
-  }, [autoClose, autoCloseDelay, currentIndex, achievements.length]);
+  }, [autoClose, autoCloseDelay, animationPhase, goToNext, currentIndex]);
 
-  const handleClose = () => {
-    setIsVisible(false);
-    setTimeout(onClose, 300);
-  };
+  if (achievements.length === 0 || !achievement) return null;
 
-  if (achievements.length === 0) return null;
-
-  const achievement = achievements[currentIndex];
-  const colors = rarityColors[achievement.rarity] || rarityColors.bronze;
+  const confettiColors = ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8"];
 
   return (
     <div
       className={`
-        fixed bottom-4 left-1/2 -translate-x-1/2 z-50
+        fixed bottom-24 left-1/2 -translate-x-1/2 z-[70]
         transition-all duration-300 ease-out
-        ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}
+        ${animationPhase === "visible" ? "pointer-events-auto" : "pointer-events-none"}
       `}
     >
-      <div
-        className={`
-          relative overflow-hidden rounded-2xl border-2 shadow-lg
-          ${colors.border} ${colors.bg}
-          min-w-[280px] max-w-[320px]
-        `}
-      >
-        {/* Barra de progresso */}
-        {autoClose && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-black/10">
-            <div
-              className={`h-full ${colors.text.replace("text-", "bg-")} opacity-50`}
-              style={{
-                animation: `shrink ${autoCloseDelay}ms linear`,
-                width: "100%",
-              }}
-            />
+      {/* Container com confete */}
+      <div className="relative">
+        {/* Partículas de confete para raridades especiais */}
+        {showConfetti && animationPhase === "visible" && (
+          <div className="absolute inset-0 overflow-visible pointer-events-none">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <ConfettiParticle
+                key={`${key}-${i}`}
+                delay={i * 50}
+                color={confettiColors[i % confettiColors.length]}
+              />
+            ))}
           </div>
         )}
 
-        {/* Conteúdo */}
-        <div className="p-4">
-          {/* Header */}
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl animate-bounce">{achievement.icon}</span>
-              <div>
-                <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">
-                  Conquista Desbloqueada!
-                </p>
-                <p className={`font-bold ${colors.text}`}>{achievement.name}</p>
-              </div>
+        {/* Card principal */}
+        <div
+          key={key}
+          className={`
+            relative overflow-hidden rounded-2xl border-2 shadow-2xl
+            ${colors.border} ${colors.bg}
+            min-w-[300px] max-w-[340px]
+            transition-all duration-300 ease-out
+            ${animationPhase === "enter" ? "opacity-0 scale-75 translate-y-8" : ""}
+            ${animationPhase === "visible" ? "opacity-100 scale-100 translate-y-0" : ""}
+            ${animationPhase === "exit" ? "opacity-0 scale-90 -translate-y-4" : ""}
+          `}
+        >
+          {/* Barra de progresso */}
+          {autoClose && animationPhase === "visible" && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-black/10">
+              <div
+                key={`progress-${key}`}
+                className={`h-full ${colors.text.replace("text-", "bg-")} opacity-60`}
+                style={{
+                  animation: `shrink ${autoCloseDelay}ms linear forwards`,
+                  width: "100%",
+                }}
+              />
             </div>
-            <button
-              onClick={handleClose}
-              className="p-1 hover:bg-black/10 rounded-full transition-colors"
-            >
-              <X className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </div>
+          )}
 
-          {/* Descrição */}
-          <p className="mt-2 text-sm text-muted-foreground">
-            {achievement.description}
-          </p>
+          {/* Glow effect para raridades especiais */}
+          {showConfetti && (
+            <div
+              className="absolute inset-0 rounded-2xl"
+              style={{
+                boxShadow: `0 0 40px ${colors.border.includes("purple") ? "rgba(168, 85, 247, 0.4)" : "rgba(6, 182, 212, 0.4)"}`,
+              }}
+            />
+          )}
 
-          {/* Raridade */}
-          <div className="mt-3 flex items-center justify-between">
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${colors.bg} ${colors.text} border ${colors.border}`}
-            >
-              {achievement.rarity.charAt(0).toUpperCase() + achievement.rarity.slice(1)}
-            </span>
-            {achievements.length > 1 && (
-              <span className="text-[10px] text-muted-foreground">
-                {currentIndex + 1} de {achievements.length}
+          {/* Conteúdo */}
+          <div className="relative p-4">
+            {/* Header com ícone animado */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`
+                    text-4xl
+                    ${animationPhase === "visible" ? "animate-bounce" : ""}
+                  `}
+                  style={{
+                    filter: showConfetti ? "drop-shadow(0 0 8px rgba(255,255,255,0.8))" : "none",
+                  }}
+                >
+                  {achievement.icon}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                    Conquista Desbloqueada!
+                  </p>
+                  <p className={`font-bold text-lg ${colors.text}`}>
+                    {achievement.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAnimationPhase("exit");
+                  setTimeout(onClose, 300);
+                }}
+                className="p-1.5 hover:bg-black/10 rounded-full transition-colors"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Descrição */}
+            <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+              {achievement.description}
+            </p>
+
+            {/* Footer com raridade e navegação */}
+            <div className="mt-4 flex items-center justify-between">
+              <span
+                className={`
+                  px-3 py-1 rounded-full text-xs font-bold
+                  ${colors.bg} ${colors.text} border-2 ${colors.border}
+                  ${showConfetti ? "animate-pulse" : ""}
+                `}
+              >
+                {achievement.rarity.charAt(0).toUpperCase() + achievement.rarity.slice(1)}
               </span>
-            )}
-          </div>
-        </div>
 
-        {/* Efeito de brilho */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
-          <div
-            className="absolute inset-0 opacity-30"
-            style={{
-              background:
-                "linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.8) 50%, transparent 60%)",
-              animation: "shine 2s ease-in-out infinite",
-            }}
-          />
+              {achievements.length > 1 && (
+                <button
+                  onClick={goToNext}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span>{currentIndex + 1} de {achievements.length}</span>
+                  {currentIndex < achievements.length - 1 && (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+            </div>
+
+          </div>
+
+          {/* Efeito de brilho passando */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+            <div
+              className="absolute inset-0 opacity-40"
+              style={{
+                background:
+                  "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.9) 45%, rgba(255,255,255,0.9) 55%, transparent 60%)",
+                animation: "shine 2.5s ease-in-out infinite",
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -141,12 +275,21 @@ export function AchievementUnlockToast({
           }
         }
         @keyframes shine {
-          0%,
-          100% {
-            transform: translateX(-100%);
+          0% {
+            transform: translateX(-150%);
           }
-          50% {
-            transform: translateX(100%);
+          100% {
+            transform: translateX(150%);
+          }
+        }
+        @keyframes confetti-fall {
+          0% {
+            opacity: 1;
+            transform: translateY(0) rotate(0deg) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(150px) rotate(720deg) scale(0.5);
           }
         }
       `}</style>

@@ -18,7 +18,6 @@ async function fetchSettings(): Promise<Setting[]> {
     .order("key");
 
   if (error) {
-    console.error("Erro ao buscar settings:", error);
     throw error;
   }
 
