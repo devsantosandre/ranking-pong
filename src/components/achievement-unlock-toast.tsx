@@ -59,13 +59,21 @@ type AchievementUnlockToastProps = {
 };
 
 // Componente de partícula de confete
-function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
+function ConfettiParticle({
+  delay,
+  color,
+  leftPercent,
+}: {
+  delay: number;
+  color: string;
+  leftPercent: number;
+}) {
   return (
     <div
       className="absolute w-2 h-2 rounded-full"
       style={{
         backgroundColor: color,
-        left: `${Math.random() * 100}%`,
+        left: `${leftPercent}%`,
         top: "-10px",
         animation: `confetti-fall 1.5s ease-out ${delay}ms forwards`,
         opacity: 0,
@@ -135,13 +143,17 @@ export function AchievementUnlockToast({
         {/* Partículas de confete para raridades especiais */}
         {showConfetti && animationPhase === "visible" && (
           <div className="absolute inset-0 overflow-visible pointer-events-none">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <ConfettiParticle
-                key={`${key}-${i}`}
-                delay={i * 50}
-                color={confettiColors[i % confettiColors.length]}
-              />
-            ))}
+            {Array.from({ length: 20 }).map((_, i) => {
+              const leftPercent = ((i * 37) % 100) + 0.5;
+              return (
+                <ConfettiParticle
+                  key={`${key}-${i}`}
+                  delay={i * 50}
+                  color={confettiColors[i % confettiColors.length]}
+                  leftPercent={leftPercent}
+                />
+              );
+            })}
           </div>
         )}
 
