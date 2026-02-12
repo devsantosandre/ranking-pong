@@ -88,7 +88,31 @@ export function useUser(userId: string | undefined) {
   });
 }
 
+// Hook para buscar posição real do usuário no ranking completo
+export function useUserRankingPosition(userId: string | undefined) {
+  const supabase = createClient();
 
+  return useQuery({
+    queryKey: queryKeys.users.position(userId || ""),
+    queryFn: async () => {
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from("users")
+        .select("id")
+        .eq("is_active", true)
+        .eq("hide_from_ranking", false)
+        .order("rating_atual", { ascending: false });
+
+      if (error) throw error;
+
+      const index = (data || []).findIndex((item) => item.id === userId);
+      return index >= 0 ? index + 1 : null;
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 30,
+  });
+}
 
 
 

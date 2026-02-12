@@ -5,7 +5,7 @@ export * from "./use-matches";
 export * from "./use-news";
 export * from "./use-settings";
 export * from "./use-achievements";
-
+export * from "./use-notifications";
 
 
 

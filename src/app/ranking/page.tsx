@@ -15,6 +15,7 @@ import {
 } from "@/lib/divisions";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
+import { queryKeys } from "@/lib/queries/query-keys";
 
 type RankingUser = {
   id: string;
@@ -36,7 +37,7 @@ function useRankingSearch(search: string) {
   const supabase = createClient();
 
   return useQuery({
-    queryKey: ["ranking-search", search],
+    queryKey: queryKeys.rankingSearch.term(search),
     queryFn: async (): Promise<RankingUserWithPosition[]> => {
       // Busca todos os usuários ordenados por rating para calcular posição real
       const { data: allUsers, error } = await supabase

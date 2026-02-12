@@ -48,7 +48,7 @@ export function useNews() {
   const supabase = createClient();
 
   return useInfiniteQuery({
-    queryKey: ["news"],
+    queryKey: queryKeys.news.all,
     queryFn: async ({ pageParam = 0 }) => {
       const from = pageParam * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
@@ -124,7 +124,6 @@ export function useNews() {
     initialPageParam: 0,
   });
 }
-
 
 
 

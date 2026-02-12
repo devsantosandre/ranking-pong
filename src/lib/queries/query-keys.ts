@@ -7,6 +7,7 @@ export const queryKeys = {
     all: ["users"] as const,
     list: () => [...queryKeys.users.all, "list"] as const,
     detail: (id: string) => [...queryKeys.users.all, "detail", id] as const,
+    position: (id: string) => [...queryKeys.users.all, "position", id] as const,
     ranking: () => [...queryKeys.users.all, "ranking"] as const,
   },
 
@@ -16,7 +17,26 @@ export const queryKeys = {
     list: (userId?: string) => [...queryKeys.matches.all, "list", userId] as const,
     detail: (id: string) => [...queryKeys.matches.all, "detail", id] as const,
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
+    pendingActions: (userId: string) =>
+      [...queryKeys.matches.all, "pending-actions", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
+  },
+
+  // Notifications
+  notifications: {
+    all: ["notifications"] as const,
+    user: (userId: string) => [...queryKeys.notifications.all, "user", userId] as const,
+  },
+
+  // News
+  news: {
+    all: ["news"] as const,
+  },
+
+  // Ranking search
+  rankingSearch: {
+    all: ["ranking-search"] as const,
+    term: (search: string) => [...queryKeys.rankingSearch.all, search] as const,
   },
 
   // Daily limits
@@ -35,9 +55,6 @@ export const queryKeys = {
     user: (userId: string) => ["achievements", "user", userId] as const,
   },
 };
-
-
-
 
 
 
