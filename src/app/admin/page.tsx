@@ -9,7 +9,9 @@ import {
   Settings,
   History,
   ChevronRight,
+  ExternalLink,
   Shield,
+  Tv,
 } from "lucide-react";
 
 const adminSections = [
@@ -41,6 +43,14 @@ const adminSections = [
     icon: History,
     description: "Ver acoes administrativas",
     color: "text-purple-600 bg-purple-100",
+  },
+  {
+    href: "/tv",
+    label: "Painel TV",
+    icon: Tv,
+    description: "Abrir placar ao vivo em nova aba",
+    color: "text-fuchsia-600 bg-fuchsia-100",
+    openInNewTab: true,
   },
 ];
 
@@ -79,6 +89,8 @@ export default function AdminPage() {
               <Link
                 key={section.href}
                 href={section.href}
+                target={section.openInNewTab ? "_blank" : undefined}
+                rel={section.openInNewTab ? "noopener noreferrer" : undefined}
                 className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary hover:shadow-md"
               >
                 <div className="flex items-center gap-3">
@@ -96,7 +108,11 @@ export default function AdminPage() {
                     </p>
                   </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                {section.openInNewTab ? (
+                  <ExternalLink className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                )}
               </Link>
             );
           })}

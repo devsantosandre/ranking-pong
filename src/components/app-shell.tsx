@@ -38,6 +38,14 @@ const baseNavItems: NavItem[] = [
 const adminNavItem: NavItem = { href: "/admin", label: "Admin", icon: Shield };
 const profileNavItem: NavItem = { href: "/perfil", label: "Perfil", icon: UserCircle };
 
+function isActiveRoute(pathname: string, href: string): boolean {
+  if (href === "/") {
+    return pathname === "/";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AppShell({
   title,
   subtitle,
@@ -61,7 +69,8 @@ export function AppShell({
   } = usePushSubscription();
   const { data: pendingActionsCount = 0 } = usePendingActionCount(user?.id);
   const hasPendingAlert = !loading && !!user && pendingActionsCount > 0;
-  const showPushSoftAsk = !!user && canShowSoftAsk;
+  const showPushSoftAsk =
+    !!user && canShowSoftAsk && !pathname.startsWith("/perfil/configuracoes");
 
   // Construir navItems dinamicamente baseado nas permissoes
   const navItems = useMemo(() => {
@@ -74,7 +83,7 @@ export function AppShell({
   }, [canAccessAdmin]);
 
   const active = useMemo(
-    () => navItems.find((item) => pathname === item.href)?.href,
+    () => navItems.find((item) => isActiveRoute(pathname, item.href))?.href,
     [pathname, navItems]
   );
 
