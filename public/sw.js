@@ -22,8 +22,8 @@ self.addEventListener("push", (event) => {
     title: "Smash Pong",
     body: "Você tem uma pendência para confirmar.",
     url: "/partidas",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon-512.png",
+    badge: "/badge-72.png",
     tag: "pending-match",
     data: {},
   };

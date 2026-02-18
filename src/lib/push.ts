@@ -56,8 +56,8 @@ function buildPushPayload(payload: PushMessagePayload): string {
     body: payload.body,
     tag: payload.tag,
     url,
-    icon: payload.icon || "/icon-192.png",
-    badge: payload.badge || "/icon-192.png",
+    icon: payload.icon || "/icon-512.png",
+    badge: payload.badge || "/badge-72.png",
     data: {
       ...payload.data,
       url,

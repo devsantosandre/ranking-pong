@@ -13,6 +13,7 @@ import {
 
 const SOFT_ASK_DISMISS_KEY_PREFIX = "push-soft-ask-dismissed-until-v1";
 const SOFT_ASK_DEFAULT_COOLDOWN_DAYS = 7;
+const SERVICE_WORKER_URL = "/sw.js?v=20260218-push-v3";
 
 function toApplicationServerKey(base64UrlString: string): ArrayBuffer {
   const base64 = base64UrlString.replace(/-/g, "+").replace(/_/g, "/");
@@ -209,7 +210,8 @@ export function PushSubscriptionProvider({
 
     setIsSyncing(true);
     try {
-      const registration = await navigator.serviceWorker.register("/sw.js");
+      const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL);
+      await registration.update();
       const existingSubscription = await registration.pushManager.getSubscription();
       const currentPermission = Notification.permission;
 
