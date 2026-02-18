@@ -2,9 +2,21 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
+import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
 import { useMatches, useUser, useUserRankingPosition } from "@/lib/queries";
 import { changePassword } from "@/app/actions/profile";
-import { Loader2, Key, Check, AlertTriangle, Eye, EyeOff, BookOpen } from "lucide-react";
+import {
+  AlertTriangle,
+  BellOff,
+  BellRing,
+  BookOpen,
+  Check,
+  Eye,
+  EyeOff,
+  Key,
+  Loader2,
+  RefreshCcw,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,6 +35,17 @@ export default function PerfilPage() {
   const { data: userStats, isLoading: userStatsLoading } = useUser(user?.id);
   const { data: rankingPosition, isLoading: rankingPositionLoading } = useUserRankingPosition(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
+  const {
+    clearSoftAskDismissal,
+    hasSubscription,
+    isConfigured,
+    isRequestingPermission,
+    isSupported,
+    isSyncing,
+    permission,
+    requestPermissionAndSubscribe,
+    syncSubscription,
+  } = usePushSubscription();
 
   const matches = useMemo(() => {
     return matchesData?.pages.flatMap((page) => page.matches) ?? [];
@@ -120,6 +143,54 @@ export default function PerfilPage() {
     return Math.ceil(max / 50) * 50 + 50;
   }, [history]);
 
+  const pushStatus = useMemo(() => {
+    if (!isConfigured) {
+      return {
+        label: "Indisponível",
+        badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        description: "Configuração de notificação ainda não foi concluída no servidor.",
+      };
+    }
+
+    if (!isSupported) {
+      return {
+        label: "Não suportado",
+        badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        description: "Este dispositivo/navegador não suporta push notifications.",
+      };
+    }
+
+    if (permission === "denied") {
+      return {
+        label: "Bloqueado",
+        badgeClass: "border-red-200 bg-red-50 text-red-700",
+        description: "Você bloqueou notificações. Ative novamente nas configurações do navegador.",
+      };
+    }
+
+    if (permission === "granted" && hasSubscription) {
+      return {
+        label: "Ativo",
+        badgeClass: "border-green-200 bg-green-50 text-green-700",
+        description: "Seu dispositivo está inscrito e pronto para receber alertas.",
+      };
+    }
+
+    if (permission === "granted" && !hasSubscription) {
+      return {
+        label: "Sincronizando",
+        badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        description: "Permissão concedida, mas inscrição ainda não confirmada no servidor.",
+      };
+    }
+
+    return {
+      label: "Inativo",
+      badgeClass: "border-border bg-muted/40 text-muted-foreground",
+      description: "Ative para receber pendências sem depender de tela aberta.",
+    };
+  }, [hasSubscription, isConfigured, isSupported, permission]);
+
   const getPlayerName = (player: { full_name: string | null; name: string | null; email: string | null }) => {
     return player.full_name || player.name || player.email?.split("@")[0] || "Jogador";
   };
@@ -172,6 +243,14 @@ export default function PerfilPage() {
     } finally {
       setPasswordLoading(false);
     }
+  };
+
+  const handleEnablePush = async () => {
+    await requestPermissionAndSubscribe();
+  };
+
+  const handleVerifyPush = async () => {
+    await syncSubscription();
   };
 
   if (isLoading) {
@@ -248,6 +327,80 @@ export default function PerfilPage() {
                 <p className="text-xs text-muted-foreground">{divisionName}</p>
               )}
             </div>
+          </div>
+        </article>
+
+        <article className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2">
+              {pushStatus.label === "Ativo" ? (
+                <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+              ) : (
+                <BellOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Notificações push</p>
+                <p className="text-xs text-muted-foreground">{pushStatus.description}</p>
+              </div>
+            </div>
+            <span
+              className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${pushStatus.badgeClass}`}
+            >
+              {pushStatus.label}
+            </span>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Permissão: <span className="font-medium uppercase">{permission}</span> • Assinatura:
+            {" "}
+            <span className="font-medium">{hasSubscription ? "ativa" : "inativa"}</span>
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {permission !== "granted" ? (
+              <button
+                type="button"
+                onClick={handleEnablePush}
+                disabled={!isConfigured || !isSupported || isRequestingPermission}
+                className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isRequestingPermission ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Ativando...
+                  </>
+                ) : (
+                  "Ativar notificações"
+                )}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={handleVerifyPush}
+              disabled={!isConfigured || !isSupported || isSyncing}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Verificando...
+                </>
+              ) : (
+                <>
+                  <RefreshCcw className="h-3 w-3" />
+                  Verificar agora
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={clearSoftAskDismissal}
+              className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+            >
+              Mostrar lembrete
+            </button>
           </div>
         </article>
 

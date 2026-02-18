@@ -8,7 +8,7 @@ import { AchievementUnlockToast } from "@/components/achievement-unlock-toast";
 import { getQueryClient } from "@/lib/query-client";
 import { useRealtimePendingSync } from "@/lib/hooks/use-realtime-pending";
 import { useRealtimeRankingSync } from "@/lib/hooks/use-realtime-ranking-sync";
-import { usePushSubscriptionSync } from "@/lib/hooks/use-push-subscription";
+import { PushSubscriptionProvider } from "@/lib/hooks/use-push-subscription";
 import type { ReactNode } from "react";
 
 function RealtimePendingBridge() {
@@ -27,12 +27,10 @@ function RealtimeRankingBridge() {
   return null;
 }
 
-function PushSubscriptionBridge() {
+function PushSubscriptionBridge({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
-  usePushSubscriptionSync(user?.id);
-
-  return null;
+  return <PushSubscriptionProvider userId={user?.id}>{children}</PushSubscriptionProvider>;
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -43,11 +41,12 @@ export function Providers({ children }: { children: ReactNode }) {
       <AuthProvider>
         <RealtimePendingBridge />
         <RealtimeRankingBridge />
-        <PushSubscriptionBridge />
-        <AuthGuard>{children}</AuthGuard>
-        <InstallPrompt />
-        {/* ⚠️ PREVIEW MODE - Remover após ajustes */}
-        <AchievementUnlockToast achievements={[]} onClose={() => {}} />
+        <PushSubscriptionBridge>
+          <AuthGuard>{children}</AuthGuard>
+          <InstallPrompt />
+          {/* ⚠️ PREVIEW MODE - Remover após ajustes */}
+          <AchievementUnlockToast achievements={[]} onClose={() => {}} />
+        </PushSubscriptionBridge>
       </AuthProvider>
     </QueryClientProvider>
   );

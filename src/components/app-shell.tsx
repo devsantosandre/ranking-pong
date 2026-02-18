@@ -6,6 +6,7 @@ import { type ComponentType, type ReactNode, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  BellRing,
   CirclePlus,
   Home,
   Info,
@@ -15,8 +16,10 @@ import {
   Shield,
   Trophy,
   UserCircle,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-store";
+import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
 import { queryKeys, usePendingActionCount } from "@/lib/queries";
 
 type NavItem = {
@@ -50,8 +53,15 @@ export function AppShell({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, loading, logout, canAccessAdmin } = useAuth();
+  const {
+    canShowSoftAsk,
+    dismissSoftAsk,
+    isRequestingPermission,
+    requestPermissionAndSubscribe,
+  } = usePushSubscription();
   const { data: pendingActionsCount = 0 } = usePendingActionCount(user?.id);
   const hasPendingAlert = !loading && !!user && pendingActionsCount > 0;
+  const showPushSoftAsk = !!user && canShowSoftAsk;
 
   // Construir navItems dinamicamente baseado nas permissoes
   const navItems = useMemo(() => {
@@ -89,6 +99,10 @@ export function AppShell({
         queryKey: queryKeys.matches.pendingActions(user.id),
       });
     }
+  };
+
+  const handleEnablePushNotifications = async () => {
+    await requestPermissionAndSubscribe();
   };
 
   return (
@@ -164,7 +178,49 @@ export function AppShell({
           hasPendingAlert ? "pt-48" : "pt-32"
         }`}
       >
-        <section className="rounded-3xl bg-card p-5 shadow-xl ring-1 ring-border">
+        <section className="space-y-4 rounded-3xl bg-card p-5 shadow-xl ring-1 ring-border">
+          {showPushSoftAsk ? (
+            <article className="rounded-2xl border border-primary/25 bg-primary/5 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      Ative notificações de pendências
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Receba alerta quando alguém registrar ou contestar partida.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissSoftAsk()}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                  aria-label="Fechar lembrete"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleEnablePushNotifications}
+                  disabled={isRequestingPermission}
+                  className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isRequestingPermission ? "Ativando..." : "Ativar agora"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dismissSoftAsk()}
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                >
+                  Lembrar depois
+                </button>
+              </div>
+            </article>
+          ) : null}
           {children}
         </section>
       </div>
