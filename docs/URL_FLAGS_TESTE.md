@@ -60,3 +60,18 @@ Uso:
    - `/tv?view=grid&demo=true`
 3. Partidas com alerta visual:
    - `/partidas?previewAlert=1`
+
+---
+
+## Rotas úteis de notificações
+
+### Configurações de notificação e segurança
+
+URL:
+- `/perfil/configuracoes`
+
+Uso:
+- Ver status de push (`Ativo`, `Inativo`, `Bloqueado`, `Indisponível`).
+- Acionar `Ativar notificações`.
+- Executar `Atualizar status`.
+- Alterar senha na seção `Segurança`.

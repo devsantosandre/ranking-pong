@@ -8,6 +8,7 @@ import { AchievementUnlockToast } from "@/components/achievement-unlock-toast";
 import { getQueryClient } from "@/lib/query-client";
 import { useRealtimePendingSync } from "@/lib/hooks/use-realtime-pending";
 import { useRealtimeRankingSync } from "@/lib/hooks/use-realtime-ranking-sync";
+import { usePrefetchNews } from "@/lib/hooks/use-prefetch-news";
 import { PushSubscriptionProvider } from "@/lib/hooks/use-push-subscription";
 import type { ReactNode } from "react";
 
@@ -27,6 +28,14 @@ function RealtimeRankingBridge() {
   return null;
 }
 
+function NewsPrefetchBridge() {
+  const { user } = useAuth();
+
+  usePrefetchNews(!!user?.id);
+
+  return null;
+}
+
 function PushSubscriptionBridge({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
@@ -41,6 +50,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <AuthProvider>
         <RealtimePendingBridge />
         <RealtimeRankingBridge />
+        <NewsPrefetchBridge />
         <PushSubscriptionBridge>
           <AuthGuard>{children}</AuthGuard>
           <InstallPrompt />

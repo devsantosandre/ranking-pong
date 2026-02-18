@@ -14,10 +14,10 @@ Documentação completa das tabelas do Supabase (PostgreSQL) utilizadas no siste
                                        │
         ┌──────────────┬───────────────┼───────────────┬──────────────┐
         │              │               │               │              │
-        ▼              ▼               ▼               ▼              ▼
-┌───────────────┐ ┌─────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐
-│    matches    │ │settings │ │ admin_logs   │ │notifications│ │daily_limits │
-└───────┬───────┘ └─────────┘ └──────────────┘ └────────────┘ └─────────────┘
+        ▼              ▼               ▼               ▼              ▼                ▼
+┌───────────────┐ ┌─────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐ ┌──────────────────┐
+│    matches    │ │settings │ │ admin_logs   │ │notifications│ │daily_limits │ │push_subscriptions│
+└───────┬───────┘ └─────────┘ └──────────────┘ └────────────┘ └─────────────┘ └──────────────────┘
         │
         ├──────────────┬───────────────┬───────────────┐
         │              │               │               │
@@ -96,6 +96,9 @@ Registro de todas as partidas do sistema.
 - `validado` - Confirmada e pontos aplicados
 - `cancelado` - Cancelada por admin
 - `in_progress` - Em andamento (futuro)
+
+**Índice de performance (feed de notícias):**
+- `idx_matches_validated_created_at` em `(created_at DESC) WHERE status = 'validado'`
 
 ---
 
@@ -318,6 +321,37 @@ Notificações dos usuários.
 
 ---
 
+### push_subscriptions
+
+Assinaturas Web Push por dispositivo/navegador.
+
+| Campo | Tipo | Padrão | Nullable | Descrição |
+|-------|------|--------|----------|-----------|
+| `id` | uuid | gen_random_uuid() | Não | PK |
+| `user_id` | uuid | - | Não | FK -> users.id |
+| `endpoint` | text | - | Não | Endpoint da assinatura (FCM/Web Push) |
+| `p256dh` | text | - | Não | Chave pública do client |
+| `auth` | text | - | Não | Auth secret do client |
+| `user_agent` | text | - | Sim | User agent do dispositivo |
+| `platform` | text | - | Sim | Plataforma reportada pelo client |
+| `last_error` | text | - | Sim | Último erro de envio |
+| `disabled_at` | timestamptz | - | Sim | Quando a assinatura foi desativada |
+| `created_at` | timestamptz | now() | Não | Data de criação |
+| `updated_at` | timestamptz | now() | Não | Data de atualização |
+
+**Índices principais:**
+- `idx_push_subscriptions_endpoint` (unique em `endpoint`)
+- `idx_push_subscriptions_user_endpoint` (unique em `user_id, endpoint`)
+- `idx_push_subscriptions_user_active` (`user_id, disabled_at, updated_at DESC`)
+
+**Policies relevantes (RLS):**
+- `Users can view own push subscriptions` (`SELECT`)
+- `Users can insert own push subscriptions` (`INSERT`)
+- `Users can update own push subscriptions` (`UPDATE`)
+- `Users can delete own push subscriptions` (`DELETE`)
+
+---
+
 ### live_updates
 
 Atualizações em tempo real de partidas.
@@ -391,6 +425,7 @@ Row Level Security está **habilitado** nas seguintes tabelas:
 | matches | Habilitado |
 | news_posts | Habilitado |
 | notifications | Habilitado |
+| push_subscriptions | Habilitado |
 | ranking_snapshots | Habilitado |
 | settings | Habilitado |
 | user_achievements | Habilitado |
@@ -418,6 +453,8 @@ Row Level Security está **habilitado** nas seguintes tabelas:
 | 20260106044411 | create_achievements_tables | Tabelas de conquistas |
 | 20260106053336 | add_k_factor_to_matches | Campo k_factor_used |
 | 20260212193000 | realtime_notifications_pending_v1 | Publication + policies + índice em notifications |
+| 20260218171000 | push_notifications_pending_v1 | Tabela push_subscriptions + RLS + índices |
+| 20260218193000 | optimize_news_feed_query | Índice parcial de performance para feed de notícias |
 
 ---
 
@@ -449,6 +486,7 @@ news_posts.created_by    -> users.id
 news_posts.match_id      -> matches.id
 
 notifications.user_id    -> users.id
+push_subscriptions.user_id -> users.id
 
 live_updates.match_id    -> matches.id
 
