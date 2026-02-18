@@ -130,7 +130,7 @@ export function AppShell({
             ) : null}
             <div className="flex-1 space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary-foreground/80">
-                Smash Pong
+                Smash Pong App
               </p>
               <h1 className="text-xl font-semibold sm:text-2xl">{title}</h1>
               {subtitle ? (

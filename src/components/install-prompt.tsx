@@ -135,7 +135,7 @@ export function InstallPrompt() {
 
           <div className="flex-1 min-w-0 pr-6">
             <h3 className="font-semibold text-white text-base">
-              Instalar Smash Pong
+              Instalar Smash Pong App
             </h3>
 
             {isIOS ? (

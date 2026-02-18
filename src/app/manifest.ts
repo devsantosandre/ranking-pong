@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Smash Pong",
-    short_name: "Smash Pong",
+    name: "Smash Pong App",
+    short_name: "Smash Pong App",
     description: "Ranking de tênis de mesa",
     start_url: "/",
     scope: "/",

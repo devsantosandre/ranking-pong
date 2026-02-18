@@ -80,7 +80,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-48 w-48 items-center justify-center rounded-2xl bg-white/20 shadow-lg overflow-hidden p-4">
             <Image
               src="/smash-pong-logo.png"
-              alt="Smash Pong Logo"
+              alt="Smash Pong App Logo"
               width={152}
               height={152}
               className="object-contain"
@@ -193,7 +193,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-white/50">
-          © {new Date().getFullYear()} Smash Pong. Todos os direitos reservados.
+          © {new Date().getFullYear()} Smash Pong App. Todos os direitos reservados.
         </p>
       </div>
     </main>

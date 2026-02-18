@@ -18,7 +18,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Smash Pong",
+  title: "Smash Pong App",
   description:
     "Aplicativo mobile-first de ranking interno de tênis de mesa com pontuação e notícias em tempo real.",
   icons: {
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Smash Pong",
+    title: "Smash Pong App",
   },
   other: {
     "mobile-web-app-capable": "yes",
