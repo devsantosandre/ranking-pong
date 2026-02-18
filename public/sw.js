@@ -19,7 +19,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const defaultPayload = {
-    title: "Smash Pong",
+    title: "Smash Pong App",
     body: "Você tem uma pendência para confirmar.",
     url: "/partidas",
     icon: "/icon-512.png",
