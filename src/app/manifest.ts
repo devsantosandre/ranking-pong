@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Ranking de tênis de mesa",
     start_url: "/",
     display: "standalone",
-    background_color: "#000000",
-    theme_color: "#000000",
+    background_color: "#a421d2",
+    theme_color: "#a421d2",
     orientation: "portrait",
     icons: [
       {
@@ -22,7 +22,7 @@ export default function manifest(): MetadataRoute.Manifest {
         type: "image/png",
       },
       {
-        src: "/icon-512.png",
+        src: "/icon-512-maskable.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
