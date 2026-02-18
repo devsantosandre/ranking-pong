@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, Share, Plus, Download } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -8,56 +8,105 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+const DISMISS_KEY = "pwa-prompt-dismissed";
+
+function isIOSDevice() {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(window as unknown as { MSStream?: unknown }).MSStream
+  );
+}
+
+function isStandaloneDisplayMode() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+}
+
 export function InstallPrompt() {
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS] = useState(() => (typeof window !== "undefined" ? isIOSDevice() : false));
+  const [isStandalone, setIsStandalone] = useState(() =>
+    typeof window !== "undefined" ? isStandaloneDisplayMode() : false
+  );
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(DISMISS_KEY) === "true";
+  });
+  const [isInstalling, setIsInstalling] = useState(false);
+  const installFallbackTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem("pwa-prompt-dismissed");
-    if (dismissed) {
-      setIsDismissed(true);
+    if ("serviceWorker" in navigator && (window.isSecureContext || window.location.hostname === "localhost")) {
+      void navigator.serviceWorker.register("/sw.js");
     }
 
-    setIsIOS(
-      /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-        !(window as unknown as { MSStream?: unknown }).MSStream
-    );
+    const mediaQuery = window.matchMedia("(display-mode: standalone)");
+    const handleDisplayModeChange = (event: MediaQueryListEvent) => {
+      setIsStandalone(event.matches);
+    };
 
-    setIsStandalone(
-      window.matchMedia("(display-mode: standalone)").matches ||
-        (window.navigator as unknown as { standalone?: boolean }).standalone ===
-          true
-    );
+    mediaQuery.addEventListener("change", handleDisplayModeChange);
 
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
+    const handleInstalled = () => {
+      if (installFallbackTimerRef.current) {
+        window.clearTimeout(installFallbackTimerRef.current);
+      }
+      installFallbackTimerRef.current = null;
+      setIsStandalone(true);
+      setDeferredPrompt(null);
+      setIsInstalling(false);
+    };
+
     window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", handleInstalled);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", handleInstalled);
+      mediaQuery.removeEventListener("change", handleDisplayModeChange);
+      if (installFallbackTimerRef.current) {
+        window.clearTimeout(installFallbackTimerRef.current);
+      }
     };
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt || isInstalling) return;
 
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
+    const installEvent = deferredPrompt;
+    setDeferredPrompt(null);
+    setIsInstalling(true);
 
-    if (outcome === "accepted") {
-      setDeferredPrompt(null);
+    try {
+      await installEvent.prompt();
+      const { outcome } = await installEvent.userChoice;
+
+      if (outcome !== "accepted") {
+        setIsInstalling(false);
+        return;
+      }
+
+      installFallbackTimerRef.current = window.setTimeout(() => {
+        setIsInstalling(false);
+      }, 15000);
+    } catch {
+      setIsInstalling(false);
     }
   };
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    localStorage.setItem("pwa-prompt-dismissed", "true");
+    localStorage.setItem(DISMISS_KEY, "true");
   };
 
   if (isStandalone || isDismissed) {
@@ -108,9 +157,10 @@ export function InstallPrompt() {
             {!isIOS && deferredPrompt && (
               <button
                 onClick={handleInstall}
-                className="mt-3 w-full bg-white text-black font-medium py-2.5 px-4 rounded-xl hover:bg-zinc-200 transition-colors text-sm"
+                disabled={isInstalling}
+                className="mt-3 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-300"
               >
-                Instalar
+                {isInstalling ? "Instalando..." : "Instalar"}
               </button>
             )}
           </div>

@@ -2,10 +2,12 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "Smash Pong",
     short_name: "Smash Pong",
     description: "Ranking de tênis de mesa",
     start_url: "/",
+    scope: "/",
     display: "standalone",
     background_color: "#a421d2",
     theme_color: "#a421d2",
