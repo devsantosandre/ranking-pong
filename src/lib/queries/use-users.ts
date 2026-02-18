@@ -106,14 +106,14 @@ export function useUserRankingPosition(userId: string | undefined) {
 
       if (error) throw error;
 
-      const index = (data || []).findIndex((item) => item.id === userId);
+      const rankingRows = (data ?? []) as Array<{ id: string }>;
+      const index = rankingRows.findIndex((item) => item.id === userId);
       return index >= 0 ? index + 1 : null;
     },
     enabled: !!userId,
     staleTime: 1000 * 30,
   });
 }
-
 
 
 

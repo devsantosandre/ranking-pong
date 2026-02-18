@@ -34,6 +34,15 @@ type AuthContextValue = {
   canAccessAdmin: boolean;
 };
 
+type AuthGetUserResult = {
+  data: {
+    user: User | null;
+  };
+  error: {
+    name?: string;
+  } | null;
+};
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
@@ -205,8 +214,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const {
           data: { user: authUser },
           error,
-        } = await withTimeout(
-          supabase.auth.getUser(),
+        } = await withTimeout<AuthGetUserResult>(
+          supabase.auth.getUser() as Promise<AuthGetUserResult>,
           AUTH_REQUEST_TIMEOUT_MS,
           "Timeout ao verificar sessao de autenticacao"
         );
