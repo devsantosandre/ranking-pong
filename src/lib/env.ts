@@ -19,6 +19,20 @@ export const env = {
     if (typeof window !== "undefined") return undefined;
     return process.env.SUPABASE_SERVICE_ROLE_KEY;
   },
+
+  get NEXT_PUBLIC_VAPID_PUBLIC_KEY(): string | undefined {
+    return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  },
+
+  get VAPID_PRIVATE_KEY(): string | undefined {
+    if (typeof window !== "undefined") return undefined;
+    return process.env.VAPID_PRIVATE_KEY;
+  },
+
+  get VAPID_SUBJECT(): string | undefined {
+    if (typeof window !== "undefined") return undefined;
+    return process.env.VAPID_SUBJECT;
+  },
 };
 
 // Função auxiliar para verificar se as variáveis de admin estão configuradas
@@ -37,6 +51,12 @@ export function getEnvErrorMessage(varName: string): string {
       "A chave de serviço do Supabase não está configurada. " +
       "Esta chave é necessária para operações de administração. " +
       "Configure a variável SUPABASE_SERVICE_ROLE_KEY no servidor.",
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY:
+      "A chave pública VAPID não está configurada. Defina NEXT_PUBLIC_VAPID_PUBLIC_KEY.",
+    VAPID_PRIVATE_KEY:
+      "A chave privada VAPID não está configurada. Defina VAPID_PRIVATE_KEY no servidor.",
+    VAPID_SUBJECT:
+      "O assunto VAPID não está configurado. Defina VAPID_SUBJECT (ex: mailto:admin@dominio.com).",
   };
 
   return messages[varName] || `Variável ${varName} não configurada.`;

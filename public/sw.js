@@ -16,3 +16,67 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(fetch(request));
 });
+
+self.addEventListener("push", (event) => {
+  const defaultPayload = {
+    title: "Smash Pong",
+    body: "Você tem uma pendência para confirmar.",
+    url: "/partidas",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: "pending-match",
+    data: {},
+  };
+
+  let payload = defaultPayload;
+
+  try {
+    const incomingPayload = event.data ? event.data.json() : {};
+    payload = {
+      ...defaultPayload,
+      ...(incomingPayload || {}),
+      data: {
+        ...defaultPayload.data,
+        ...(incomingPayload?.data || {}),
+      },
+    };
+  } catch {
+    // fallback para payload padrão
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: payload.icon,
+      badge: payload.badge,
+      tag: payload.tag,
+      data: {
+        url: payload.url,
+        ...(payload.data || {}),
+      },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl = event.notification?.data?.url || "/partidas";
+  const absoluteUrl = new URL(targetUrl, self.location.origin).toString();
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url === absoluteUrl && "focus" in client) {
+          return client.focus();
+        }
+      }
+
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(absoluteUrl);
+      }
+
+      return undefined;
+    })
+  );
+});

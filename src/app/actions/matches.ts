@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { calculateElo, applyMinRating } from "@/lib/elo";
 import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements";
+import { sendPushToUsers } from "@/lib/push";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -485,6 +486,18 @@ export async function contestMatchAction(
 
   await emitPendingNotification(supabase, recipientId, transferPayload);
   telemetry.step("emit_transfer_notification");
+
+  await sendPushToUsers([recipientId], {
+    title: "Partida contestada",
+    body: `${actorName || "Seu adversário"} contestou o placar para ${score.a}x${score.b}. Revise e confirme.`,
+    url: "/partidas",
+    tag: `pending-match-${matchId}`,
+    data: {
+      matchId,
+      event: "pending_transferred",
+    },
+  });
+  telemetry.step("emit_transfer_push");
   telemetry.finish("success");
 
   return { success: true };
@@ -636,6 +649,18 @@ export async function registerMatchAction(input: {
 
   await emitPendingNotification(supabase, input.opponentId, createdPayload);
   telemetry.step("emit_pending_notification");
+
+  await sendPushToUsers([input.opponentId], {
+    title: "Nova partida para confirmar",
+    body: `${actorName || "Seu adversário"} registrou ${score.a}x${score.b}. Toque para revisar.`,
+    url: "/partidas",
+    tag: `pending-match-${createdMatch.id}`,
+    data: {
+      matchId: createdMatch.id,
+      event: "pending_created",
+    },
+  });
+  telemetry.step("emit_pending_push");
   telemetry.finish("success");
 
   return { success: true };
