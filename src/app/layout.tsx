@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import {
+  APP_DEFAULT_BROWSER_TITLE,
+  APP_TITLE,
+} from "@/lib/app-title";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +22,11 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Smash Pong App",
+  title: {
+    default: APP_DEFAULT_BROWSER_TITLE,
+    template: `${APP_TITLE} · %s`,
+  },
+  applicationName: APP_TITLE,
   description:
     "Aplicativo mobile-first de ranking interno de tênis de mesa com pontuação e notícias em tempo real.",
   icons: {
@@ -27,7 +35,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Smash Pong App",
+    title: APP_TITLE,
   },
   other: {
     "mobile-web-app-capable": "yes",

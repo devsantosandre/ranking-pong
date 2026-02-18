@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ComponentType, type ReactNode, useMemo } from "react";
+import { type ComponentType, type ReactNode, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/lib/auth-store";
 import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
 import { queryKeys, usePendingActionCount } from "@/lib/queries";
+import { buildBrowserTitle } from "@/lib/app-title";
 
 type NavItem = {
   href: string;
@@ -113,6 +114,10 @@ export function AppShell({
   const handleEnablePushNotifications = async () => {
     await requestPermissionAndSubscribe();
   };
+
+  useEffect(() => {
+    document.title = buildBrowserTitle(title);
+  }, [title]);
 
   return (
     <main className="min-h-screen bg-[#f5f4fa] text-foreground">

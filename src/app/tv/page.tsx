@@ -8,6 +8,7 @@ import { useRealtimeRanking, type RankingPlayerWithPosition } from "@/lib/hooks/
 import { useLatestValidatedMatch } from "@/lib/hooks/use-latest-validated-match";
 import { TvRankingList } from "@/components/tv/tv-ranking-list";
 import { LayoutGrid, List, Volume2, VolumeX } from "lucide-react";
+import { buildBrowserTitle } from "@/lib/app-title";
 
 function TvRankingContent() {
   const searchParams = useSearchParams();
@@ -77,6 +78,10 @@ function TvRankingContent() {
   // Usa players simulados no modo demo, senão usa os reais
   const displayPlayers =
     demoMode && players && players.length >= 2 && simulatedPlayers ? simulatedPlayers : players;
+
+  useEffect(() => {
+    document.title = buildBrowserTitle(demoMode ? "TV Demo" : "TV ao vivo");
+  }, [demoMode]);
 
   const toggleViewMode = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());

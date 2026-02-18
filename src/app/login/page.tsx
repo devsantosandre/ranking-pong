@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/client";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
+import { buildBrowserTitle } from "@/lib/app-title";
 
 type AuthMode = "login" | "register";
 
@@ -22,6 +23,10 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    document.title = buildBrowserTitle(mode === "login" ? "Entrar" : "Criar conta");
+  }, [mode]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
