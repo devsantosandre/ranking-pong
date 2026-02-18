@@ -69,8 +69,8 @@ export function InstallPrompt() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 animate-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl">
+    <div className="fixed bottom-4 left-4 right-4 z-[9999] animate-in slide-in-from-bottom-4 duration-300">
+      <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl">
         <button
           onClick={handleDismiss}
           className="absolute top-3 right-3 text-zinc-500 hover:text-zinc-300 transition-colors"
