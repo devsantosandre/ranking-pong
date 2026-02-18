@@ -31,12 +31,11 @@ import {
 import { AchievementsSection } from "@/components/achievements-section";
 
 export default function PerfilPage() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, logout, canAccessAdmin } = useAuth();
   const { data: userStats, isLoading: userStatsLoading } = useUser(user?.id);
   const { data: rankingPosition, isLoading: rankingPositionLoading } = useUserRankingPosition(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
   const {
-    clearSoftAskDismissal,
     hasSubscription,
     isConfigured,
     isRequestingPermission,
@@ -61,6 +60,7 @@ export default function PerfilPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState("");
 
   const isLoading = authLoading || userStatsLoading || rankingPositionLoading;
   const userPosition = rankingPosition ?? 0;
@@ -148,7 +148,7 @@ export default function PerfilPage() {
       return {
         label: "Indisponível",
         badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
-        description: "Configuração de notificação ainda não foi concluída no servidor.",
+        description: "Notificações ainda não foram habilitadas no servidor.",
       };
     }
 
@@ -156,7 +156,7 @@ export default function PerfilPage() {
       return {
         label: "Não suportado",
         badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
-        description: "Este dispositivo/navegador não suporta push notifications.",
+        description: "Este dispositivo ou navegador não suporta notificações push.",
       };
     }
 
@@ -164,7 +164,7 @@ export default function PerfilPage() {
       return {
         label: "Bloqueado",
         badgeClass: "border-red-200 bg-red-50 text-red-700",
-        description: "Você bloqueou notificações. Ative novamente nas configurações do navegador.",
+        description: "Você bloqueou notificações. Libere nas configurações do navegador.",
       };
     }
 
@@ -180,16 +180,23 @@ export default function PerfilPage() {
       return {
         label: "Sincronizando",
         badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
-        description: "Permissão concedida, mas inscrição ainda não confirmada no servidor.",
+        description: "Permissão concedida. Estamos finalizando o vínculo do dispositivo.",
       };
     }
 
     return {
       label: "Inativo",
       badgeClass: "border-border bg-muted/40 text-muted-foreground",
-      description: "Ative para receber pendências sem depender de tela aberta.",
+      description: "Ative para receber alerta quando surgir pendência de partida.",
     };
   }, [hasSubscription, isConfigured, isSupported, permission]);
+
+  const permissionLabel = useMemo(() => {
+    if (!isSupported) return "Indisponível";
+    if (permission === "granted") return "Permitida";
+    if (permission === "denied") return "Bloqueada";
+    return "Não definida";
+  }, [isSupported, permission]);
 
   const getPlayerName = (player: { full_name: string | null; name: string | null; email: string | null }) => {
     return player.full_name || player.name || player.email?.split("@")[0] || "Jogador";
@@ -246,11 +253,30 @@ export default function PerfilPage() {
   };
 
   const handleEnablePush = async () => {
-    await requestPermissionAndSubscribe();
+    setPushFeedback("");
+    const result = await requestPermissionAndSubscribe();
+
+    if (result.ok) {
+      setPushFeedback("Notificações ativadas com sucesso.");
+      return;
+    }
+
+    const reasonMessageMap: Record<string, string> = {
+      misconfigured: "Ainda indisponível no servidor. Tente novamente mais tarde.",
+      unsupported: "Seu dispositivo não suporta notificações push.",
+      permission_denied: "Permissão bloqueada. Libere nas configurações do navegador.",
+      permission_not_granted: "Permissão não concedida.",
+      subscribe_failed: "Não foi possível ativar agora. Tente novamente.",
+      not_authenticated: "Sessão inválida. Faça login novamente.",
+    };
+
+    setPushFeedback(reasonMessageMap[result.reason || "subscribe_failed"]);
   };
 
   const handleVerifyPush = async () => {
+    setPushFeedback("");
     await syncSubscription();
+    setPushFeedback("Status atualizado.");
   };
 
   if (isLoading) {
@@ -351,17 +377,16 @@ export default function PerfilPage() {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Permissão: <span className="font-medium uppercase">{permission}</span> • Assinatura:
-            {" "}
-            <span className="font-medium">{hasSubscription ? "ativa" : "inativa"}</span>
+            Permissão: <span className="font-medium">{permissionLabel}</span> • Dispositivo:
+            <span className="font-medium"> {hasSubscription ? " conectado" : " não conectado"}</span>
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
-            {permission !== "granted" ? (
+            {isConfigured && isSupported && permission !== "granted" ? (
               <button
                 type="button"
                 onClick={handleEnablePush}
-                disabled={!isConfigured || !isSupported || isRequestingPermission}
+                disabled={isRequestingPermission}
                 className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isRequestingPermission ? (
@@ -375,33 +400,38 @@ export default function PerfilPage() {
               </button>
             ) : null}
 
-            <button
-              type="button"
-              onClick={handleVerifyPush}
-              disabled={!isConfigured || !isSupported || isSyncing}
-              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSyncing ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Verificando...
-                </>
-              ) : (
-                <>
-                  <RefreshCcw className="h-3 w-3" />
-                  Verificar agora
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={clearSoftAskDismissal}
-              className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
-            >
-              Mostrar lembrete
-            </button>
+            {isConfigured && isSupported ? (
+              <button
+                type="button"
+                onClick={handleVerifyPush}
+                disabled={isSyncing}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Atualizando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw className="h-3 w-3" />
+                    Atualizar status
+                  </>
+                )}
+              </button>
+            ) : null}
           </div>
+
+          {pushFeedback ? (
+            <p className="text-xs text-muted-foreground">{pushFeedback}</p>
+          ) : null}
+
+          {!isConfigured && canAccessAdmin ? (
+            <p className="text-xs text-muted-foreground">
+              Para resolver: configure no servidor as variáveis `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+              `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT`.
+            </p>
+          ) : null}
         </article>
 
         {/* Estatísticas */}
