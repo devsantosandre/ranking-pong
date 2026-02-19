@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { calculateElo, applyMinRating } from "@/lib/elo";
 import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements";
 import { sendPushToUsers } from "@/lib/push";
@@ -122,16 +123,38 @@ async function emitPendingNotifications(
   if (error) return;
 }
 
+async function getAuthenticatedUserId(
+  supabase: ServerSupabaseClient
+): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return user?.id ?? null;
+}
+
 export async function confirmMatchAction(
   matchId: string,
-  userId: string
+  requestedUserId: string
 ): Promise<{ success: boolean; error?: string; unlockedAchievements?: Achievement[] }> {
   const supabase = await createClient();
+  const adminClient = createAdminClient();
   const telemetry = createConfirmMatchTelemetry();
   const fail = (errorMessage: string, reason: string) => {
     telemetry.finish("error", reason);
     return { success: false, error: errorMessage };
   };
+  const authenticatedUserId = await getAuthenticatedUserId(supabase);
+
+  if (!authenticatedUserId) {
+    return fail("Usuário não autenticado", "not_authenticated");
+  }
+
+  if (requestedUserId !== authenticatedUserId) {
+    return fail("Sessão inválida para confirmar a partida", "actor_mismatch");
+  }
+
+  const userId = authenticatedUserId;
 
   // 1. Buscar a partida COM VERIFICAÇÃO DE STATUS para evitar race condition
   // Usamos uma query que já filtra por status válido
@@ -258,7 +281,7 @@ export async function confirmMatchAction(
   const newLoserRating = applyMinRating((loserData.rating_atual ?? 1000) + loserDelta);
 
   const [winnerUpdateResult, loserUpdateResult] = await Promise.all([
-    supabase
+    adminClient
       .from("users")
       .update({
         rating_atual: newWinnerRating,
@@ -266,7 +289,7 @@ export async function confirmMatchAction(
         jogos_disputados: (winnerData.jogos_disputados ?? 0) + 1,
       })
       .eq("id", winnerId),
-    supabase
+    adminClient
       .from("users")
       .update({
         rating_atual: newLoserRating,
@@ -280,7 +303,7 @@ export async function confirmMatchAction(
   if (winnerUpdateResult.error || loserUpdateResult.error) {
     // Reverte para estado anterior (best effort)
     await Promise.allSettled([
-      supabase
+      adminClient
         .from("users")
         .update({
           rating_atual: winnerData.rating_atual,
@@ -288,7 +311,7 @@ export async function confirmMatchAction(
           jogos_disputados: winnerData.jogos_disputados,
         })
         .eq("id", winnerId),
-      supabase
+      adminClient
         .from("users")
         .update({
           rating_atual: loserData.rating_atual,
@@ -306,7 +329,7 @@ export async function confirmMatchAction(
   // 10. Registrar transações (não crítico) - inicia em paralelo
   const myNewRating = isWinner ? newWinnerRating : newLoserRating;
   const opponentNewRating = isWinner ? newLoserRating : newWinnerRating;
-  const transactionPromise = supabase.from("rating_transactions").insert([
+  const transactionPromise = adminClient.from("rating_transactions").insert([
     {
       match_id: matchId,
       user_id: userId,
@@ -411,7 +434,7 @@ export async function confirmMatchAction(
 
 export async function contestMatchAction(
   matchId: string,
-  userId: string,
+  requestedUserId: string,
   newOutcome: string
 ): Promise<{ success: boolean; error?: string }> {
   const telemetry = createContestMatchTelemetry();
@@ -427,6 +450,17 @@ export async function contestMatchAction(
   }
 
   const supabase = await createClient();
+  const authenticatedUserId = await getAuthenticatedUserId(supabase);
+
+  if (!authenticatedUserId) {
+    return fail("Usuário não autenticado", "not_authenticated");
+  }
+
+  if (requestedUserId !== authenticatedUserId) {
+    return fail("Sessão inválida para contestar a partida", "actor_mismatch");
+  }
+
+  const userId = authenticatedUserId;
 
   // Buscar a partida para determinar o vencedor e verificar status
   const { data: match, error: matchError } = await supabase
@@ -526,6 +560,15 @@ export async function registerMatchAction(input: {
   }
 
   const supabase = await createClient();
+  const authenticatedUserId = await getAuthenticatedUserId(supabase);
+
+  if (!authenticatedUserId) {
+    return fail("Usuário não autenticado", "not_authenticated");
+  }
+
+  if (input.playerId !== authenticatedUserId) {
+    return fail("Sessão inválida para registrar a partida", "actor_mismatch");
+  }
 
   // Buscar limite diário das configurações
   const { data: limiteSetting } = await supabase

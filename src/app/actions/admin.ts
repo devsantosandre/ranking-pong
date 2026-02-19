@@ -1,6 +1,5 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   requireModerator,
@@ -74,7 +73,7 @@ export type AdminLog = {
 // ============================================================
 
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
-type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 
 function validatePage(page: number): number {
   if (typeof page !== "number" || isNaN(page)) return 0;
@@ -94,7 +93,7 @@ async function createAdminLog(params: {
   reason?: string;
 }) {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const admin = await getCurrentUser();
 
     if (!admin) {
@@ -146,7 +145,7 @@ export async function adminGetAllMatches(
   page = 0
 ) {
   await requireModerator();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const validPage = validatePage(page);
   const from = validPage * PAGE_SIZE;
@@ -184,7 +183,7 @@ export async function adminCancelMatch(matchId: string, reason: string) {
     throw new Error("Motivo obrigatorio (minimo 3 caracteres)");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Buscar partida atual
   const { data: match, error: matchError } = await supabase
@@ -387,7 +386,7 @@ export async function adminGetAllUsers(
   page = 0
 ) {
   await requireModerator();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const validPage = validatePage(page);
   const from = validPage * PAGE_SIZE;
@@ -427,7 +426,7 @@ export async function adminSearchUsers(
   filters?: { status?: string; role?: string }
 ): Promise<AdminUser[]> {
   await requireModerator();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   if (!search || search.trim().length < 2) {
     return [];
@@ -481,7 +480,7 @@ export async function adminCreateUser(
     throw new Error("Senha temporaria deve ter no minimo 6 caracteres");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const adminClient = createAdminClient();
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -591,7 +590,7 @@ export async function adminResetPassword(
     throw new Error("Senha temporaria deve ter no minimo 6 caracteres");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const adminClient = createAdminClient();
 
   // Buscar usuario
@@ -650,7 +649,7 @@ export async function adminUpdateUserRating(
     throw new Error("Rating deve estar entre 0 e 9999");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Buscar usuario
   const { data: user, error: userError } = await supabase
@@ -704,7 +703,7 @@ export async function adminUpdateUserRating(
 
 export async function adminToggleUserStatus(userId: string) {
   await requireAdminOnly();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Buscar usuario
   const { data: user, error: userError } = await supabase
@@ -748,7 +747,7 @@ export async function adminToggleUserStatus(userId: string) {
 
 export async function adminToggleHideFromRanking(userId: string) {
   await requireAdminOnly();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Buscar usuario
   const { data: user, error: userError } = await supabase
@@ -812,7 +811,7 @@ export async function adminToggleHideFromRanking(userId: string) {
 
 export async function adminResetUserStats(userId: string) {
   await requireAdminOnly();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Buscar usuario
   const { data: user, error: userError } = await supabase
@@ -882,7 +881,7 @@ export async function adminChangeUserRole(
   newRole: "player" | "moderator" | "admin"
 ) {
   await requireAdminOnly();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const currentAdmin = await getCurrentUser();
 
   // Impedir admin de alterar proprio role
@@ -935,7 +934,7 @@ export async function adminChangeUserRole(
 
 export async function adminGetSettings() {
   await requireModerator();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("settings")
@@ -948,7 +947,7 @@ export async function adminGetSettings() {
 
 export async function adminUpdateSetting(key: string, value: string) {
   await requireAdminOnly();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const admin = await getCurrentUser();
 
   // Buscar configuracao atual
@@ -997,7 +996,7 @@ export async function adminUpdateSetting(key: string, value: string) {
 
 export async function adminGetLogs(page = 0) {
   await requireModerator();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const validPage = validatePage(page);
   const from = validPage * PAGE_SIZE;
