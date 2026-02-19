@@ -1,0 +1,4 @@
+-- Desabilitar RLS temporariamente para testar
+ALTER TABLE matches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE rating_transactions DISABLE ROW LEVEL SECURITY;

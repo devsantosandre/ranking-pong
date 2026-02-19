@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push:hml": "supabase link --project-ref \"$SUPABASE_PROJECT_ID_HML\" && supabase db push --dry-run && supabase db push",
+    "db:push:prod": "supabase link --project-ref \"$SUPABASE_PROJECT_ID_PROD\" && supabase db push --dry-run && supabase db push"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
