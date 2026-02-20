@@ -6,7 +6,9 @@ import { useState, useMemo } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
-  useMatches,
+  usePendingMatches,
+  useRecentMatches,
+  useMatchCounts,
   useConfirmMatch,
   useContestMatch,
   type MatchWithUsers,
@@ -39,14 +41,21 @@ export default function PartidasPage() {
 
   // React Query hooks
   const {
-    data,
-    isLoading,
-    error,
-    refetch,
+    data: pendingData,
+    isLoading: pendingLoading,
+    error: pendingError,
+    refetch: refetchPending,
+  } = usePendingMatches(user?.id);
+  const {
+    data: recentData,
+    isLoading: recentLoading,
+    error: recentError,
+    refetch: refetchRecent,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useMatches(user?.id);
+  } = useRecentMatches(user?.id);
+  const { data: matchCounts } = useMatchCounts(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
   const previewAlertEnabled = searchParams.get("previewAlert") === "1";
@@ -56,13 +65,13 @@ export default function PartidasPage() {
       ? "Exemplo de erro ao confirmar partida. Tente novamente."
       : null);
 
-  // Flatten paginated data
-  const matches = useMemo(() => {
-    return data?.pages.flatMap((page) => page.matches) ?? [];
-  }, [data]);
+  const pendentes = pendingData ?? [];
+  const recentes = useMemo(() => {
+    return recentData?.pages.flatMap((page) => page.matches) ?? [];
+  }, [recentData]);
 
-  const pendentes = matches.filter((m) => m.status === "pendente" || m.status === "edited");
-  const recentes = matches.filter((m) => m.status === "validado");
+  const totalPendentes = pendentes.length;
+  const totalRecentes = matchCounts?.recentes ?? recentes.length;
 
   const handleConfirm = (matchId: string) => {
     if (!user) return;
@@ -80,7 +89,8 @@ export default function PartidasPage() {
           const message =
             err instanceof Error ? err.message : "Erro ao confirmar partida. Tente novamente.";
           setActionError(message);
-          void refetch();
+          void refetchPending();
+          void refetchRecent();
         },
       }
     );
@@ -97,7 +107,8 @@ export default function PartidasPage() {
           const message =
             err instanceof Error ? err.message : "Erro ao contestar partida. Tente novamente.";
           setActionError(message);
-          void refetch();
+          void refetchPending();
+          void refetchRecent();
         },
       }
     );
@@ -121,7 +132,7 @@ export default function PartidasPage() {
   };
 
   // Loading enquanto auth ou dados carregam
-  if (authLoading || isLoading) {
+  if (authLoading || pendingLoading || recentLoading) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
         <div className="space-y-4">
@@ -152,7 +163,7 @@ export default function PartidasPage() {
   }
 
   // Erro
-  if (error) {
+  if (pendingError || recentError) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
         <p className="py-8 text-center text-sm text-red-500">
@@ -175,7 +186,7 @@ export default function PartidasPage() {
                 : "bg-muted/70 text-foreground"
             }`}
           >
-            Pendentes ({pendentes.length})
+            Pendentes ({totalPendentes})
           </button>
           <button
             onClick={() => setActiveTab("recentes")}
@@ -185,7 +196,7 @@ export default function PartidasPage() {
                 : "bg-muted/70 text-foreground"
             }`}
           >
-            Recentes ({recentes.length})
+            Recentes ({totalRecentes})
           </button>
         </div>
 
@@ -270,7 +281,7 @@ export default function PartidasPage() {
           <LoadMoreButton
             onClick={() => fetchNextPage()}
             isLoading={isFetchingNextPage}
-            hasMore={!!hasNextPage}
+            hasMore={activeTab === "recentes" && !!hasNextPage}
           />
         </div>
       </div>

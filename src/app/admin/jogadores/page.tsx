@@ -28,6 +28,7 @@ import {
   adminSearchUsers,
   adminCreateUser,
   adminResetPassword,
+  adminUpdateUserName,
   adminUpdateUserRating,
   adminToggleUserStatus,
   adminToggleHideFromRanking,
@@ -63,10 +64,18 @@ const roleFilters = [
 ];
 
 type ConfirmAction = {
-  type: "toggle_status" | "reset_stats" | "change_role" | "reset_password" | "toggle_hide_from_ranking";
+  type:
+    | "toggle_status"
+    | "reset_stats"
+    | "change_role"
+    | "reset_password"
+    | "toggle_hide_from_ranking"
+    | "update_name";
   userId: string;
   userName: string;
   extra?: string; // para role ou senha
+  newName?: string;
+  reason?: string;
 };
 
 export default function AdminJogadoresPage() {
@@ -98,12 +107,22 @@ export default function AdminJogadoresPage() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  // Estados para editar nome
+  const [editNameId, setEditNameId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [nameReason, setNameReason] = useState("");
+  const [nameErrors, setNameErrors] = useState({ name: "", reason: "" });
+
   // Estados para editar rating
   const [editRatingId, setEditRatingId] = useState<string | null>(null);
   const [newRating, setNewRating] = useState("");
   const [ratingReason, setRatingReason] = useState("");
   const [ratingErrors, setRatingErrors] = useState({ rating: "", reason: "" });
   const [ratingLoading, setRatingLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   // Modal de confirmacao
   const [confirmModal, setConfirmModal] = useState<{
@@ -220,6 +239,38 @@ export default function AdminJogadoresPage() {
     return "";
   };
 
+  const validateNameUpdate = (user: AdminUser): boolean => {
+    const errors = { name: "", reason: "" };
+    let isValid = true;
+    const trimmedName = newName.trim();
+    const currentDisplayName = (user.full_name || user.name || "").trim();
+
+    if (currentUser?.id === user.id) {
+      errors.name = "Voce nao pode alterar seu proprio nome nesta tela";
+      isValid = false;
+    } else if (!trimmedName) {
+      errors.name = "Nome e obrigatorio";
+      isValid = false;
+    } else if (trimmedName.length < 2) {
+      errors.name = "Nome deve ter pelo menos 2 caracteres";
+      isValid = false;
+    } else if (trimmedName === currentDisplayName) {
+      errors.name = "Informe um nome diferente do atual";
+      isValid = false;
+    }
+
+    if (!nameReason.trim()) {
+      errors.reason = "Motivo e obrigatorio";
+      isValid = false;
+    } else if (nameReason.trim().length < 5) {
+      errors.reason = "Motivo deve ter pelo menos 5 caracteres";
+      isValid = false;
+    }
+
+    setNameErrors(errors);
+    return isValid;
+  };
+
   const validateRating = (): boolean => {
     const errors = { rating: "", reason: "" };
     let isValid = true;
@@ -310,6 +361,21 @@ export default function AdminJogadoresPage() {
     }
   };
 
+  const handleUpdateNameClick = (user: AdminUser) => {
+    if (!validateNameUpdate(user)) return;
+
+    setConfirmModal({
+      isOpen: true,
+      action: {
+        type: "update_name",
+        userId: user.id,
+        userName: user.full_name || user.name || "Jogador",
+        newName: newName.trim(),
+        reason: nameReason.trim(),
+      },
+    });
+  };
+
   const handleToggleStatusClick = (user: AdminUser) => {
     setConfirmModal({
       isOpen: true,
@@ -366,8 +432,9 @@ export default function AdminJogadoresPage() {
     if (!confirmModal.action) return;
 
     setConfirmLoading(true);
+    setActionMessage(null);
     try {
-      const { type, userId, extra } = confirmModal.action;
+      const { type, userId, extra, newName: nextName, reason } = confirmModal.action;
 
       switch (type) {
         case "toggle_status":
@@ -394,13 +461,36 @@ export default function AdminJogadoresPage() {
           setNewPassword("");
           setPasswordError("");
           break;
+        case "update_name": {
+          if (!nextName || !reason) {
+            throw new Error("Dados invalidos para atualizar nome");
+          }
+
+          const result = await adminUpdateUserName({
+            userId,
+            name: nextName,
+            reason,
+          });
+
+          setEditNameId(null);
+          setNewName("");
+          setNameReason("");
+          setNameErrors({ name: "", reason: "" });
+          setActionMessage({
+            type: "success",
+            text: `Nome atualizado para "${result.updatedName}"`,
+          });
+          // Invalidar queries de users pois o nome foi alterado
+          queryClient.invalidateQueries({ queryKey: ["users"] });
+          break;
+        }
       }
 
       loadUsers();
     } catch (err) {
       // Mostrar erro ao usuário
       const errorMessage = err instanceof Error ? err.message : "Erro ao executar acao";
-      alert(errorMessage);
+      setActionMessage({ type: "error", text: errorMessage });
     } finally {
       setConfirmLoading(false);
       setConfirmModal({ isOpen: false, action: null });
@@ -412,7 +502,7 @@ export default function AdminJogadoresPage() {
       return { title: "", description: "", variant: "default" as const };
     }
 
-    const { type, userName, extra } = confirmModal.action;
+    const { type, userName, extra, newName, reason } = confirmModal.action;
 
     switch (type) {
       case "toggle_status":
@@ -449,6 +539,12 @@ export default function AdminJogadoresPage() {
         return {
           title: "Resetar senha",
           description: `Deseja resetar a senha de "${userName}"? O jogador devera usar a nova senha temporaria para fazer login.`,
+          variant: "warning" as const,
+        };
+      case "update_name":
+        return {
+          title: "Editar nome do jogador",
+          description: `Deseja alterar "${userName}" para "${newName}"? Motivo: ${reason}`,
           variant: "warning" as const,
         };
       default:
@@ -567,6 +663,18 @@ export default function AdminJogadoresPage() {
           <p className="text-xs text-muted-foreground text-center">
             {searchLoading ? "Buscando..." : `${displayUsers.length} resultado(s) para "${searchInput}"`}
           </p>
+        )}
+
+        {actionMessage && (
+          <div
+            className={`rounded-xl border px-3 py-2 text-sm font-medium ${
+              actionMessage.type === "success"
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {actionMessage.text}
+          </div>
         )}
 
         {/* Filtros */}
@@ -767,6 +875,84 @@ export default function AdminJogadoresPage() {
                       {/* Acoes apenas Admin */}
                       {isAdmin && (
                         <>
+                          {/* Editar Nome */}
+                          {editNameId === player.id ? (
+                            <div className="space-y-2">
+                              <div>
+                                <Input
+                                  type="text"
+                                  placeholder="Novo nome"
+                                  value={newName}
+                                  onChange={(e) => {
+                                    setNewName(e.target.value);
+                                    if (nameErrors.name) {
+                                      setNameErrors((prev) => ({ ...prev, name: "" }));
+                                    }
+                                  }}
+                                  className={nameErrors.name ? "border-red-500" : ""}
+                                />
+                                {nameErrors.name && (
+                                  <p className="mt-1 text-xs text-red-500">{nameErrors.name}</p>
+                                )}
+                              </div>
+                              <div>
+                                <Input
+                                  placeholder="Motivo da alteracao"
+                                  value={nameReason}
+                                  onChange={(e) => {
+                                    setNameReason(e.target.value);
+                                    if (nameErrors.reason) {
+                                      setNameErrors((prev) => ({ ...prev, reason: "" }));
+                                    }
+                                  }}
+                                  className={nameErrors.reason ? "border-red-500" : ""}
+                                />
+                                {nameErrors.reason && (
+                                  <p className="mt-1 text-xs text-red-500">{nameErrors.reason}</p>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() => {
+                                    setEditNameId(null);
+                                    setNewName("");
+                                    setNameReason("");
+                                    setNameErrors({ name: "", reason: "" });
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="flex-1"
+                                  onClick={() => handleUpdateNameClick(player)}
+                                  disabled={confirmLoading}
+                                >
+                                  Confirmar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                setEditNameId(player.id);
+                                setEditRatingId(null);
+                                setNewName(player.full_name || player.name || "");
+                                setNameReason("");
+                                setNameErrors({ name: "", reason: "" });
+                              }}
+                              disabled={isCurrentUser}
+                            >
+                              Editar Nome
+                            </Button>
+                          )}
+
                           {/* Editar Rating */}
                           {editRatingId === player.id ? (
                             <div className="space-y-2">
@@ -840,6 +1026,7 @@ export default function AdminJogadoresPage() {
                               className="w-full"
                               onClick={() => {
                                 setEditRatingId(player.id);
+                                setEditNameId(null);
                                 setNewRating(player.rating_atual.toString());
                               }}
                             >

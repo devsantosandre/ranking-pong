@@ -66,6 +66,27 @@ export function useRanking() {
   });
 }
 
+// Hook para buscar ranking completo (sem paginação)
+export function useRankingAll() {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: [...queryKeys.users.ranking(), "all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
+        .eq("is_active", true)
+        .eq("hide_from_ranking", false)
+        .order("rating_atual", { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as User[];
+    },
+    staleTime: 1000 * 30,
+  });
+}
+
 // Hook para buscar um usuário específico
 export function useUser(userId: string | undefined) {
   const supabase = createClient();
@@ -114,7 +135,6 @@ export function useUserRankingPosition(userId: string | undefined) {
     staleTime: 1000 * 30,
   });
 }
-
 
 
 

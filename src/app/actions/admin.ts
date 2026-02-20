@@ -68,6 +68,17 @@ export type AdminLog = {
   admin?: { name: string; full_name: string };
 };
 
+export type AdminUpdateUserNameInput = {
+  userId: string;
+  name: string;
+  reason: string;
+};
+
+export type AdminUpdateUserNameResult = {
+  success: boolean;
+  updatedName: string;
+};
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -633,6 +644,96 @@ export async function adminResetPassword(
 // ============================================================
 // JOGADORES - Apenas Admin
 // ============================================================
+
+export async function adminUpdateUserName({
+  userId,
+  name,
+  reason,
+}: AdminUpdateUserNameInput): Promise<AdminUpdateUserNameResult> {
+  await requireAdminOnly();
+
+  const normalizedName = name.trim();
+  const normalizedReason = reason.trim();
+
+  if (!userId) {
+    throw new Error("Usuario invalido");
+  }
+
+  if (!normalizedName || normalizedName.length < 2) {
+    throw new Error("Nome obrigatorio (minimo 2 caracteres)");
+  }
+
+  if (!normalizedReason || normalizedReason.length < 5) {
+    throw new Error("Motivo obrigatorio (minimo 5 caracteres)");
+  }
+
+  const currentAdmin = await getCurrentUser();
+  if (!currentAdmin) {
+    throw new Error("Usuario administrador nao encontrado");
+  }
+
+  if (currentAdmin.id === userId) {
+    throw new Error("Voce nao pode alterar seu proprio nome nesta tela");
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id, name, full_name, email")
+    .eq("id", userId)
+    .single();
+
+  if (userError || !user) {
+    throw new Error("Usuario nao encontrado");
+  }
+
+  const oldName = user.full_name || user.name || "Jogador";
+  if (oldName === normalizedName) {
+    throw new Error("Informe um nome diferente do atual");
+  }
+
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({
+      name: normalizedName,
+      full_name: normalizedName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+
+  if (updateError) {
+    throw new Error("Erro ao atualizar nome do usuario");
+  }
+
+  await createAdminLog({
+    action: "user_name_updated",
+    action_description: "Nome do jogador alterado",
+    target_type: "user",
+    target_id: userId,
+    target_name: oldName,
+    old_value: {
+      name: user.name,
+      full_name: user.full_name,
+      email: user.email,
+    },
+    new_value: {
+      name: normalizedName,
+      full_name: normalizedName,
+      email: user.email,
+    },
+    reason: normalizedReason,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/ranking");
+  revalidatePath("/perfil");
+
+  return {
+    success: true,
+    updatedName: normalizedName,
+  };
+}
 
 export async function adminUpdateUserRating(
   userId: string,

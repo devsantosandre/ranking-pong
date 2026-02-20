@@ -15,6 +15,7 @@ export const queryKeys = {
   matches: {
     all: ["matches"] as const,
     list: (userId?: string) => [...queryKeys.matches.all, "list", userId] as const,
+    counts: (userId?: string) => [...queryKeys.matches.all, "counts", userId] as const,
     detail: (id: string) => [...queryKeys.matches.all, "detail", id] as const,
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
@@ -55,7 +56,6 @@ export const queryKeys = {
     user: (userId: string) => ["achievements", "user", userId] as const,
   },
 };
-
 
 
 

@@ -3,8 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { Search, X } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
-import { useRanking } from "@/lib/queries";
-import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { useRankingAll } from "@/lib/queries";
 import { PlayerListSkeleton } from "@/components/skeletons";
 import {
   getPlayerStyle,
@@ -13,94 +12,33 @@ import {
   getDivisionName,
   isTopThree,
 } from "@/lib/divisions";
-import { useQuery } from "@tanstack/react-query";
-import { createClient } from "@/utils/supabase/client";
-import { queryKeys } from "@/lib/queries/query-keys";
-
-type RankingUser = {
-  id: string;
-  name: string | null;
-  full_name: string | null;
-  email: string | null;
-  rating_atual: number | null;
-  vitorias: number | null;
-  derrotas: number | null;
-};
-
-type RankingUserWithPosition = RankingUser & {
-  position: number;
-  displayName: string;
-};
-
-// Hook para buscar ranking completo com posições reais
-function useRankingSearch(search: string) {
-  const supabase = createClient();
-
-  return useQuery({
-    queryKey: queryKeys.rankingSearch.term(search),
-    queryFn: async (): Promise<RankingUserWithPosition[]> => {
-      // Busca todos os usuários ordenados por rating para calcular posição real
-      const { data: allUsers, error } = await supabase
-        .from("users")
-        .select("id, name, full_name, email, rating_atual, vitorias, derrotas")
-        .eq("is_active", true)
-        .eq("hide_from_ranking", false)
-        .order("rating_atual", { ascending: false });
-
-      if (error) throw error;
-
-      // Atribui posição real a cada usuário
-      const usersWithPosition: RankingUserWithPosition[] = (allUsers || []).map((user: RankingUser, index: number) => ({
-        ...user,
-        position: index + 1,
-        displayName: user.full_name || user.name || user.email?.split("@")[0] || "Jogador",
-      }));
-
-      // Filtra por busca
-      const searchLower = search.toLowerCase();
-      return usersWithPosition.filter((user) =>
-        user.displayName.toLowerCase().includes(searchLower)
-      );
-    },
-    enabled: search.length >= 2, // Só busca com 2+ caracteres
-    staleTime: 1000 * 30, // 30 segundos
-  });
-}
 
 export default function RankingPage() {
   const [searchInput, setSearchInput] = useState("");
-  const isSearching = searchInput.length >= 2;
+  const normalizedSearch = searchInput.trim().toLowerCase();
+  const isSearching = normalizedSearch.length >= 2;
 
-  // Query para listagem normal (paginada)
+  // Query para listagem completa (sem paginação)
   const {
-    data: paginatedData,
-    isLoading: isPaginatedLoading,
-    error: paginatedError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useRanking();
+    data: rankingData,
+    isLoading,
+    error,
+  } = useRankingAll();
 
-  // Query para busca (com posições reais)
-  const {
-    data: searchResults,
-    isLoading: isSearchLoading,
-    error: searchError,
-  } = useRankingSearch(searchInput);
-
-  // Dados da listagem paginada
-  const paginatedPlayers = useMemo(() => {
-    const players = paginatedData?.pages.flatMap((page) => page.users) ?? [];
-    return players.map((player, index) => ({
+  const allPlayers = useMemo(() => {
+    return (rankingData ?? []).map((player, index) => ({
       ...player,
       position: index + 1,
       displayName: player.full_name || player.name || player.email?.split("@")[0] || "Jogador",
     }));
-  }, [paginatedData]);
+  }, [rankingData]);
 
-  // Escolhe qual lista mostrar
-  const players = isSearching ? (searchResults || []) : paginatedPlayers;
-  const error = isSearching ? searchError : paginatedError;
+  const players = useMemo(() => {
+    if (normalizedSearch.length < 2) {
+      return allPlayers;
+    }
+    return allPlayers.filter((user) => user.displayName.toLowerCase().includes(normalizedSearch));
+  }, [allPlayers, normalizedSearch]);
 
   // Handler para input
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,7 +50,7 @@ export default function RankingPage() {
     setSearchInput("");
   }, []);
 
-  if (isPaginatedLoading && !isSearching) {
+  if (isLoading) {
     return (
       <AppShell title="Ranking" subtitle="Classificação dos jogadores" showBack>
         <div className="space-y-4">
@@ -157,7 +95,7 @@ export default function RankingPage() {
         {/* Indicador de busca */}
         {isSearching && (
           <p className="text-xs text-muted-foreground text-center">
-            {isSearchLoading ? "Buscando..." : `${players.length} resultado(s) para "${searchInput}"`}
+            {`${players.length} resultado(s) para "${searchInput.trim()}"`}
           </p>
         )}
 
@@ -166,7 +104,7 @@ export default function RankingPage() {
           {players.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {isSearching
-                ? (isSearchLoading ? "Buscando..." : "Nenhum jogador encontrado")
+                ? "Nenhum jogador encontrado"
                 : "Nenhum jogador no ranking"
               }
             </p>
@@ -251,15 +189,6 @@ export default function RankingPage() {
                   </div>
                 );
               })}
-
-              {/* Botao Carregar mais (só quando não está buscando) */}
-              {!isSearching && (
-                <LoadMoreButton
-                  onClick={() => fetchNextPage()}
-                  isLoading={isFetchingNextPage}
-                  hasMore={!!hasNextPage}
-                />
-              )}
             </>
           )}
         </div>

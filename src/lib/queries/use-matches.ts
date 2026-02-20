@@ -3,6 +3,7 @@
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
@@ -47,6 +48,52 @@ type MatchesPage = {
   nextPage: number | undefined;
 };
 
+type MatchCounts = {
+  pendentes: number;
+  recentes: number;
+};
+
+async function fetchMatchesWithUsers(
+  supabase: ReturnType<typeof createClient>,
+  matchesData: MatchData[]
+) {
+  if (matchesData.length === 0) {
+    return [] as MatchWithUsers[];
+  }
+
+  const playerIds = new Set<string>();
+  matchesData.forEach((m) => {
+    playerIds.add(m.player_a_id);
+    playerIds.add(m.player_b_id);
+  });
+
+  const { data: usersData, error: usersError } = await supabase
+    .from("users")
+    .select("id, name, full_name, email")
+    .in("id", Array.from(playerIds));
+
+  if (usersError) throw usersError;
+
+  const usersMap = new Map<string, UserInfo>();
+  usersData?.forEach((u: UserInfo) => usersMap.set(u.id, u));
+
+  return matchesData.map((match) => ({
+    ...match,
+    player_a: usersMap.get(match.player_a_id) || {
+      id: match.player_a_id,
+      name: null,
+      full_name: null,
+      email: null,
+    },
+    player_b: usersMap.get(match.player_b_id) || {
+      id: match.player_b_id,
+      name: null,
+      full_name: null,
+      email: null,
+    },
+  })) as MatchWithUsers[];
+}
+
 // Hook para buscar partidas do usuário com paginacao
 export function useMatches(userId: string | undefined) {
   const supabase = createClient();
@@ -72,41 +119,7 @@ export function useMatches(userId: string | undefined) {
         return { matches: [] as MatchWithUsers[], nextPage: undefined };
       }
 
-      // Coletar IDs únicos de jogadores
-      const playerIds = new Set<string>();
-      matchesData.forEach((m: MatchData) => {
-        playerIds.add(m.player_a_id);
-        playerIds.add(m.player_b_id);
-      });
-
-      // Buscar dados dos jogadores
-      const { data: usersData, error: usersError } = await supabase
-        .from("users")
-        .select("id, name, full_name, email")
-        .in("id", Array.from(playerIds));
-
-      if (usersError) throw usersError;
-
-      // Criar mapa de usuários
-      const usersMap = new Map<string, UserInfo>();
-      usersData?.forEach((u: UserInfo) => usersMap.set(u.id, u));
-
-      // Combinar dados
-      const matchesWithUsers: MatchWithUsers[] = matchesData.map((match: MatchData) => ({
-        ...match,
-        player_a: usersMap.get(match.player_a_id) || {
-          id: match.player_a_id,
-          name: null,
-          full_name: null,
-          email: null,
-        },
-        player_b: usersMap.get(match.player_b_id) || {
-          id: match.player_b_id,
-          name: null,
-          full_name: null,
-          email: null,
-        },
-      }));
+      const matchesWithUsers = await fetchMatchesWithUsers(supabase, matchesData as MatchData[]);
 
       return {
         matches: matchesWithUsers,
@@ -115,6 +128,106 @@ export function useMatches(userId: string | undefined) {
     },
     getNextPageParam: (lastPage) => lastPage.nextPage,
     initialPageParam: 0,
+    enabled: !!userId,
+  });
+}
+
+export function usePendingMatches(userId: string | undefined) {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: queryKeys.matches.pending(userId || "anonymous"),
+    queryFn: async () => {
+      if (!userId) {
+        return [] as MatchWithUsers[];
+      }
+
+      const { data: matchesData, error: matchesError } = await supabase
+        .from("matches")
+        .select("*")
+        .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
+        .in("status", ["pendente", "edited"])
+        .order("created_at", { ascending: false });
+
+      if (matchesError) throw matchesError;
+      return fetchMatchesWithUsers(supabase, (matchesData ?? []) as MatchData[]);
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useRecentMatches(userId: string | undefined) {
+  const supabase = createClient();
+
+  return useInfiniteQuery({
+    queryKey: queryKeys.matches.recent(userId || "anonymous"),
+    queryFn: async ({ pageParam = 0 }) => {
+      if (!userId) {
+        return { matches: [] as MatchWithUsers[], nextPage: undefined };
+      }
+
+      const from = pageParam * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data: matchesData, error: matchesError } = await supabase
+        .from("matches")
+        .select("*")
+        .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
+        .eq("status", "validado")
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (matchesError) throw matchesError;
+      if (!matchesData || matchesData.length === 0) {
+        return { matches: [] as MatchWithUsers[], nextPage: undefined };
+      }
+
+      const matchesWithUsers = await fetchMatchesWithUsers(supabase, matchesData as MatchData[]);
+
+      return {
+        matches: matchesWithUsers,
+        nextPage: matchesData.length === PAGE_SIZE ? pageParam + 1 : undefined,
+      };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    initialPageParam: 0,
+    enabled: !!userId,
+  });
+}
+
+export function useMatchCounts(userId: string | undefined) {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: queryKeys.matches.counts(userId),
+    queryFn: async () => {
+      if (!userId) {
+        return { pendentes: 0, recentes: 0 } as MatchCounts;
+      }
+
+      const baseFilter = `player_a_id.eq.${userId},player_b_id.eq.${userId}`;
+
+      const [pendingResult, recentResult] = await Promise.all([
+        supabase
+          .from("matches")
+          .select("id", { count: "exact", head: true })
+          .or(baseFilter)
+          .in("status", ["pendente", "edited"]),
+        supabase
+          .from("matches")
+          .select("id", { count: "exact", head: true })
+          .or(baseFilter)
+          .eq("status", "validado"),
+      ]);
+
+      if (pendingResult.error) throw pendingResult.error;
+      if (recentResult.error) throw recentResult.error;
+
+      return {
+        pendentes: pendingResult.count ?? 0,
+        recentes: recentResult.count ?? 0,
+      } as MatchCounts;
+    },
     enabled: !!userId,
   });
 }
@@ -215,8 +328,6 @@ export function useRegisterMatch() {
     },
   });
 }
-
-
 
 
 

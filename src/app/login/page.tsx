@@ -10,14 +10,10 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { buildBrowserTitle } from "@/lib/app-title";
 
-type AuthMode = "login" | "register";
-
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -25,8 +21,8 @@ export default function LoginPage() {
   const supabase = createClient();
 
   useEffect(() => {
-    document.title = buildBrowserTitle(mode === "login" ? "Entrar" : "Criar conta");
-  }, [mode]);
+    document.title = buildBrowserTitle("Entrar");
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,34 +45,6 @@ export default function LoginPage() {
     router.refresh();
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setMessage(null);
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-        },
-      },
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    setMessage("Verifique seu email para confirmar o cadastro!");
-    setLoading(false);
-  };
-
-  const handleSubmit = mode === "login" ? handleLogin : handleRegister;
-
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/90 to-primary p-4">
       <div className="w-full max-w-[380px] space-y-6">
@@ -92,30 +60,13 @@ export default function LoginPage() {
             />
           </div>
           <p className="mt-1 text-sm text-white/70">
-            {mode === "login"
-              ? "Entre na sua conta"
-              : "Crie sua conta para jogar"}
+            Entre na sua conta
           </p>
         </div>
 
         {/* Card de autenticação */}
         <div className="rounded-3xl bg-white p-6 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Seu nome"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  disabled={loading}
-                />
-              </div>
-            )}
-
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -157,43 +108,10 @@ export default function LoginPage() {
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {mode === "login" ? "Entrar" : "Criar conta"}
+              Entrar
             </Button>
           </form>
 
-          <div className="mt-6 border-t border-border pt-4 text-center">
-            {mode === "login" ? (
-              <p className="text-sm text-muted-foreground">
-                Não tem uma conta?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("register");
-                    setError(null);
-                    setMessage(null);
-                  }}
-                  className="font-semibold text-primary hover:underline"
-                >
-                  Criar conta
-                </button>
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Já tem uma conta?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    setError(null);
-                    setMessage(null);
-                  }}
-                  className="font-semibold text-primary hover:underline"
-                >
-                  Entrar
-                </button>
-              </p>
-            )}
-          </div>
         </div>
 
         {/* Footer */}
