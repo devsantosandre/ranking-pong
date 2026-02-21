@@ -75,7 +75,8 @@ export function useUserAchievements(userId: string | undefined) {
             icon,
             points,
             condition_type,
-            condition_value
+            condition_value,
+            is_active
           )
         `)
         .eq("user_id", userId)
@@ -90,13 +91,17 @@ export function useUserAchievements(userId: string | undefined) {
         achievement_id: string;
         unlocked_at: string;
         match_id: string | null;
-        achievement: Achievement | Achievement[];
+        achievement: Achievement | Achievement[] | null;
       };
 
-      return (data || []).map((ua: RawUserAchievement) => ({
+      const normalized = (data || []).map((ua: RawUserAchievement) => ({
         ...ua,
         achievement: Array.isArray(ua.achievement) ? ua.achievement[0] : ua.achievement,
-      })) as UserAchievement[];
+      }));
+
+      return normalized.filter(
+        (ua): ua is UserAchievement => Boolean(ua.achievement?.is_active)
+      );
     },
     enabled: !!userId,
     staleTime: 1000 * 30, // 30 segundos

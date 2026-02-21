@@ -52,15 +52,32 @@ type ValidatedMatch = {
   vencedor_id: string | null;
 };
 
+type RatingGateConfig = {
+  minPlayers: number;
+  minValidatedMatches: number;
+};
+
+type RatingGateSnapshot = {
+  eligiblePlayersCount: number;
+  validatedMatchesCount: number;
+  isOpen: boolean;
+};
+
 type AchievementEvaluationCache = {
   validatedMatchesPromise?: Promise<ValidatedMatch[]>;
   userCreatedAtPromise?: Promise<string | null>;
   matchesInCurrentDayCountPromise?: Promise<number>;
+  ratingGateConfigPromise?: Promise<RatingGateConfig>;
+  ratingGateSnapshotPromise?: Promise<RatingGateSnapshot>;
   rankingIdsByLimit: Map<number, Promise<string[]>>;
   conditionResultByKey: Map<string, Promise<boolean>>;
 };
 
 const ACTIVE_ACHIEVEMENTS_CACHE_TTL_MS = 30_000;
+const DEFAULT_RATING_ACHIEVEMENT_MIN_PLAYERS = 6;
+const DEFAULT_RATING_ACHIEVEMENT_MIN_VALIDATED_MATCHES = 20;
+const SETTINGS_KEY_RATING_MIN_PLAYERS = "achievements_rating_min_players";
+const SETTINGS_KEY_RATING_MIN_VALIDATED_MATCHES = "achievements_rating_min_validated_matches";
 let cachedActiveAchievements: { data: Achievement[]; fetchedAt: number } | null = null;
 
 async function getAchievementsSupabaseClient(): Promise<ServerSupabaseClient> {
@@ -128,6 +145,13 @@ export async function checkAndUnlockAchievements(
     // 3. Verificar cada conquista não desbloqueada
     for (const achievement of allAchievements) {
       if (unlockedIds.has(achievement.id)) continue;
+
+      if (achievement.category === "rating") {
+        const ratingGateSnapshot = await getRatingGateSnapshot(supabase, evaluationCache);
+        if (!ratingGateSnapshot.isOpen) {
+          continue;
+        }
+      }
 
       const conditionCacheKey = `${achievement.condition_type}:${achievement.condition_value}`;
       if (!evaluationCache.conditionResultByKey.has(conditionCacheKey)) {
@@ -246,6 +270,105 @@ async function checkAchievementCondition(
 }
 
 // Helpers para verificações complexas
+
+function parseSettingAsPositiveInt(
+  value: string | null | undefined,
+  fallback: number
+): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+async function getRatingGateConfig(
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
+): Promise<RatingGateConfig> {
+  if (!cache.ratingGateConfigPromise) {
+    cache.ratingGateConfigPromise = (async () => {
+      const fallback: RatingGateConfig = {
+        minPlayers: DEFAULT_RATING_ACHIEVEMENT_MIN_PLAYERS,
+        minValidatedMatches: DEFAULT_RATING_ACHIEVEMENT_MIN_VALIDATED_MATCHES,
+      };
+
+      const { data, error } = await supabase
+        .from("settings")
+        .select("key, value")
+        .in("key", [SETTINGS_KEY_RATING_MIN_PLAYERS, SETTINGS_KEY_RATING_MIN_VALIDATED_MATCHES]);
+
+      if (error || !data) {
+        return fallback;
+      }
+
+      const minPlayersSetting = data.find((setting) => setting.key === SETTINGS_KEY_RATING_MIN_PLAYERS);
+      const minMatchesSetting = data.find(
+        (setting) => setting.key === SETTINGS_KEY_RATING_MIN_VALIDATED_MATCHES
+      );
+
+      return {
+        minPlayers: parseSettingAsPositiveInt(minPlayersSetting?.value, fallback.minPlayers),
+        minValidatedMatches: parseSettingAsPositiveInt(
+          minMatchesSetting?.value,
+          fallback.minValidatedMatches
+        ),
+      };
+    })();
+  }
+
+  return cache.ratingGateConfigPromise;
+}
+
+async function getRatingGateSnapshot(
+  supabase: ServerSupabaseClient,
+  cache: AchievementEvaluationCache
+): Promise<RatingGateSnapshot> {
+  if (!cache.ratingGateSnapshotPromise) {
+    cache.ratingGateSnapshotPromise = (async () => {
+      try {
+        const config = await getRatingGateConfig(supabase, cache);
+
+        const [eligiblePlayersResult, validatedMatchesResult] = await Promise.all([
+          supabase
+            .from("users")
+            .select("*", { count: "exact", head: true })
+            .eq("is_active", true)
+            .eq("hide_from_ranking", false)
+            .gt("jogos_disputados", 0),
+          supabase
+            .from("matches")
+            .select("*", { count: "exact", head: true })
+            .eq("status", "validado"),
+        ]);
+
+        if (eligiblePlayersResult.error || validatedMatchesResult.error) {
+          return {
+            eligiblePlayersCount: 0,
+            validatedMatchesCount: 0,
+            isOpen: false,
+          };
+        }
+
+        const eligiblePlayersCount = eligiblePlayersResult.count || 0;
+        const validatedMatchesCount = validatedMatchesResult.count || 0;
+
+        return {
+          eligiblePlayersCount,
+          validatedMatchesCount,
+          isOpen:
+            eligiblePlayersCount >= config.minPlayers &&
+            validatedMatchesCount >= config.minValidatedMatches,
+        };
+      } catch {
+        return {
+          eligiblePlayersCount: 0,
+          validatedMatchesCount: 0,
+          isOpen: false,
+        };
+      }
+    })();
+  }
+
+  return cache.ratingGateSnapshotPromise;
+}
 
 async function getValidatedMatchesForUser(
   userId: string,

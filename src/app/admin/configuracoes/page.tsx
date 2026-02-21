@@ -28,7 +28,25 @@ const settingLabels: Record<string, { label: string; description: string }> = {
     label: "Rating Inicial",
     description: "Pontuacao inicial para novos jogadores",
   },
+  achievements_rating_min_players: {
+    label: "Conquistas Rating: Min. Jogadores",
+    description: "Minimo de jogadores com jogo validado para liberar conquistas de rating",
+  },
+  achievements_rating_min_validated_matches: {
+    label: "Conquistas Rating: Min. Partidas",
+    description: "Minimo de partidas validadas globais para liberar conquistas de rating",
+  },
 };
+
+const settingDisplayOrder = [
+  "k_factor",
+  "limite_jogos_diarios",
+  "rating_inicial",
+  "achievements_rating_min_players",
+  "achievements_rating_min_validated_matches",
+] as const;
+
+const settingOrderIndex = new Map(settingDisplayOrder.map((key, index) => [key, index]));
 
 // Componente de preview da tabela ELO
 function EloPreview({ kFactor }: { kFactor: number }) {
@@ -190,6 +208,14 @@ export default function AdminConfiguracoesPage() {
     }
   };
 
+  const orderedSettings = [...settings]
+    .filter((setting) => settingLabels[setting.key])
+    .sort((left, right) => {
+      const leftIndex = settingOrderIndex.get(left.key) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = settingOrderIndex.get(right.key) ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
+
   const getSettingLabel = (key: string) => {
     return settingLabels[key]?.label || key;
   };
@@ -212,11 +238,8 @@ export default function AdminConfiguracoesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {settings.map((setting) => {
-              const meta = settingLabels[setting.key] || {
-                label: setting.key,
-                description: setting.description || "",
-              };
+            {orderedSettings.map((setting) => {
+              const meta = settingLabels[setting.key];
               const isEditing = editingKey === setting.key;
 
               return (

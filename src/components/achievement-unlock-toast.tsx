@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, ChevronRight } from "lucide-react";
 import { rarityColors, type Achievement } from "@/lib/queries/use-achievements";
+import { getSingleEmoji } from "@/lib/emoji";
 
 // ⚠️ PREVIEW MODE - Remover após ajustes
 const PREVIEW_MODE = false;
@@ -96,6 +97,7 @@ export function AchievementUnlockToast({
   const achievement = achievements[currentIndex];
   const colors = rarityColors[achievement?.rarity] || rarityColors.bronze;
   const showConfetti = achievement && CONFETTI_RARITIES.includes(achievement.rarity);
+  const icon = getSingleEmoji(achievement?.icon);
 
   const goToNext = useCallback(() => {
     if (currentIndex < achievements.length - 1) {
@@ -208,7 +210,7 @@ export function AchievementUnlockToast({
                     filter: showConfetti ? "drop-shadow(0 0 8px rgba(255,255,255,0.8))" : "none",
                   }}
                 >
-                  {achievement.icon}
+                  {icon}
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">

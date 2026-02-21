@@ -16,6 +16,57 @@ type AchievementsSectionProps = {
   compact?: boolean;
 };
 
+function formatCount(value: number, singular: string, plural: string): string {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function getAchievementRequirementText(achievement: Achievement): string {
+  const value = achievement.condition_value;
+
+  switch (achievement.condition_type) {
+    case "jogos":
+      return `Dispute ${formatCount(value, "partida validada", "partidas validadas")}.`;
+    case "vitorias":
+      return `Alcance ${formatCount(value, "vitoria", "vitorias")}.`;
+    case "streak":
+      return `Emende ${formatCount(value, "vitoria seguida", "vitorias seguidas")} sem perder.`;
+    case "rating":
+      return `Chegue a rating ${value} ou mais.`;
+    case "posicao":
+      return value === 1
+        ? "Termine em 1º lugar no ranking."
+        : `Fique entre os ${value} primeiros do ranking.`;
+    case "perfect":
+      return "Venca uma partida por 3x0.";
+    case "jogos_dia":
+      return `Jogue ${formatCount(value, "partida", "partidas")} no mesmo dia.`;
+    case "winrate":
+      return `Mantenha ${value}% ou mais de win rate (minimo de 20 jogos).`;
+    case "underdog":
+      return `Venca um adversario com ${value}+ pontos acima do seu rating.`;
+    case "h2h":
+      return `Jogue ${formatCount(value, "vez", "vezes")} contra o mesmo adversario.`;
+    case "oponentes_unicos":
+      return `Enfrente ${formatCount(value, "adversario diferente", "adversarios diferentes")}.`;
+    case "dias_escola":
+      return value === 0
+        ? "Conquista de boas-vindas: conta criada."
+        : `Complete ${formatCount(value, "dia", "dias")} desde o cadastro.`;
+    case "semanas_consecutivas":
+      return `Tenha jogos em ${formatCount(value, "semana consecutiva", "semanas consecutivas")}.`;
+    case "meses_ativos":
+      return `Tenha jogos em ${formatCount(value, "mes ativo", "meses ativos")} distintos.`;
+    case "primeira_semana":
+      return "Jogue ao menos 1 partida nos primeiros 7 dias da conta.";
+    case "jogos_primeiro_mes":
+      return `Dispute ${formatCount(value, "partida", "partidas")} no primeiro mes de conta.`;
+    case "retorno":
+      return `Jogue novamente apos ${formatCount(value, "dia", "dias")} sem atividade.`;
+    default:
+      return achievement.description;
+  }
+}
+
 export function AchievementsSection({ userId, compact = false }: AchievementsSectionProps) {
   const [expanded, setExpanded] = useState(!compact);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -170,6 +221,31 @@ export function AchievementsSection({ userId, compact = false }: AchievementsSec
                     />
                   ))}
                 </div>
+
+                {selectedCategory === category && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground">
+                      Como desbloquear
+                    </p>
+                    {categoryAchievements.map((achievement) => {
+                      const isUnlocked = unlockedIds.has(achievement.id);
+
+                      return (
+                        <article
+                          key={`${achievement.id}-guide`}
+                          className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2"
+                        >
+                          <p className="text-xs font-semibold text-foreground">
+                            {isUnlocked ? "✅" : "🎯"} {achievement.name}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            {getAchievementRequirementText(achievement)}
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

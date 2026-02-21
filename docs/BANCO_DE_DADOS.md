@@ -201,6 +201,8 @@ Configurações dinâmicas do sistema.
 | `k_factor` | "24" | Fator K do ELO |
 | `limite_jogos_diarios` | "2" | Limite de jogos/dia vs mesmo oponente |
 | `rating_inicial` | "250" | Rating inicial usado na criação de jogadores |
+| `achievements_rating_min_players` | "6" | Minimo de jogadores com jogo validado para liberar conquistas de rating |
+| `achievements_rating_min_validated_matches` | "20" | Minimo de partidas validadas globais para liberar conquistas de rating |
 
 ---
 
