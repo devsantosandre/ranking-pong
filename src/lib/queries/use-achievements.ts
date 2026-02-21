@@ -100,7 +100,8 @@ export function useUserAchievements(userId: string | undefined) {
       }));
 
       return normalized.filter(
-        (ua): ua is UserAchievement => Boolean(ua.achievement?.is_active)
+        (ua: (typeof normalized)[number]): ua is UserAchievement =>
+          Boolean(ua.achievement?.is_active)
       );
     },
     enabled: !!userId,
@@ -122,7 +123,9 @@ export function useAchievementStats(userId: string | undefined) {
   };
 
   if (allAchievements && userAchievements) {
-    const unlockedIds = new Set(userAchievements.map((ua) => ua.achievement_id));
+    const unlockedIds = new Set(
+      userAchievements.map((ua: UserAchievement) => ua.achievement_id)
+    );
 
     // Por categoria
     for (const achievement of allAchievements) {

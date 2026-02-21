@@ -15,7 +15,17 @@ import {
   type AdminSetting,
 } from "@/app/actions/admin";
 
-const settingLabels: Record<string, { label: string; description: string }> = {
+const settingDisplayOrder = [
+  "k_factor",
+  "limite_jogos_diarios",
+  "rating_inicial",
+  "achievements_rating_min_players",
+  "achievements_rating_min_validated_matches",
+] as const;
+
+type SupportedSettingKey = (typeof settingDisplayOrder)[number];
+
+const settingLabels: Record<SupportedSettingKey, { label: string; description: string }> = {
   k_factor: {
     label: "Fator K (ELO)",
     description: "Intensidade das mudancas de pontuacao (16-32 recomendado)",
@@ -38,15 +48,13 @@ const settingLabels: Record<string, { label: string; description: string }> = {
   },
 };
 
-const settingDisplayOrder = [
-  "k_factor",
-  "limite_jogos_diarios",
-  "rating_inicial",
-  "achievements_rating_min_players",
-  "achievements_rating_min_validated_matches",
-] as const;
+const settingOrderIndex = new Map<SupportedSettingKey, number>(
+  settingDisplayOrder.map((key, index) => [key, index])
+);
 
-const settingOrderIndex = new Map(settingDisplayOrder.map((key, index) => [key, index]));
+function isSupportedSettingKey(key: string): key is SupportedSettingKey {
+  return Object.prototype.hasOwnProperty.call(settingLabels, key);
+}
 
 // Componente de preview da tabela ELO
 function EloPreview({ kFactor }: { kFactor: number }) {
@@ -209,7 +217,10 @@ export default function AdminConfiguracoesPage() {
   };
 
   const orderedSettings = [...settings]
-    .filter((setting) => settingLabels[setting.key])
+    .filter(
+      (setting): setting is AdminSetting & { key: SupportedSettingKey } =>
+        isSupportedSettingKey(setting.key)
+    )
     .sort((left, right) => {
       const leftIndex = settingOrderIndex.get(left.key) ?? Number.MAX_SAFE_INTEGER;
       const rightIndex = settingOrderIndex.get(right.key) ?? Number.MAX_SAFE_INTEGER;
@@ -217,7 +228,10 @@ export default function AdminConfiguracoesPage() {
     });
 
   const getSettingLabel = (key: string) => {
-    return settingLabels[key]?.label || key;
+    if (isSupportedSettingKey(key)) {
+      return settingLabels[key].label;
+    }
+    return key;
   };
 
   return (

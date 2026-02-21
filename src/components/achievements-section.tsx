@@ -8,6 +8,7 @@ import {
   achievementCategories,
   rarityColors,
   type Achievement,
+  type UserAchievement,
 } from "@/lib/queries/use-achievements";
 import { AchievementBadge } from "./achievement-badge";
 
@@ -89,7 +90,9 @@ export function AchievementsSection({ userId, compact = false }: AchievementsSec
     );
   }
 
-  const unlockedIds = new Set(userAchievements?.map((ua) => ua.achievement_id) || []);
+  const unlockedIds = new Set(
+    userAchievements?.map((ua: UserAchievement) => ua.achievement_id) || []
+  );
   const unlockedCount = unlockedIds.size;
   const totalCount = allAchievements?.length || 0;
 
@@ -123,7 +126,7 @@ export function AchievementsSection({ userId, compact = false }: AchievementsSec
 
   // Buscar data de desbloqueio
   const getUnlockDate = (achievementId: string) => {
-    const ua = userAchievements?.find((u) => u.achievement_id === achievementId);
+    const ua = userAchievements?.find((u: UserAchievement) => u.achievement_id === achievementId);
     return ua?.unlocked_at;
   };
 
