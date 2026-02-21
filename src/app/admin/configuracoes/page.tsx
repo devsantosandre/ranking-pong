@@ -38,6 +38,16 @@ const settingLabels: Record<string, { label: string; description: string }> = {
   },
 };
 
+const settingDisplayOrder = [
+  "k_factor",
+  "limite_jogos_diarios",
+  "rating_inicial",
+  "achievements_rating_min_players",
+  "achievements_rating_min_validated_matches",
+] as const;
+
+const settingOrderIndex = new Map(settingDisplayOrder.map((key, index) => [key, index]));
+
 // Componente de preview da tabela ELO
 function EloPreview({ kFactor }: { kFactor: number }) {
   if (isNaN(kFactor) || kFactor < 1) return null;
@@ -198,6 +208,14 @@ export default function AdminConfiguracoesPage() {
     }
   };
 
+  const orderedSettings = [...settings]
+    .filter((setting) => settingLabels[setting.key])
+    .sort((left, right) => {
+      const leftIndex = settingOrderIndex.get(left.key) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = settingOrderIndex.get(right.key) ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
+
   const getSettingLabel = (key: string) => {
     return settingLabels[key]?.label || key;
   };
@@ -220,7 +238,7 @@ export default function AdminConfiguracoesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {settings.filter((setting) => settingLabels[setting.key]).map((setting) => {
+            {orderedSettings.map((setting) => {
               const meta = settingLabels[setting.key];
               const isEditing = editingKey === setting.key;
 
