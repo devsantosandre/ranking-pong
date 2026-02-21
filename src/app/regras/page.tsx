@@ -28,6 +28,20 @@ export default function RegrasPage() {
     return !isNaN(rating) && rating > 0 ? rating : 250;
   }, [settings]);
 
+  const ratingAchievementsMinPlayers = useMemo(() => {
+    const minPlayersSetting = settings?.find((s) => s.key === "achievements_rating_min_players");
+    const minPlayers = minPlayersSetting ? parseInt(minPlayersSetting.value, 10) : 6;
+    return !isNaN(minPlayers) && minPlayers > 0 ? minPlayers : 6;
+  }, [settings]);
+
+  const ratingAchievementsMinMatches = useMemo(() => {
+    const minMatchesSetting = settings?.find(
+      (s) => s.key === "achievements_rating_min_validated_matches"
+    );
+    const minMatches = minMatchesSetting ? parseInt(minMatchesSetting.value, 10) : 20;
+    return !isNaN(minMatches) && minMatches > 0 ? minMatches : 20;
+  }, [settings]);
+
   // Calcular exemplos de pontuacao com o K factor atual
   const eloExamples = useMemo(() => {
     // vs Mais forte (800 vs 1200) - diferenca de 400 pontos
@@ -216,6 +230,13 @@ export default function RegrasPage() {
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
               <span>Rating inicial: {ratingInicial} pontos</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary mt-0.5">•</span>
+              <span>
+                Conquistas de rating liberam apos {ratingAchievementsMinPlayers} jogadores com jogo
+                validado e {ratingAchievementsMinMatches} partidas validadas no total
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>

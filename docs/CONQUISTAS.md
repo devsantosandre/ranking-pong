@@ -62,6 +62,16 @@ Baseadas na pontuação ELO e posição no ranking.
 | Pódio | No pódio | Posição 1-3 |
 | Campeão | O melhor do ranking | Posição 1 |
 
+**Regra de maturidade da categoria Rating**
+
+As conquistas da categoria `rating` só são avaliadas quando o sistema atingir massa crítica:
+- Mínimo de jogadores com jogo validado
+- Mínimo de partidas validadas globais
+
+Por padrão, os limites são `6` jogadores e `20` partidas, configuráveis em `settings` pelas chaves:
+- `achievements_rating_min_players`
+- `achievements_rating_min_validated_matches`
+
 ### 5. Especiais (Diamante)
 
 Conquistas únicas que exigem situações específicas.

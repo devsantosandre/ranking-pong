@@ -32,6 +32,8 @@ const settingNames: Record<string, string> = {
   k_factor: "Fator K (ELO)",
   limite_jogos_diarios: "Limite jogos diarios",
   rating_inicial: "Rating inicial",
+  achievements_rating_min_players: "Conquistas rating: min jogadores",
+  achievements_rating_min_validated_matches: "Conquistas rating: min partidas",
   pontos_vitoria: "Pontos vitoria",
   pontos_derrota: "Pontos derrota",
 };

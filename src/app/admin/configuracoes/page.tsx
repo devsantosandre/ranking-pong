@@ -28,6 +28,14 @@ const settingLabels: Record<string, { label: string; description: string }> = {
     label: "Rating Inicial",
     description: "Pontuacao inicial para novos jogadores",
   },
+  achievements_rating_min_players: {
+    label: "Conquistas Rating: Min. Jogadores",
+    description: "Minimo de jogadores com jogo validado para liberar conquistas de rating",
+  },
+  achievements_rating_min_validated_matches: {
+    label: "Conquistas Rating: Min. Partidas",
+    description: "Minimo de partidas validadas globais para liberar conquistas de rating",
+  },
 };
 
 // Componente de preview da tabela ELO
@@ -212,11 +220,8 @@ export default function AdminConfiguracoesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {settings.map((setting) => {
-              const meta = settingLabels[setting.key] || {
-                label: setting.key,
-                description: setting.description || "",
-              };
+            {settings.filter((setting) => settingLabels[setting.key]).map((setting) => {
+              const meta = settingLabels[setting.key];
               const isEditing = editingKey === setting.key;
 
               return (
