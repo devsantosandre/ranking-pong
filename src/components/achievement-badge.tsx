@@ -1,6 +1,7 @@
 "use client";
 
 import { rarityColors, type Achievement } from "@/lib/queries/use-achievements";
+import { getSingleEmoji } from "@/lib/emoji";
 
 type AchievementBadgeProps = {
   achievement: Achievement;
@@ -18,6 +19,7 @@ export function AchievementBadge({
   showTooltip = true,
 }: AchievementBadgeProps) {
   const colors = rarityColors[achievement.rarity] || rarityColors.bronze;
+  const icon = getSingleEmoji(achievement.icon);
 
   const sizeClasses = {
     sm: "h-10 w-10 text-lg",
@@ -44,7 +46,7 @@ export function AchievementBadge({
         `}
       >
         {unlocked ? (
-          <span>{achievement.icon}</span>
+          <span>{icon}</span>
         ) : (
           <span className="text-muted-foreground/30">?</span>
         )}
@@ -74,7 +76,7 @@ export function AchievementBadge({
           <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-popover" />
           <div className="bg-popover text-popover-foreground rounded-lg border shadow-lg p-2 min-w-[140px] max-w-[180px]">
             <p className="font-semibold text-xs flex items-center gap-1">
-              {achievement.icon} {achievement.name}
+              {icon} {achievement.name}
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               {achievement.description}
@@ -110,6 +112,7 @@ export function AchievementBadgeCompact({
   unlocked?: boolean;
 }) {
   const colors = rarityColors[achievement.rarity] || rarityColors.bronze;
+  const icon = getSingleEmoji(achievement.icon);
 
   return (
     <div
@@ -118,7 +121,7 @@ export function AchievementBadgeCompact({
         ${unlocked ? `${colors.bg} ${colors.text}` : "bg-muted text-muted-foreground"}
       `}
     >
-      <span>{unlocked ? achievement.icon : "?"}</span>
+      <span>{unlocked ? icon : "?"}</span>
       <span>{unlocked ? achievement.name : "???"}</span>
     </div>
   );
