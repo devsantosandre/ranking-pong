@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, X } from "lucide-react";
 
@@ -27,17 +27,13 @@ export function ConfirmModal({
   variant = "default",
   loading = false,
 }: ConfirmModalProps) {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setIsVisible(true);
-    }
-  }, [isOpen]);
+  const [isClosing, setIsClosing] = useState(false);
 
   const handleClose = () => {
-    setIsVisible(false);
-    setTimeout(onClose, 150);
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 150);
   };
 
   const handleConfirm = async () => {
@@ -67,7 +63,7 @@ export function ConfirmModal({
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${
-        isVisible ? "opacity-100" : "opacity-0"
+        isClosing ? "opacity-0" : "opacity-100"
       }`}
     >
       {/* Backdrop */}
@@ -79,7 +75,7 @@ export function ConfirmModal({
       {/* Modal */}
       <div
         className={`relative mx-4 w-full max-w-sm rounded-2xl bg-card p-6 shadow-xl transition-transform duration-150 ${
-          isVisible ? "scale-100" : "scale-95"
+          isClosing ? "scale-95" : "scale-100"
         }`}
       >
         {/* Close button */}
