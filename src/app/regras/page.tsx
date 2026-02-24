@@ -220,12 +220,28 @@ export default function RegrasPage() {
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
               <span>
-                Limite de {limiteJogosDiarios} partidas por dia contra o mesmo adversario
+                O ranking é exclusivo para alunos com matrícula ativa. Se o aluno
+                cancelar o plano ou deixar de estar ativo, ele sai automaticamente do
+                ranking.
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
-              <span>Partidas precisam ser confirmadas pelo adversario</span>
+              <span>
+                Limite de {limiteJogosDiarios} partidas por dia contra o mesmo adversário
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary mt-0.5">•</span>
+              <span>Partidas precisam ser confirmadas pelo adversário</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary mt-0.5">•</span>
+              <span>
+                O jogador só pode registrar partidas que aconteceram no mesmo dia.
+                Se for lançado jogo de data anterior ou jogo que não aconteceu, a
+                partida será excluída.
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
@@ -234,13 +250,13 @@ export default function RegrasPage() {
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
               <span>
-                Conquistas de rating liberam apos {ratingAchievementsMinPlayers} jogadores com jogo
+                Conquistas de rating liberam após {ratingAchievementsMinPlayers} jogadores com jogo
                 validado e {ratingAchievementsMinMatches} partidas validadas no total
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
-              <span>O ranking e atualizado em tempo real apos cada partida validada</span>
+              <span>O ranking é atualizado em tempo real após cada partida validada</span>
             </li>
           </ul>
         </section>
