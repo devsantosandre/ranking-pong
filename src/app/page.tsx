@@ -103,28 +103,38 @@ export default function Home() {
               return (
                 <article
                   key={player.pos}
-                  className={`flex items-center justify-between rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
+                  className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} shadow-lg shadow-orange-500/50`}>
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
-                      <span className="relative text-sm font-bold text-white drop-shadow-md">{player.pos}º</span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className={`text-sm font-semibold ${playerStyle.text}`}>{player.nome}</p>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${playerStyle.badge} text-white shadow-sm`}>
-                          🔥 TOP {player.pos}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        <span className="text-green-600">{player.vitorias}V</span>
-                        {" / "}
-                        <span className="text-red-500">{player.derrotas}D</span>
-                      </p>
-                    </div>
+                  <div
+                    className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} shadow-lg shadow-orange-500/50`}
+                  >
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
+                    <span className="relative text-sm font-bold text-white drop-shadow-md">
+                      {player.pos}º
+                    </span>
                   </div>
-                  <p className={`text-lg font-bold ${playerStyle.text}`}>{player.pts}</p>
+                  <div className="min-w-0">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                      <p
+                        className={`min-w-0 break-words text-sm font-semibold leading-tight ${playerStyle.text}`}
+                      >
+                        {player.nome}
+                      </p>
+                      <span
+                        className={`inline-flex w-fit shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm ${playerStyle.badge}`}
+                      >
+                        🔥 TOP {player.pos}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-green-600">{player.vitorias}V</span>
+                      {" / "}
+                      <span className="text-red-500">{player.derrotas}D</span>
+                    </p>
+                  </div>
+                  <p className={`min-w-[3.5rem] shrink-0 text-right text-lg font-bold tabular-nums ${playerStyle.text}`}>
+                    {player.pts}
+                  </p>
                 </article>
               );
             })

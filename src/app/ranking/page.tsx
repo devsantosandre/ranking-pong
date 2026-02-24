@@ -137,50 +137,54 @@ export default function RankingPage() {
                     )}
 
                     <article
-                      className={`flex items-center justify-between rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
+                      className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
                     >
-                      <div className="flex items-center gap-3">
-                        {/* Badge com posição */}
-                        <div
-                          className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} ${isTop3 ? 'shadow-lg shadow-orange-500/50' : 'shadow-md'}`}
+                      {/* Badge com posição */}
+                      <div
+                        className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} ${isTop3 ? "shadow-lg shadow-orange-500/50" : "shadow-md"}`}
+                      >
+                        {isTop3 && (
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
+                        )}
+                        <span
+                          className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow-md" : "text-muted-foreground"}`}
                         >
-                          {isTop3 && (
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
-                          )}
-                          <span className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? 'text-white drop-shadow-md' : 'text-muted-foreground'}`}>
-                            {player.position}º
-                          </span>
-                        </div>
+                          {player.position}º
+                        </span>
+                      </div>
 
-                        {/* Info do jogador */}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className={`text-sm font-semibold ${playerStyle.text}`}>
-                              {player.displayName}
-                            </p>
-                            {isTop3 && (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${playerStyle.badge} text-white shadow-sm`}>
-                                🔥 TOP {player.position}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-medium">{player.position}º</span>
-                            {" · "}
-                            <span className="text-green-600 font-semibold">
-                              {player.vitorias || 0}V
-                            </span>
-                            {" / "}
-                            <span className="text-red-500 font-semibold">
-                              {player.derrotas || 0}D
-                            </span>
+                      {/* Info do jogador */}
+                      <div className="min-w-0">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                          <p
+                            className={`min-w-0 break-words text-sm font-semibold leading-tight ${playerStyle.text}`}
+                          >
+                            {player.displayName}
                           </p>
+                          {isTop3 && (
+                            <span
+                              className={`inline-flex w-fit shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm ${playerStyle.badge}`}
+                            >
+                              🔥 TOP {player.position}
+                            </span>
+                          )}
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">{player.position}º</span>
+                          {" · "}
+                          <span className="text-green-600 font-semibold">
+                            {player.vitorias || 0}V
+                          </span>
+                          {" / "}
+                          <span className="text-red-500 font-semibold">
+                            {player.derrotas || 0}D
+                          </span>
+                        </p>
                       </div>
 
                       {/* Pontuação */}
-                      <div className="text-right">
-                        <p className={`text-lg font-bold ${playerStyle.text}`}>
+                      <div className="min-w-[4.5rem] shrink-0 text-right">
+                        <p className={`text-lg font-bold tabular-nums ${playerStyle.text}`}>
                           {player.rating_atual || 1000}
                         </p>
                         <p className="text-[11px] text-muted-foreground">pontos</p>
