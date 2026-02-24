@@ -85,6 +85,7 @@ export type AdminUpdateUserNameResult = {
 
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
 type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
+const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
 
 function validatePage(page: number): number {
   if (typeof page !== "number" || isNaN(page)) return 0;
@@ -143,6 +144,55 @@ async function emitPendingNotification(
   });
 
   if (error) return;
+}
+
+function getDateInTimezone(dateInput: string | Date, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(dateInput));
+  } catch {
+    return new Date(dateInput).toISOString().split("T")[0];
+  }
+}
+
+async function revertDailyLimitForCancelledMatch(
+  supabase: ServerSupabaseClient,
+  params: { playerAId: string; playerBId: string; createdAt: string }
+) {
+  const matchDate = getDateInTimezone(params.createdAt, BUSINESS_TIMEZONE);
+
+  const { data: limitRows, error: fetchError } = await supabase
+    .from("daily_limits")
+    .select("id, jogos_registrados")
+    .or(
+      `and(user_id.eq.${params.playerAId},opponent_id.eq.${params.playerBId}),and(user_id.eq.${params.playerBId},opponent_id.eq.${params.playerAId})`
+    )
+    .eq("data", matchDate);
+
+  if (fetchError) {
+    throw new Error("Erro ao buscar limite diario para reversao");
+  }
+
+  if (!limitRows?.length) {
+    return;
+  }
+
+  for (const row of limitRows) {
+    const nextCount = Math.max(0, (row.jogos_registrados || 0) - 1);
+
+    const { error: updateError } = await supabase
+      .from("daily_limits")
+      .update({ jogos_registrados: nextCount })
+      .eq("id", row.id);
+
+    if (updateError) {
+      throw new Error("Erro ao reverter limite diario");
+    }
+  }
 }
 
 // ============================================================
@@ -335,6 +385,13 @@ export async function adminCancelMatch(matchId: string, reason: string) {
     .delete()
     .eq("match_id", matchId)
     .select("achievement_id, user_id");
+
+  // Reverter contador do limite diário (a partida cancelada não deve contar)
+  await revertDailyLimitForCancelledMatch(supabase, {
+    playerAId: match.player_a_id,
+    playerBId: match.player_b_id,
+    createdAt: match.created_at,
+  });
 
   // Atualizar status da partida
   const { error: cancelError } = await supabase
