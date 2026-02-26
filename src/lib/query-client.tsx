@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, isServer } from "@tanstack/react-query";
+import { QueryClient, isServer, onlineManager } from "@tanstack/react-query";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -9,7 +9,13 @@ function makeQueryClient() {
         // Com SSR, definimos staleTime > 0 para evitar refetch imediato no cliente
         staleTime: 60 * 1000, // 1 minuto
         refetchOnWindowFocus: false,
-        retry: 1,
+        refetchOnReconnect: true,
+        retry: (failureCount) => {
+          if (isServer) return failureCount < 2;
+          if (!onlineManager.isOnline()) return false;
+          return failureCount < 2;
+        },
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 8000),
       },
     },
   });
@@ -29,8 +35,6 @@ export function getQueryClient() {
     return browserQueryClient;
   }
 }
-
-
 
 
 

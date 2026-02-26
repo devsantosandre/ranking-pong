@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { InstallPrompt } from "@/components/install-prompt";
 import { AchievementUnlockToast } from "@/components/achievement-unlock-toast";
+import { NetworkStatusLayer } from "@/components/network-status-layer";
 import { getQueryClient } from "@/lib/query-client";
 import { useRealtimePendingSync } from "@/lib/hooks/use-realtime-pending";
 import { useRealtimeRankingSync } from "@/lib/hooks/use-realtime-ranking-sync";
@@ -53,6 +54,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <NewsPrefetchBridge />
         <PushSubscriptionBridge>
           <AuthGuard>{children}</AuthGuard>
+          <NetworkStatusLayer />
           <InstallPrompt />
           {/* ⚠️ PREVIEW MODE - Remover após ajustes */}
           <AchievementUnlockToast achievements={[]} onClose={() => {}} />

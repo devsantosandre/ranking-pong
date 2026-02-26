@@ -4,6 +4,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Suspense, useCallback, useState, useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { getQueryClient } from "@/lib/query-client";
+import { NetworkStatusLayer } from "@/components/network-status-layer";
 import { useRealtimeRanking, type RankingPlayerWithPosition } from "@/lib/hooks/use-realtime-ranking";
 import { useLatestValidatedMatch } from "@/lib/hooks/use-latest-validated-match";
 import { TvRankingList } from "@/components/tv/tv-ranking-list";
@@ -223,6 +224,7 @@ export default function TvPage() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <NetworkStatusLayer />
       <Suspense
         fallback={
           <div className="flex items-center justify-center h-screen bg-background">
