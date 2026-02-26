@@ -4,7 +4,7 @@ import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Wifi, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type NetworkState = "online" | "checking" | "offline";
+type NetworkState = "online" | "checking" | "offline" | "server_unreachable";
 
 const HEALTH_CHECK_URL = "/api/health";
 const HEALTH_CHECK_TIMEOUT_MS = 4000;
@@ -34,7 +34,9 @@ export function NetworkStatusLayer() {
 
       stateRef.current = nextState;
       setNetworkState(nextState);
-      onlineManager.setOnline(nextState === "online");
+      // React Query deve pausar apenas quando o navegador estiver realmente offline.
+      // Falha no healthcheck (backend indisponível/lento) não significa falta de internet.
+      onlineManager.setOnline(nextState !== "offline");
 
       if (initializedRef.current && previousState !== "online" && nextState === "online") {
         setShowOnlineToast(true);
@@ -77,14 +79,14 @@ export function NetworkStatusLayer() {
         });
 
         if (healthCheckRunIdRef.current !== runId) return;
-        applyNetworkState(response.ok ? "online" : "offline");
+        applyNetworkState(response.ok ? "online" : "server_unreachable");
       } catch {
         if (healthCheckRunIdRef.current !== runId) return;
         if (controller.signal.aborted && navigator.onLine) {
-          applyNetworkState("offline");
+          applyNetworkState("server_unreachable");
           return;
         }
-        applyNetworkState("offline");
+        applyNetworkState(navigator.onLine ? "server_unreachable" : "offline");
       } finally {
         window.clearTimeout(timeoutId);
         if (healthCheckControllerRef.current === controller) {
@@ -155,7 +157,10 @@ export function NetworkStatusLayer() {
     return () => window.clearTimeout(timer);
   }, [showOnlineToast]);
 
-  const showPersistentBanner = networkState === "offline" || networkState === "checking";
+  const showPersistentBanner =
+    networkState === "offline" ||
+    networkState === "checking" ||
+    networkState === "server_unreachable";
 
   return (
     <>
@@ -177,12 +182,18 @@ export function NetworkStatusLayer() {
             )}
             <div className="min-w-0">
               <p className="text-xs font-semibold">
-                {networkState === "offline" ? "Sem conexão com a internet" : "Reconectando..."}
+                {networkState === "offline"
+                  ? "Sem conexão com a internet"
+                  : networkState === "server_unreachable"
+                    ? "Internet ok, mas servidor indisponível"
+                    : "Reconectando..."}
               </p>
               <p className="truncate text-[11px] opacity-90">
                 {networkState === "offline"
                   ? "Mostrando dados em cache quando disponíveis."
-                  : "Tentando restabelecer a conexão com o servidor."}
+                  : networkState === "server_unreachable"
+                    ? "Tentando se comunicar com o servidor. Alguns dados podem demorar."
+                    : "Tentando restabelecer a conexão com o servidor."}
               </p>
             </div>
           </div>
