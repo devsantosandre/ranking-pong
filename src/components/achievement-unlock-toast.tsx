@@ -284,7 +284,7 @@ export function AchievementUnlockToast({
   onClose,
   onAchievementVisible,
   autoClose = true,
-  autoCloseDelay = 4000,
+  autoCloseDelay = 7000,
 }: AchievementUnlockToastProps) {
   const achievements = PREVIEW_MODE ? PREVIEW_ACHIEVEMENTS : propAchievements;
   const [currentIndex, setCurrentIndex] = useState(0);
