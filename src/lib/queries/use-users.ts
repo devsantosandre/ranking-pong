@@ -52,6 +52,7 @@ export function useRanking() {
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
         .eq("is_active", true)
         .eq("hide_from_ranking", false)
+        .gt("jogos_disputados", 0)
         .order("rating_atual", { ascending: false })
         .range(from, to);
 
@@ -78,6 +79,7 @@ export function useRankingAll() {
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas, jogos_disputados")
         .eq("is_active", true)
         .eq("hide_from_ranking", false)
+        .gt("jogos_disputados", 0)
         .order("rating_atual", { ascending: false });
 
       if (error) throw error;
@@ -123,6 +125,7 @@ export function useUserRankingPosition(userId: string | undefined) {
         .select("id")
         .eq("is_active", true)
         .eq("hide_from_ranking", false)
+        .gt("jogos_disputados", 0)
         .order("rating_atual", { ascending: false });
 
       if (error) throw error;
@@ -135,7 +138,6 @@ export function useUserRankingPosition(userId: string | undefined) {
     staleTime: 1000 * 30,
   });
 }
-
 
 
 

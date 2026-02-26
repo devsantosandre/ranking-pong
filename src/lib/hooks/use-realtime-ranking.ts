@@ -42,6 +42,7 @@ export function useRealtimeRanking(limit: number = 20) {
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas")
         .eq("is_active", true)
         .eq("hide_from_ranking", false)
+        .gt("jogos_disputados", 0)
         .limit(limit);
 
       if (error) throw error;
