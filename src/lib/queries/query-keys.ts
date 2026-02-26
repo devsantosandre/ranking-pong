@@ -56,9 +56,10 @@ export const queryKeys = {
   achievements: {
     all: ["achievements"] as const,
     user: (userId: string) => ["achievements", "user", userId] as const,
+    pendingToasts: (userId: string) =>
+      ["achievements", "pending-toasts", userId] as const,
   },
 };
-
 
 
 

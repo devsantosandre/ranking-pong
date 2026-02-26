@@ -37,7 +37,7 @@ export default function PartidasPage() {
   const [previewAlertDismissed, setPreviewAlertDismissed] = useState(false);
 
   // Achievement toast hook
-  const { showAchievements, ToastComponent } = useAchievementToast();
+  const { showAchievements } = useAchievementToast();
 
   // React Query hooks
   const {
@@ -285,9 +285,6 @@ export default function PartidasPage() {
           />
         </div>
       </div>
-
-      {/* Toast de conquistas desbloqueadas */}
-      {ToastComponent}
     </AppShell>
   );
 }

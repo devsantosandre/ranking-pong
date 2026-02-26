@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/lib/auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { InstallPrompt } from "@/components/install-prompt";
-import { AchievementUnlockToast } from "@/components/achievement-unlock-toast";
+import { AchievementUnlockToastHost } from "@/components/achievement-unlock-toast";
 import { NetworkStatusLayer } from "@/components/network-status-layer";
 import { getQueryClient } from "@/lib/query-client";
 import { useRealtimePendingSync } from "@/lib/hooks/use-realtime-pending";
@@ -37,6 +37,17 @@ function NewsPrefetchBridge() {
   return null;
 }
 
+function AchievementToastBridge() {
+  const { user } = useAuth();
+
+  return (
+    <AchievementUnlockToastHost
+      key={user?.id || "anonymous"}
+      userId={user?.id}
+    />
+  );
+}
+
 function PushSubscriptionBridge({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
@@ -56,8 +67,7 @@ export function Providers({ children }: { children: ReactNode }) {
           <AuthGuard>{children}</AuthGuard>
           <NetworkStatusLayer />
           <InstallPrompt />
-          {/* ⚠️ PREVIEW MODE - Remover após ajustes */}
-          <AchievementUnlockToast achievements={[]} onClose={() => {}} />
+          <AchievementToastBridge />
         </PushSubscriptionBridge>
       </AuthProvider>
     </QueryClientProvider>

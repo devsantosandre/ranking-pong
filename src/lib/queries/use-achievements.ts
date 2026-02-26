@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { markAchievementToastsSeenAction } from "@/app/actions/achievements";
 import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
 
@@ -23,9 +24,32 @@ export type UserAchievement = {
   user_id: string;
   achievement_id: string;
   unlocked_at: string;
+  toast_seen_at: string | null;
   match_id: string | null;
   achievement: Achievement;
 };
+
+type RawUserAchievement = {
+  id: string;
+  user_id: string;
+  achievement_id: string;
+  unlocked_at: string;
+  toast_seen_at: string | null;
+  match_id: string | null;
+  achievement: Achievement | Achievement[] | null;
+};
+
+function normalizeUserAchievements(data: RawUserAchievement[] | null | undefined) {
+  const normalized = (data || []).map((ua) => ({
+    ...ua,
+    achievement: Array.isArray(ua.achievement) ? ua.achievement[0] : ua.achievement,
+  }));
+
+  return normalized.filter(
+    (ua: (typeof normalized)[number]): ua is UserAchievement =>
+      Boolean(ua.achievement?.is_active)
+  );
+}
 
 // Buscar todas as conquistas disponíveis
 export function useAllAchievements() {
@@ -64,6 +88,7 @@ export function useUserAchievements(userId: string | undefined) {
           user_id,
           achievement_id,
           unlocked_at,
+          toast_seen_at,
           match_id,
           achievement:achievements (
             id,
@@ -83,29 +108,80 @@ export function useUserAchievements(userId: string | undefined) {
         .order("unlocked_at", { ascending: false });
 
       if (error) throw error;
-
-      // Transformar para o formato esperado
-      type RawUserAchievement = {
-        id: string;
-        user_id: string;
-        achievement_id: string;
-        unlocked_at: string;
-        match_id: string | null;
-        achievement: Achievement | Achievement[] | null;
-      };
-
-      const normalized = (data || []).map((ua: RawUserAchievement) => ({
-        ...ua,
-        achievement: Array.isArray(ua.achievement) ? ua.achievement[0] : ua.achievement,
-      }));
-
-      return normalized.filter(
-        (ua: (typeof normalized)[number]): ua is UserAchievement =>
-          Boolean(ua.achievement?.is_active)
-      );
+      return normalizeUserAchievements(data as RawUserAchievement[]);
     },
     enabled: !!userId,
     staleTime: 1000 * 30, // 30 segundos
+  });
+}
+
+// Buscar conquistas desbloqueadas que ainda nao foram exibidas na modal
+export function usePendingAchievementToasts(userId: string | undefined) {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: queryKeys.achievements.pendingToasts(userId || ""),
+    queryFn: async () => {
+      if (!userId) return [];
+
+      const { data, error } = await supabase
+        .from("user_achievements")
+        .select(`
+          id,
+          user_id,
+          achievement_id,
+          unlocked_at,
+          toast_seen_at,
+          match_id,
+          achievement:achievements (
+            id,
+            key,
+            name,
+            description,
+            category,
+            rarity,
+            icon,
+            points,
+            condition_type,
+            condition_value,
+            is_active
+          )
+        `)
+        .eq("user_id", userId)
+        .is("toast_seen_at", null)
+        .order("unlocked_at", { ascending: true });
+
+      if (error) throw error;
+      return normalizeUserAchievements(data as RawUserAchievement[]);
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 5,
+  });
+}
+
+export function useMarkAchievementToastsSeen(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (userAchievementIds: string[]) => {
+      const result = await markAchievementToastsSeenAction(userAchievementIds);
+      if (!result.success) {
+        throw new Error(result.error || "Erro ao marcar conquistas como visualizadas");
+      }
+      return result;
+    },
+    onSuccess: () => {
+      if (userId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.achievements.pendingToasts(userId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.achievements.user(userId),
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
+      }
+    },
   });
 }
 

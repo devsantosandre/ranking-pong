@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronRight } from "lucide-react";
-import { rarityColors, type Achievement } from "@/lib/queries/use-achievements";
+import {
+  rarityColors,
+  type Achievement,
+  useMarkAchievementToastsSeen,
+  usePendingAchievementToasts,
+} from "@/lib/queries/use-achievements";
 import { getSingleEmoji } from "@/lib/emoji";
 
 // ⚠️ PREVIEW MODE - Remover após ajustes
@@ -51,13 +56,204 @@ const PREVIEW_ACHIEVEMENTS: Achievement[] = [
 
 // Raridades que mostram confete
 const CONFETTI_RARITIES = ["diamante", "platina", "especial"];
+const ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY = "smash-pong:achievement-toast-queue:v1";
+const ACHIEVEMENT_TOAST_QUEUE_EVENT = "smash-pong:achievement-toast-queue:changed";
+const ACHIEVEMENT_TOAST_QUEUE_TTL_MS = 1000 * 60 * 30; // 30 min
 
 type AchievementUnlockToastProps = {
   achievements: Achievement[];
   onClose: () => void;
+  onAchievementVisible?: (achievement: Achievement) => void;
   autoClose?: boolean;
   autoCloseDelay?: number;
 };
+
+type PersistedAchievementToastQueue = {
+  version: 1;
+  createdAt: number;
+  achievements: Achievement[];
+};
+
+function canUseBrowserStorage() {
+  return typeof window !== "undefined" && typeof localStorage !== "undefined";
+}
+
+function dedupeAchievements(achievements: Achievement[]) {
+  const seen = new Set<string>();
+
+  return achievements.filter((achievement) => {
+    const dedupeKey = `${achievement.id}:${achievement.key}`;
+    if (seen.has(dedupeKey)) return false;
+    seen.add(dedupeKey);
+    return true;
+  });
+}
+
+function readAchievementToastQueue(): Achievement[] {
+  if (!canUseBrowserStorage()) return [];
+
+  try {
+    const raw = localStorage.getItem(ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as Partial<PersistedAchievementToastQueue>;
+    const createdAt = typeof parsed.createdAt === "number" ? parsed.createdAt : 0;
+    const isFresh = createdAt > 0 && Date.now() - createdAt <= ACHIEVEMENT_TOAST_QUEUE_TTL_MS;
+
+    if (!isFresh || !Array.isArray(parsed.achievements)) {
+      localStorage.removeItem(ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY);
+      return [];
+    }
+
+    return dedupeAchievements(parsed.achievements as Achievement[]);
+  } catch {
+    try {
+      localStorage.removeItem(ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY);
+    } catch {
+      // noop
+    }
+    return [];
+  }
+}
+
+function persistAchievementToastQueue(achievements: Achievement[]) {
+  if (!canUseBrowserStorage()) return;
+
+  if (achievements.length === 0) {
+    localStorage.removeItem(ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY);
+    return;
+  }
+
+  const payload: PersistedAchievementToastQueue = {
+    version: 1,
+    createdAt: Date.now(),
+    achievements,
+  };
+
+  localStorage.setItem(ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function notifyAchievementToastQueueChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(ACHIEVEMENT_TOAST_QUEUE_EVENT));
+}
+
+export function enqueueAchievementToast(newAchievements: Achievement[]) {
+  if (!newAchievements || newAchievements.length === 0) return;
+
+  const mergedQueue = dedupeAchievements([
+    ...readAchievementToastQueue(),
+    ...newAchievements,
+  ]);
+
+  persistAchievementToastQueue(mergedQueue);
+  notifyAchievementToastQueueChanged();
+}
+
+export function clearAchievementToastQueue() {
+  persistAchievementToastQueue([]);
+  notifyAchievementToastQueueChanged();
+}
+
+export function AchievementUnlockToastHost({ userId }: { userId?: string }) {
+  const [localAchievements, setLocalAchievements] = useState<Achievement[]>(() =>
+    readAchievementToastQueue()
+  );
+  const [suppressedPendingToastIds, setSuppressedPendingToastIds] = useState<string[]>([]);
+  const { data: pendingToastRows = [], refetch: refetchPendingToasts } =
+    usePendingAchievementToasts(userId);
+  const markToastsSeenMutation = useMarkAchievementToastsSeen(userId);
+  const seenPendingToastIdsRef = useRef<Set<string>>(new Set());
+
+  const syncQueueFromStorage = useCallback(() => {
+    setLocalAchievements(readAchievementToastQueue());
+  }, []);
+
+  const syncAllSources = useCallback(() => {
+    syncQueueFromStorage();
+    if (userId) {
+      void refetchPendingToasts();
+    }
+  }, [refetchPendingToasts, syncQueueFromStorage, userId]);
+
+  useEffect(() => {
+    const handleQueueChanged = () => {
+      syncAllSources();
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY) return;
+      syncAllSources();
+    };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      syncAllSources();
+    };
+
+    window.addEventListener(ACHIEVEMENT_TOAST_QUEUE_EVENT, handleQueueChanged);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleVisibility);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener(ACHIEVEMENT_TOAST_QUEUE_EVENT, handleQueueChanged);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleVisibility);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [syncAllSources]);
+
+  const suppressedPendingSet = new Set(suppressedPendingToastIds);
+  const visiblePendingToastRows = pendingToastRows.filter(
+    (row) => !suppressedPendingSet.has(row.id)
+  );
+  const pendingServerAchievements = visiblePendingToastRows.map((row) => row.achievement);
+  const pendingServerIds = visiblePendingToastRows.map((row) => row.id);
+  const mergedAchievements = dedupeAchievements([
+    ...localAchievements,
+    ...pendingServerAchievements,
+  ]);
+
+  const handleAchievementVisible = useCallback(
+    (achievement: Achievement) => {
+      const matchingRow = visiblePendingToastRows.find(
+        (row) => row.achievement.id === achievement.id
+      );
+
+      if (!matchingRow) return;
+      seenPendingToastIdsRef.current.add(matchingRow.id);
+    },
+    [visiblePendingToastRows]
+  );
+
+  const handleClose = useCallback(() => {
+    setLocalAchievements([]);
+    clearAchievementToastQueue();
+    if (pendingServerIds.length > 0) {
+      setSuppressedPendingToastIds((prev) =>
+        Array.from(new Set([...prev, ...pendingServerIds]))
+      );
+    }
+
+    const idsToMarkAsSeen = Array.from(seenPendingToastIdsRef.current);
+    seenPendingToastIdsRef.current.clear();
+
+    if (idsToMarkAsSeen.length > 0) {
+      markToastsSeenMutation.mutate(idsToMarkAsSeen);
+    }
+  }, [markToastsSeenMutation, pendingServerIds]);
+
+  if (mergedAchievements.length === 0) return null;
+
+  return (
+    <AchievementUnlockToast
+      achievements={mergedAchievements}
+      onClose={handleClose}
+      onAchievementVisible={handleAchievementVisible}
+    />
+  );
+}
 
 // Componente de partícula de confete
 function ConfettiParticle({
@@ -86,6 +282,7 @@ function ConfettiParticle({
 export function AchievementUnlockToast({
   achievements: propAchievements,
   onClose,
+  onAchievementVisible,
   autoClose = true,
   autoCloseDelay = 4000,
 }: AchievementUnlockToastProps) {
@@ -93,6 +290,13 @@ export function AchievementUnlockToast({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animationPhase, setAnimationPhase] = useState<"enter" | "visible" | "exit">("enter");
   const [key, setKey] = useState(0); // Para forçar re-render da animação
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden"
+  );
+  const [progressRestartKey, setProgressRestartKey] = useState(0);
+  const documentVisibleRef = useRef(isDocumentVisible);
+  const animationPhaseRef = useRef(animationPhase);
+  const autoCloseRef = useRef(autoClose);
 
   const achievement = achievements[currentIndex];
   const colors = rarityColors[achievement?.rarity] || rarityColors.bronze;
@@ -120,13 +324,51 @@ export function AchievementUnlockToast({
     return () => clearTimeout(timer);
   }, []);
 
+  // Detecta quando o app volta do background para pausar/retomar o auto-close
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const nextVisible = document.visibilityState !== "hidden";
+      const wasVisible = documentVisibleRef.current;
+
+      documentVisibleRef.current = nextVisible;
+      setIsDocumentVisible(nextVisible);
+
+      if (nextVisible && !wasVisible && autoCloseRef.current && animationPhaseRef.current === "visible") {
+        setProgressRestartKey((v) => v + 1);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    animationPhaseRef.current = animationPhase;
+  }, [animationPhase]);
+
+  useEffect(() => {
+    autoCloseRef.current = autoClose;
+  }, [autoClose]);
+
+  useEffect(() => {
+    if (!achievement || !onAchievementVisible) return;
+    if (animationPhase !== "visible" || !isDocumentVisible) return;
+    onAchievementVisible(achievement);
+  }, [
+    achievement,
+    animationPhase,
+    currentIndex,
+    isDocumentVisible,
+    onAchievementVisible,
+  ]);
+
   // Auto-close timer
   useEffect(() => {
-    if (autoClose && animationPhase === "visible") {
+    if (autoClose && animationPhase === "visible" && isDocumentVisible) {
       const timer = setTimeout(goToNext, autoCloseDelay);
       return () => clearTimeout(timer);
     }
-  }, [autoClose, autoCloseDelay, animationPhase, goToNext, currentIndex]);
+  }, [autoClose, autoCloseDelay, animationPhase, goToNext, currentIndex, isDocumentVisible]);
 
   if (achievements.length === 0 || !achievement) return null;
 
@@ -143,7 +385,7 @@ export function AchievementUnlockToast({
       {/* Container com confete */}
       <div className="relative">
         {/* Partículas de confete para raridades especiais */}
-        {showConfetti && animationPhase === "visible" && (
+        {showConfetti && animationPhase === "visible" && isDocumentVisible && (
           <div className="absolute inset-0 overflow-visible pointer-events-none">
             {Array.from({ length: 20 }).map((_, i) => {
               const leftPercent = ((i * 37) % 100) + 0.5;
@@ -173,10 +415,10 @@ export function AchievementUnlockToast({
           `}
         >
           {/* Barra de progresso */}
-          {autoClose && animationPhase === "visible" && (
+          {autoClose && animationPhase === "visible" && isDocumentVisible && (
             <div className="absolute top-0 left-0 right-0 h-1 bg-black/10">
               <div
-                key={`progress-${key}`}
+                key={`progress-${key}-${currentIndex}-${progressRestartKey}`}
                 className={`h-full ${colors.text.replace("text-", "bg-")} opacity-60`}
                 style={{
                   animation: `shrink ${autoCloseDelay}ms linear forwards`,
@@ -313,24 +555,18 @@ export function AchievementUnlockToast({
 
 // Hook para gerenciar toast de conquistas
 export function useAchievementToast() {
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const showAchievements = useCallback((newAchievements: Achievement[]) => {
+    enqueueAchievementToast(newAchievements);
+  }, []);
 
-  const showAchievements = (newAchievements: Achievement[]) => {
-    if (newAchievements.length > 0) {
-      setAchievements(newAchievements);
-    }
-  };
-
-  const closeToast = () => {
-    setAchievements([]);
-  };
+  const closeToast = useCallback(() => {
+    clearAchievementToastQueue();
+  }, []);
 
   return {
-    achievements,
+    achievements: [] as Achievement[],
     showAchievements,
     closeToast,
-    ToastComponent: achievements.length > 0 ? (
-      <AchievementUnlockToast achievements={achievements} onClose={closeToast} />
-    ) : null,
+    ToastComponent: null,
   };
 }
