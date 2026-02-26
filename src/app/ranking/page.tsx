@@ -1,10 +1,18 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { Search, X } from "lucide-react";
+import { ChevronRight, Search, X } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
-import { useRankingAll } from "@/lib/queries";
+import { useHeadToHeadStats, useRankingAll } from "@/lib/queries";
 import { PlayerListSkeleton } from "@/components/skeletons";
+import { useAuth } from "@/lib/auth-store";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   getPlayerStyle,
   getDivisionStyle,
@@ -14,7 +22,9 @@ import {
 } from "@/lib/divisions";
 
 export default function RankingPage() {
+  const { user } = useAuth();
   const [searchInput, setSearchInput] = useState("");
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const normalizedSearch = searchInput.trim().toLowerCase();
   const isSearching = normalizedSearch.length >= 2;
 
@@ -40,6 +50,20 @@ export default function RankingPage() {
     return allPlayers.filter((user) => user.displayName.toLowerCase().includes(normalizedSearch));
   }, [allPlayers, normalizedSearch]);
 
+  const selectedPlayer = useMemo(
+    () => allPlayers.find((player) => player.id === selectedPlayerId) ?? null,
+    [allPlayers, selectedPlayerId]
+  );
+
+  const {
+    data: h2hStats,
+    isLoading: h2hLoading,
+    error: h2hError,
+  } = useHeadToHeadStats(
+    user?.id,
+    selectedPlayer && selectedPlayer.id !== user?.id ? selectedPlayer.id : undefined
+  );
+
   // Handler para input
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
@@ -48,6 +72,16 @@ export default function RankingPage() {
   // Limpar busca
   const handleClearSearch = useCallback(() => {
     setSearchInput("");
+  }, []);
+
+  const handleOpenH2H = useCallback((playerId: string) => {
+    setSelectedPlayerId(playerId);
+  }, []);
+
+  const handleSheetOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setSelectedPlayerId(null);
+    }
   }, []);
 
   if (isLoading) {
@@ -116,6 +150,7 @@ export default function RankingPage() {
                 const divisionNumber = getDivisionNumber(player.position);
                 const divisionName = getDivisionName(player.position);
                 const isTop3 = isTopThree(player.position);
+                const canOpenH2H = Boolean(user && player.id !== user.id);
 
                 // Mostra separador de divisão
                 const isFirstPlayer = index === 0;
@@ -136,8 +171,13 @@ export default function RankingPage() {
                       </div>
                     )}
 
-                    <article
-                      className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 shadow-sm ${playerStyle.border} ${playerStyle.bg}`}
+                    <button
+                      type="button"
+                      onClick={() => canOpenH2H && handleOpenH2H(player.id)}
+                      disabled={!canOpenH2H}
+                      className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${
+                        canOpenH2H ? "cursor-pointer active:scale-[0.995]" : "cursor-default"
+                      } ${playerStyle.border} ${playerStyle.bg}`}
                     >
                       {/* Badge com posição */}
                       <div
@@ -188,8 +228,14 @@ export default function RankingPage() {
                           {player.rating_atual || 1000}
                         </p>
                         <p className="text-[11px] text-muted-foreground">pontos</p>
+                        {canOpenH2H && (
+                          <span className="mt-1 inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                            H2H
+                            <ChevronRight className="h-3 w-3" />
+                          </span>
+                        )}
                       </div>
-                    </article>
+                    </button>
                   </div>
                 );
               })}
@@ -197,6 +243,77 @@ export default function RankingPage() {
           )}
         </div>
       </div>
+
+      <Sheet
+        open={Boolean(selectedPlayerId)}
+        onOpenChange={handleSheetOpenChange}
+      >
+        <SheetContent
+          side="bottom"
+          className="right-auto bottom-2 left-1/2 max-h-[80vh] w-[calc(100%-1rem)] max-w-2xl -translate-x-1/2 gap-0 rounded-2xl border p-0"
+        >
+          <SheetHeader className="pr-12">
+            <SheetTitle>
+              {selectedPlayer ? `H2H vs ${selectedPlayer.displayName}` : "H2H"}
+            </SheetTitle>
+            <SheetDescription>
+              Confrontos validados entre você e este adversário
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-4 px-4 pb-6">
+            {!user ? (
+              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+                Faça login para ver seu H2H contra outros jogadores.
+              </p>
+            ) : !selectedPlayer ? (
+              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+                Selecione um jogador para ver o H2H.
+              </p>
+            ) : selectedPlayer.id === user.id ? (
+              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+                Selecione outro jogador para comparar seu histórico de confrontos.
+              </p>
+            ) : h2hLoading ? (
+              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+                Carregando H2H...
+              </p>
+            ) : h2hError ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                Erro ao carregar H2H. Tente novamente.
+              </p>
+            ) : h2hStats && h2hStats.total > 0 ? (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
+                    <p className="text-xl font-bold text-emerald-700">{h2hStats.wins}</p>
+                    <p className="text-[11px] text-emerald-700/80">Você ganhou</p>
+                  </article>
+                  <article className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
+                    <p className="text-xl font-bold text-red-600">{h2hStats.losses}</p>
+                    <p className="text-[11px] text-red-600/80">Você perdeu</p>
+                  </article>
+                  <article className="rounded-xl border border-border bg-card p-3 text-center">
+                    <p className="text-xl font-bold text-foreground">{h2hStats.total}</p>
+                    <p className="text-[11px] text-muted-foreground">Total</p>
+                  </article>
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">Aproveitamento</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {h2hStats.winRate}% de vitórias
+                  </p>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+                Vocês ainda não têm partidas validadas entre si.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </AppShell>
   );
 }

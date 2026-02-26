@@ -53,6 +53,13 @@ type MatchCounts = {
   recentes: number;
 };
 
+export type HeadToHeadStats = {
+  wins: number;
+  losses: number;
+  total: number;
+  winRate: number;
+};
+
 async function fetchMatchesWithUsers(
   supabase: ReturnType<typeof createClient>,
   matchesData: MatchData[]
@@ -232,6 +239,48 @@ export function useMatchCounts(userId: string | undefined) {
   });
 }
 
+export function useHeadToHeadStats(
+  userId: string | undefined,
+  opponentId: string | undefined
+) {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: queryKeys.matches.h2h(userId, opponentId),
+    queryFn: async (): Promise<HeadToHeadStats> => {
+      if (!userId || !opponentId || userId === opponentId) {
+        return { wins: 0, losses: 0, total: 0, winRate: 0 };
+      }
+
+      const pairFilter =
+        `and(player_a_id.eq.${userId},player_b_id.eq.${opponentId}),` +
+        `and(player_a_id.eq.${opponentId},player_b_id.eq.${userId})`;
+
+      const { data, error } = await supabase
+        .from("matches")
+        .select("id, vencedor_id")
+        .eq("status", "validado")
+        .or(pairFilter);
+
+      if (error) throw error;
+
+      const rows = (data ?? []) as Array<{ id: string; vencedor_id: string | null }>;
+      const wins = rows.filter((match) => match.vencedor_id === userId).length;
+      const losses = rows.filter((match) => match.vencedor_id === opponentId).length;
+      const total = rows.length;
+
+      return {
+        wins,
+        losses,
+        total,
+        winRate: total > 0 ? Math.round((wins / total) * 100) : 0,
+      };
+    },
+    enabled: Boolean(userId && opponentId),
+    staleTime: 1000 * 30,
+  });
+}
+
 // Hook para confirmar partida
 export function useConfirmMatch() {
   const queryClient = useQueryClient();
@@ -328,7 +377,6 @@ export function useRegisterMatch() {
     },
   });
 }
-
 
 
 

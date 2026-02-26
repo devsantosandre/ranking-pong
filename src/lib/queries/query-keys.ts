@@ -21,6 +21,8 @@ export const queryKeys = {
     pendingActions: (userId: string) =>
       [...queryKeys.matches.all, "pending-actions", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
+    h2h: (userId?: string, opponentId?: string) =>
+      [...queryKeys.matches.all, "h2h", userId, opponentId] as const,
   },
 
   // Notifications
@@ -56,7 +58,6 @@ export const queryKeys = {
     user: (userId: string) => ["achievements", "user", userId] as const,
   },
 };
-
 
 
 
