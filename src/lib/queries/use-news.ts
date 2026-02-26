@@ -121,6 +121,8 @@ export async function fetchNewsPage(
     const pointsLoser = isPlayerAWinner
       ? match.pontos_variacao_b
       : match.pontos_variacao_a;
+    const scoreWinner = isPlayerAWinner ? match.resultado_a : match.resultado_b;
+    const scoreLoser = isPlayerAWinner ? match.resultado_b : match.resultado_a;
 
     return {
       id: match.id,
@@ -128,7 +130,7 @@ export async function fetchNewsPage(
       title: `${winner.name} vence ${loser.name}`,
       winner,
       loser,
-      score: `${match.resultado_a} x ${match.resultado_b}`,
+      score: `${scoreWinner} x ${scoreLoser}`,
       pointsWinner: pointsWinner ?? 0,
       pointsLoser: pointsLoser ?? 0,
       createdAt: match.created_at,
@@ -156,7 +158,6 @@ export function useNews() {
     placeholderData: (previousData) => previousData,
   });
 }
-
 
 
 
