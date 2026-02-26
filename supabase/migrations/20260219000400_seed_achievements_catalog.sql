@@ -14,7 +14,7 @@ INSERT INTO public.achievements (
 )
 VALUES
   -- 1) Primeiros Passos (Bronze)
-  ('primeiro_saque', 'Primeiro Saque', 'Jogou sua primeira partida', 'primeiros_passos', 'bronze', '🎾', 10, 'jogos', 1, true),
+  ('primeiro_saque', 'Primeiro Saque', 'Jogou sua primeira partida', 'primeiros_passos', 'bronze', '🏓', 10, 'jogos', 1, true),
   ('primeira_vitoria', 'Primeira Vitória', 'Venceu sua primeira partida', 'primeiros_passos', 'bronze', '🏅', 15, 'vitorias', 1, true),
   ('aquecendo', 'Aquecendo', 'Jogador em desenvolvimento', 'primeiros_passos', 'bronze', '🔥', 25, 'jogos', 25, true),
   ('jogador_regular', 'Jogador Regular', 'Presença constante no ranking', 'primeiros_passos', 'bronze', '📍', 40, 'jogos', 100, true),

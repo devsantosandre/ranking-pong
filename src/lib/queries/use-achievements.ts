@@ -161,7 +161,7 @@ export function useAchievementStats(userId: string | undefined) {
 
 // Categorias de conquistas com metadados
 export const achievementCategories: Record<string, { name: string; emoji: string }> = {
-  primeiros_passos: { name: "Primeiros Passos", emoji: "🎾" },
+  primeiros_passos: { name: "Primeiros Passos", emoji: "🏓" },
   vitorias: { name: "Vitórias", emoji: "🏆" },
   sequencias: { name: "Sequências", emoji: "🔥" },
   rating: { name: "Rating", emoji: "📈" },
