@@ -21,8 +21,11 @@ const actionLabels: Record<string, { label: string; color: string }> = {
   user_activated: { label: "Jogador ativado", color: "bg-emerald-100 text-emerald-700" },
   user_deactivated: { label: "Jogador desativado", color: "bg-red-100 text-red-700" },
   user_stats_reset: { label: "Stats resetadas", color: "bg-orange-100 text-orange-700" },
+  user_name_updated: { label: "Nome alterado", color: "bg-blue-100 text-blue-700" },
   user_rating_changed: { label: "Pontos alterados", color: "bg-purple-100 text-purple-700" },
   user_role_changed: { label: "Role alterado", color: "bg-indigo-100 text-indigo-700" },
+  user_hidden_from_ranking: { label: "Jogador oculto", color: "bg-amber-100 text-amber-700" },
+  user_shown_in_ranking: { label: "Jogador visível", color: "bg-emerald-100 text-emerald-700" },
   match_cancelled: { label: "Partida cancelada", color: "bg-red-100 text-red-700" },
   setting_changed: { label: "Config alterada", color: "bg-amber-100 text-amber-700" },
 };
@@ -49,7 +52,7 @@ function formatValue(value: unknown, action: string): React.ReactNode {
       const key = String(obj.key);
       const settingName = settingNames[key] || key;
       return (
-        <span>
+        <span className="break-words [overflow-wrap:anywhere]">
           <span className="font-medium">{settingName}</span>: {String(obj.value)}
         </span>
       );
@@ -75,7 +78,7 @@ function formatValue(value: unknown, action: string): React.ReactNode {
 
     if (parts.length > 0) {
       return (
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
           {parts.map((part, i) => (
             <div key={i}>{part}</div>
           ))}
@@ -100,20 +103,20 @@ function formatValue(value: unknown, action: string): React.ReactNode {
     if (obj.vitorias !== undefined) parts.push(`V: ${obj.vitorias}`);
     if (obj.derrotas !== undefined) parts.push(`D: ${obj.derrotas}`);
     if (parts.length > 0) {
-      return <span>{parts.join(" | ")}</span>;
+      return <span className="break-words [overflow-wrap:anywhere]">{parts.join(" | ")}</span>;
     }
   }
 
   // Fallback para JSON
   if (typeof value === "object") {
     return (
-      <code className="inline-block rounded bg-muted px-2 py-1 text-[10px]">
-        {JSON.stringify(value)}
-      </code>
+      <pre className="max-w-full whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 text-[10px] leading-relaxed [overflow-wrap:anywhere]">
+        {JSON.stringify(value, null, 2)}
+      </pre>
     );
   }
 
-  return String(value);
+  return <span className="break-words [overflow-wrap:anywhere]">{String(value)}</span>;
 }
 
 const targetIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -208,8 +211,8 @@ export default function AdminLogsPage() {
           <div className="space-y-3">
             {logs.map((log) => {
               const actionMeta = actionLabels[log.action] || {
-                label: log.action,
-                color: "bg-gray-100 text-gray-700",
+                label: "Acao registrada",
+                color: "bg-slate-100 text-slate-700",
               };
               const TargetIcon = targetIcons[log.target_type] || User;
               const isExpanded = expandedLog === log.id;
@@ -226,23 +229,23 @@ export default function AdminLogsPage() {
                     }
                     className="flex w-full items-start justify-between p-4 text-left"
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
                       <div
-                        className={`flex h-8 w-8 items-center justify-center rounded-full ${actionMeta.color}`}
+                        className={`flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-full ${actionMeta.color}`}
                       >
                         <TargetIcon className="h-4 w-4" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${actionMeta.color}`}
+                          className={`inline-flex max-w-full rounded-full px-2 py-0.5 text-[10px] font-semibold ${actionMeta.color}`}
                         >
                           {actionMeta.label}
                         </span>
-                        <p className="mt-1 text-sm font-medium">
+                        <p className="mt-1 text-sm font-medium break-words [overflow-wrap:anywhere]">
                           {log.action_description}
                         </p>
                         {log.target_name && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
                             {log.target_name}
                           </p>
                         )}
@@ -252,18 +255,18 @@ export default function AdminLogsPage() {
                       <span className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatRelativeTime(log.created_at)}
                       </span>
-                      {isExpanded ? (
-                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                      )}
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
                     </div>
                   </button>
 
                   {/* Detalhes expandidos */}
                   {isExpanded && (
-                    <div className="border-t border-border px-4 pb-4 pt-3 space-y-2">
-                      <div className="text-xs">
+                    <div className="space-y-2 overflow-hidden border-t border-border px-4 pb-4 pt-3">
+                      <div className="text-xs break-words [overflow-wrap:anywhere]">
                         <span className="text-muted-foreground">Admin: </span>
                         <span className="font-medium">
                           {log.admin?.full_name || log.admin?.name || "Desconhecido"}
@@ -274,7 +277,7 @@ export default function AdminLogsPage() {
                       </div>
 
                       {log.reason && (
-                        <div className="text-xs">
+                        <div className="text-xs break-words [overflow-wrap:anywhere]">
                           <span className="text-muted-foreground">Motivo: </span>
                           <span className="font-medium">{log.reason}</span>
                         </div>
@@ -283,7 +286,7 @@ export default function AdminLogsPage() {
                       {log.old_value && (
                         <div className="text-xs">
                           <span className="text-muted-foreground">Antes: </span>
-                          <div className="mt-1">
+                          <div className="mt-1 max-w-full">
                             {formatValue(log.old_value, log.action)}
                           </div>
                         </div>
@@ -292,7 +295,7 @@ export default function AdminLogsPage() {
                       {log.new_value && (
                         <div className="text-xs">
                           <span className="text-muted-foreground">Depois: </span>
-                          <div className="mt-1">
+                          <div className="mt-1 max-w-full">
                             {formatValue(log.new_value, log.action)}
                           </div>
                         </div>
