@@ -272,34 +272,74 @@ export async function adminCancelMatch(matchId: string, reason: string) {
   const adminActor = await getCurrentUser();
 
   // Se a partida estava validada, reverter pontos
-  if (match.status === "validado" && match.vencedor_id) {
+  if (match.status === "validado") {
+    if (!match.vencedor_id) {
+      throw new Error("Partida validada sem vencedor definido");
+    }
+
     const winnerId = match.vencedor_id;
     const loserId =
       winnerId === match.player_a_id ? match.player_b_id : match.player_a_id;
+
+    if (winnerId !== match.player_a_id && winnerId !== match.player_b_id) {
+      throw new Error("Vencedor da partida é inválido");
+    }
 
     const winner =
       winnerId === match.player_a_id ? match.player_a : match.player_b;
     const loser =
       loserId === match.player_a_id ? match.player_a : match.player_b;
 
-    const pontosVitoria = match.pontos_variacao_a
-      ? winnerId === match.player_a_id
-        ? match.pontos_variacao_a
-        : match.pontos_variacao_b
-      : 20;
-    const pontosDerrota = match.pontos_variacao_b
-      ? loserId === match.player_a_id
-        ? match.pontos_variacao_a
-        : match.pontos_variacao_b
-      : 8;
+    let deltaA =
+      typeof match.pontos_variacao_a === "number" ? match.pontos_variacao_a : null;
+    let deltaB =
+      typeof match.pontos_variacao_b === "number" ? match.pontos_variacao_b : null;
+
+    // Fallback para dados legados/inconsistentes: usa transações originais da partida.
+    if (deltaA === null || deltaB === null) {
+      const { data: transactionRows, error: transactionError } = await supabase
+        .from("rating_transactions")
+        .select("user_id, valor, motivo, created_at")
+        .eq("match_id", matchId)
+        .in("motivo", ["vitoria", "derrota"])
+        .order("created_at", { ascending: false });
+
+      if (transactionError) {
+        throw new Error("Erro ao buscar historico de pontos da partida");
+      }
+
+      const deltaByUser = new Map<string, number>();
+      for (const row of transactionRows || []) {
+        if (typeof row.valor !== "number") continue;
+        if (deltaByUser.has(row.user_id)) continue;
+        deltaByUser.set(row.user_id, row.valor);
+      }
+
+      if (deltaA === null) {
+        deltaA = deltaByUser.get(match.player_a_id) ?? null;
+      }
+      if (deltaB === null) {
+        deltaB = deltaByUser.get(match.player_b_id) ?? null;
+      }
+    }
+
+    if (deltaA === null || deltaB === null) {
+      throw new Error("Partida validada sem variacao de pontos para reverter");
+    }
+
+    const winnerDelta = winnerId === match.player_a_id ? deltaA : deltaB;
+    const loserDelta = loserId === match.player_a_id ? deltaA : deltaB;
+
+    const nextWinnerRating = winner.rating_atual - winnerDelta;
+    const nextLoserRating = loser.rating_atual - loserDelta;
 
     // Reverter pontos do vencedor
     const { error: winnerError } = await supabase
       .from("users")
       .update({
-        rating_atual: winner.rating_atual - pontosVitoria,
-        vitorias: Math.max(0, winner.vitorias - 1),
-        jogos_disputados: Math.max(0, winner.jogos_disputados - 1),
+        rating_atual: nextWinnerRating,
+        vitorias: Math.max(0, (winner.vitorias ?? 0) - 1),
+        jogos_disputados: Math.max(0, (winner.jogos_disputados ?? 0) - 1),
       })
       .eq("id", winnerId);
 
@@ -311,9 +351,9 @@ export async function adminCancelMatch(matchId: string, reason: string) {
     const { error: loserError } = await supabase
       .from("users")
       .update({
-        rating_atual: loser.rating_atual - pontosDerrota,
-        derrotas: Math.max(0, loser.derrotas - 1),
-        jogos_disputados: Math.max(0, loser.jogos_disputados - 1),
+        rating_atual: nextLoserRating,
+        derrotas: Math.max(0, (loser.derrotas ?? 0) - 1),
+        jogos_disputados: Math.max(0, (loser.jogos_disputados ?? 0) - 1),
       })
       .eq("id", loserId);
 
@@ -327,17 +367,17 @@ export async function adminCancelMatch(matchId: string, reason: string) {
         match_id: matchId,
         user_id: winnerId,
         motivo: "reversao_admin",
-        valor: -pontosVitoria,
+        valor: -winnerDelta,
         rating_antes: winner.rating_atual,
-        rating_depois: winner.rating_atual - pontosVitoria,
+        rating_depois: nextWinnerRating,
       },
       {
         match_id: matchId,
         user_id: loserId,
         motivo: "reversao_admin",
-        valor: -pontosDerrota,
+        valor: -loserDelta,
         rating_antes: loser.rating_atual,
-        rating_depois: loser.rating_atual - pontosDerrota,
+        rating_depois: nextLoserRating,
       },
     ]);
 
