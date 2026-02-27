@@ -211,6 +211,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session
     const getUser = async () => {
       try {
+        // Hidrata sessão local rapidamente para evitar "flash" de loading no reload.
+        // A validação completa continua com getUser() logo em seguida.
+        const {
+          data: { session: localSession },
+        } = await supabase.auth.getSession();
+
+        if (isMounted && localSession?.user) {
+          setUser((previousUser) =>
+            buildFallbackAuthUser(localSession.user, previousUser)
+          );
+          setLoading(false);
+        }
+
         const {
           data: { user: authUser },
           error,
