@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Smash Pong App",
     short_name: "Smash Pong App",
     description: "Ranking de tênis de mesa",
-    start_url: "/",
+    start_url: "/login",
     scope: "/",
     display: "standalone",
     background_color: "#a421d2",

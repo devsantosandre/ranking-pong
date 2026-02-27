@@ -4,14 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/client";
+import { useAuth } from "@/lib/auth-store";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { buildBrowserTitle } from "@/lib/app-title";
 
+const POST_LOGIN_REDIRECT_KEY = "post_login_redirect_started_at_v1";
+const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
+
 export default function LoginPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,6 +28,26 @@ export default function LoginPage() {
   useEffect(() => {
     document.title = buildBrowserTitle("Entrar");
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    router.replace("/");
+  }, [router, user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const rawStartedAt = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    if (!rawStartedAt) return;
+
+    const startedAt = Number(rawStartedAt);
+    const expired =
+      !Number.isFinite(startedAt) ||
+      Date.now() - startedAt > POST_LOGIN_REDIRECT_MAX_AGE_MS;
+
+    if (expired || (!authLoading && !user?.id && !loading)) {
+      sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    }
+  }, [authLoading, loading, user?.id]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,14 +61,38 @@ export default function LoginPage() {
     });
 
     if (error) {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+      }
       setError(error.message);
       setLoading(false);
       return;
     }
 
-    router.push("/");
-    router.refresh();
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, String(Date.now()));
+    }
+    router.replace("/");
   };
+
+  const shouldShowPostLoginTransition = (() => {
+    if (typeof window === "undefined") return false;
+    const rawStartedAt = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    if (!rawStartedAt) return false;
+    if (!Number.isFinite(Number(rawStartedAt))) return false;
+    return authLoading || !!user?.id;
+  })();
+
+  if (shouldShowPostLoginTransition) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/90 to-primary p-4">
+        <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/20 px-6 py-5 text-white shadow-lg">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <p className="text-sm font-medium">Entrando na aplicação...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/90 to-primary p-4">
