@@ -27,10 +27,46 @@ export function Combobox({
   onChange,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const listRef = React.useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
+  const normalizedSearch = React.useMemo(
+    () =>
+      search
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase()
+        .trim(),
+    [search],
+  );
+  const filteredOptions = React.useMemo(() => {
+    if (!normalizedSearch) return options;
+    return options.filter((opt) => {
+      const label = opt.label
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase();
+      const description = (opt.description ?? "")
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase();
+      return label.includes(normalizedSearch) || description.includes(normalizedSearch);
+    });
+  }, [normalizedSearch, options]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    listRef.current?.scrollTo({ top: 0 });
+  }, [open, search]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -43,17 +79,24 @@ export function Combobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Buscar..." />
-          <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            <CommandGroup>
-              {options.map((opt) => (
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Buscar..."
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList ref={listRef}>
+            {filteredOptions.length === 0 ? (
+              <CommandEmpty>{emptyText}</CommandEmpty>
+            ) : (
+              <CommandGroup>
+                {filteredOptions.map((opt) => (
                 <CommandItem
                   key={opt.value}
                   value={`${opt.label} ${opt.description ?? ""}`}
                   onSelect={() => {
                     onChange(opt.value);
+                    setSearch("");
                     setOpen(false);
                   }}
                 >
@@ -72,8 +115,9 @@ export function Combobox({
                     ) : null}
                   </div>
                 </CommandItem>
-              ))}
-            </CommandGroup>
+                ))}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
