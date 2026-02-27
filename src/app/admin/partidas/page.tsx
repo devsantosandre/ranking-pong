@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, X, AlertTriangle } from "lucide-react";
+import { X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
@@ -190,117 +190,152 @@ export default function AdminPartidasPage() {
           </p>
         ) : (
           <div className="space-y-3">
-            {matches.map((match) => (
-              <article
-                key={match.id}
-                className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold">
-                      {match.player_a?.full_name || match.player_a?.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">vs</p>
-                    <p className="text-sm font-semibold">
-                      {match.player_b?.full_name || match.player_b?.name}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={`inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${
-                        statusColors[match.status] || "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {match.status}
-                    </span>
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      {formatDate(match.created_at)}
-                    </p>
-                  </div>
-                </div>
+            {matches.map((match) => {
+              const isPlayerAWinner =
+                match.vencedor_id === match.player_a_id
+                  ? true
+                  : match.vencedor_id === match.player_b_id
+                    ? false
+                    : match.resultado_a >= match.resultado_b;
 
-                {/* Placar */}
-                <p className="text-center text-2xl font-bold text-primary">
-                  {match.resultado_a} x {match.resultado_b}
-                </p>
+              const winner = isPlayerAWinner ? match.player_a : match.player_b;
+              const loser = isPlayerAWinner ? match.player_b : match.player_a;
+              const winnerScore = isPlayerAWinner ? match.resultado_a : match.resultado_b;
+              const loserScore = isPlayerAWinner ? match.resultado_b : match.resultado_a;
+              const winnerPointsRaw = isPlayerAWinner
+                ? match.pontos_variacao_a
+                : match.pontos_variacao_b;
+              const loserPointsRaw = isPlayerAWinner
+                ? match.pontos_variacao_b
+                : match.pontos_variacao_a;
+              const winnerPoints =
+                typeof winnerPointsRaw === "number" ? Math.abs(winnerPointsRaw) : null;
+              const loserPoints =
+                typeof loserPointsRaw === "number" ? Math.abs(loserPointsRaw) : null;
+              const winnerName = winner?.full_name || winner?.name || "Vencedor";
+              const loserName = loser?.full_name || loser?.name || "Perdedor";
 
-                {/* Pontos */}
-                {match.status === "validado" &&
-                  match.pontos_variacao_a !== null && (
-                    <div className="flex justify-center gap-4 text-xs">
-                      <span className="text-emerald-600">
-                        +{match.pontos_variacao_a} pts
-                      </span>
-                      <span className="text-emerald-600">
-                        +{match.pontos_variacao_b} pts
-                      </span>
-                    </div>
-                  )}
-
-                {/* Acao de cancelar */}
-                {match.status !== "cancelado" && (
-                  <>
-                    {cancelingId === match.id ? (
-                      <div className="space-y-2">
-                        <div>
-                          <textarea
-                            value={cancelReason}
-                            onChange={(e) => handleReasonChange(e.target.value)}
-                            placeholder="Motivo do cancelamento (obrigatorio)"
-                            className={`w-full rounded-lg border bg-background p-2 text-sm placeholder:text-muted-foreground focus:outline-none ${
-                              fieldError
-                                ? "border-red-500 focus:border-red-500"
-                                : "border-border focus:border-primary"
-                            }`}
-                            rows={2}
-                          />
-                          {fieldError && (
-                            <p className="mt-1 text-xs text-red-500">
-                              {fieldError}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => {
-                              setCancelingId(null);
-                              setCancelReason("");
-                              setFieldError("");
-                            }}
-                          >
-                            Voltar
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 bg-red-600 hover:bg-red-700"
-                            onClick={() => handleCancelClick(match)}
-                            disabled={!!fieldError}
-                          >
-                            Confirmar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
-                        onClick={() => setCancelingId(match.id)}
+              return (
+                <article
+                  key={match.id}
+                  className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Resultado
+                    </p>
+                    <div className="text-right">
+                      <span
+                        className={`inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${
+                          statusColors[match.status] || "bg-gray-100 text-gray-700"
+                        }`}
                       >
-                        <X className="mr-1 h-4 w-4" />
-                        {match.status === "validado"
-                          ? "Cancelar e Reverter Pontos"
-                          : "Cancelar Partida"}
-                      </Button>
+                        {match.status}
+                      </span>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {formatDate(match.created_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Jogadores + placar (vencedor sempre à esquerda) */}
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-emerald-700">
+                        {winnerName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Vencedor</p>
+                    </div>
+                    <p className="text-center text-2xl font-bold text-primary">
+                      {winnerScore} x {loserScore}
+                    </p>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-red-600">
+                        {loserName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Perdedor</p>
+                    </div>
+                  </div>
+
+                  {/* Pontos */}
+                  {match.status === "validado" &&
+                    winnerPoints !== null &&
+                    loserPoints !== null && (
+                      <div className="grid grid-cols-2 gap-4 text-xs">
+                        <p className="text-center font-semibold text-emerald-600">
+                          +{winnerPoints} pts
+                        </p>
+                        <p className="text-center font-semibold text-red-600">
+                          -{loserPoints} pts
+                        </p>
+                      </div>
                     )}
-                  </>
-                )}
-              </article>
-            ))}
+
+                  {/* Acao de cancelar */}
+                  {match.status !== "cancelado" && (
+                    <>
+                      {cancelingId === match.id ? (
+                        <div className="space-y-2">
+                          <div>
+                            <textarea
+                              value={cancelReason}
+                              onChange={(e) => handleReasonChange(e.target.value)}
+                              placeholder="Motivo do cancelamento (obrigatorio)"
+                              className={`w-full rounded-lg border bg-background p-2 text-sm placeholder:text-muted-foreground focus:outline-none ${
+                                fieldError
+                                  ? "border-red-500 focus:border-red-500"
+                                  : "border-border focus:border-primary"
+                              }`}
+                              rows={2}
+                            />
+                            {fieldError && (
+                              <p className="mt-1 text-xs text-red-500">
+                                {fieldError}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => {
+                                setCancelingId(null);
+                                setCancelReason("");
+                                setFieldError("");
+                              }}
+                            >
+                              Voltar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="flex-1 bg-red-600 hover:bg-red-700"
+                              onClick={() => handleCancelClick(match)}
+                              disabled={!!fieldError}
+                            >
+                              Confirmar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => setCancelingId(match.id)}
+                        >
+                          <X className="mr-1 h-4 w-4" />
+                          {match.status === "validado"
+                            ? "Cancelar e Reverter Pontos"
+                            : "Cancelar Partida"}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </article>
+              );
+            })}
 
             {/* Botao Carregar mais */}
             <LoadMoreButton
