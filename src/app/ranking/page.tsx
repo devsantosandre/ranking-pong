@@ -33,7 +33,7 @@ export default function RankingPage() {
     data: rankingData,
     isLoading,
     error,
-  } = useRankingAll();
+  } = useRankingAll(user?.id);
 
   const allPlayers = useMemo(() => {
     return (rankingData ?? []).map((player, index) => ({

@@ -17,12 +17,17 @@ export type User = {
   jogos_disputados: number | null;
 };
 
+function getViewerScopeKey(viewerId?: string) {
+  return viewerId || "anonymous";
+}
+
 // Hook para buscar lista de usuários (apenas ativos)
-export function useUsers() {
+export function useUsers(viewerId?: string) {
   const supabase = createClient();
+  const viewerScopeKey = getViewerScopeKey(viewerId);
 
   return useQuery({
-    queryKey: queryKeys.users.list(),
+    queryKey: [...queryKeys.users.list(), "viewer", viewerScopeKey],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
@@ -38,11 +43,12 @@ export function useUsers() {
 }
 
 // Hook para buscar ranking com paginacao (ordenado por rating, apenas ativos)
-export function useRanking() {
+export function useRanking(viewerId?: string) {
   const supabase = createClient();
+  const viewerScopeKey = getViewerScopeKey(viewerId);
 
   return useInfiniteQuery({
-    queryKey: queryKeys.users.ranking(),
+    queryKey: [...queryKeys.users.ranking(), "viewer", viewerScopeKey],
     queryFn: async ({ pageParam = 0 }) => {
       const from = pageParam * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
@@ -68,11 +74,12 @@ export function useRanking() {
 }
 
 // Hook para buscar ranking completo (sem paginação)
-export function useRankingAll() {
+export function useRankingAll(viewerId?: string) {
   const supabase = createClient();
+  const viewerScopeKey = getViewerScopeKey(viewerId);
 
   return useQuery({
-    queryKey: [...queryKeys.users.ranking(), "all"],
+    queryKey: [...queryKeys.users.ranking(), "all", "viewer", viewerScopeKey],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
@@ -138,7 +145,6 @@ export function useUserRankingPosition(userId: string | undefined) {
     staleTime: 1000 * 30,
   });
 }
-
 
 
 

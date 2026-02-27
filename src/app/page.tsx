@@ -10,7 +10,7 @@ import { getPlayerStyle } from "@/lib/divisions";
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const { data: rankingData, isLoading: rankingLoading } = useRanking();
+  const { data: rankingData, isLoading: rankingLoading } = useRanking(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
 
   // Flatten paginated data

@@ -22,6 +22,7 @@ import { useAuth } from "@/lib/auth-store";
 import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
 import { queryKeys, usePendingActionCount } from "@/lib/queries";
 import { buildBrowserTitle } from "@/lib/app-title";
+import { clearClientSessionData } from "@/lib/client-session-cleanup";
 
 type NavItem = {
   href: string;
@@ -89,9 +90,10 @@ export function AppShell({
   );
 
   const handleLogout = async () => {
+    queryClient.clear();
+    clearClientSessionData();
     await logout();
-    router.push("/login");
-    router.refresh();
+    router.replace("/login");
   };
 
   const handlePendingCtaClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {

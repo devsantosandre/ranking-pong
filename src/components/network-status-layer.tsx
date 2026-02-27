@@ -3,6 +3,7 @@
 import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Wifi, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { queryKeys } from "@/lib/queries";
 
 type NetworkState = "online" | "checking" | "offline" | "server_unreachable";
 
@@ -11,6 +12,7 @@ const HEALTH_CHECK_TIMEOUT_MS = 4000;
 const OFFLINE_RECHECK_MS = 12000;
 const ONLINE_REVALIDATE_MS = 45000;
 const ONLINE_TOAST_MS = 2500;
+const CRITICAL_RESUME_SYNC_DEDUP_MS = 1200;
 
 function getInitialNetworkState(): NetworkState {
   if (typeof window === "undefined") return "online";
@@ -26,6 +28,20 @@ export function NetworkStatusLayer() {
   const initializedRef = useRef(false);
   const healthCheckControllerRef = useRef<AbortController | null>(null);
   const healthCheckRunIdRef = useRef(0);
+  const lastCriticalSyncAtRef = useRef(0);
+
+  const refetchCriticalQueriesOnResume = useCallback(async () => {
+    await Promise.all([
+      queryClient.refetchQueries({
+        queryKey: queryKeys.matches.all,
+        type: "active",
+      }),
+      queryClient.refetchQueries({
+        queryKey: queryKeys.users.all,
+        type: "active",
+      }),
+    ]);
+  }, [queryClient]);
 
   const applyNetworkState = useCallback(
     (nextState: NetworkState) => {
@@ -115,6 +131,16 @@ export function NetworkStatusLayer() {
     const handleVisibilityOrFocus = () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void runHealthCheck(stateRef.current !== "online");
+
+      const now = Date.now();
+      const shouldSync =
+        stateRef.current === "online" &&
+        now - lastCriticalSyncAtRef.current > CRITICAL_RESUME_SYNC_DEDUP_MS;
+
+      if (shouldSync) {
+        lastCriticalSyncAtRef.current = now;
+        void refetchCriticalQueriesOnResume();
+      }
     };
 
     window.addEventListener("offline", handleOffline);
@@ -145,7 +171,7 @@ export function NetworkStatusLayer() {
       window.clearInterval(onlineInterval);
       healthCheckControllerRef.current?.abort();
     };
-  }, [applyNetworkState, runHealthCheck]);
+  }, [applyNetworkState, refetchCriticalQueriesOnResume, runHealthCheck]);
 
   useEffect(() => {
     if (!showOnlineToast) return;

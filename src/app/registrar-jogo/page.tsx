@@ -26,7 +26,7 @@ export default function RegistrarJogoPage() {
   const [opponentId, setOpponentId] = useState("");
 
   // React Query hooks
-  const { data: users = [], isLoading: loadingUsers } = useUsers();
+  const { data: users = [], isLoading: loadingUsers } = useUsers(user?.id);
   const { data: settings } = useSettings();
   const registerMutation = useRegisterMatch();
 
