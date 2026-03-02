@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { ChevronRight, Search, X } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
-import { useHeadToHeadStats, useRankingAll } from "@/lib/queries";
+import { useHeadToHeadStats, useRankingAll, useTotalValidatedMatches } from "@/lib/queries";
 import { PlayerListSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth-store";
 import {
@@ -34,6 +34,12 @@ export default function RankingPage() {
     isLoading,
     error,
   } = useRankingAll(user?.id);
+  const {
+    data: totalValidatedMatches,
+    isLoading: totalMatchesLoading,
+    isFetching: totalMatchesFetching,
+    isError: totalMatchesError,
+  } = useTotalValidatedMatches();
 
   const allPlayers = useMemo(() => {
     return (rankingData ?? []).map((player, index) => ({
@@ -120,6 +126,16 @@ export default function RankingPage() {
   return (
     <AppShell title="Ranking" subtitle="Classificação dos jogadores" showBack>
       <div className="space-y-4">
+        <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-center">
+          <p className="text-xs font-semibold text-muted-foreground">
+            {totalMatchesLoading || totalMatchesFetching || totalValidatedMatches === undefined
+              ? "Carregando total de jogos..."
+              : totalMatchesError
+                ? "Atualizando total de jogos..."
+                : `${totalValidatedMatches.toLocaleString("pt-BR")} jogos validados`}
+          </p>
+        </div>
+
         <SearchInput
           value={searchInput}
           onChange={handleSearchChange}

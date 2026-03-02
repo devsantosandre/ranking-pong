@@ -7,6 +7,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
 import {
@@ -239,6 +240,71 @@ export function useMatchCounts(userId: string | undefined) {
   });
 }
 
+export function useTotalValidatedMatches() {
+  const queryClient = useQueryClient();
+  const supabase = useMemo(() => createClient(), []);
+  const totalValidatedQueryKey = useMemo(
+    () => queryKeys.matches.totalValidated(),
+    []
+  );
+
+  const query = useQuery({
+    queryKey: totalValidatedQueryKey,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("match_metrics")
+        .select("total_validated_matches")
+        .eq("id", true)
+        .single();
+
+      if (error) throw error;
+      return data?.total_validated_matches ?? 0;
+    },
+    staleTime: 1000 * 60 * 30,
+    retry: 3,
+    refetchOnWindowFocus: true,
+  });
+
+  const refreshTotal = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: totalValidatedQueryKey,
+      exact: true,
+    });
+  }, [queryClient, totalValidatedQueryKey]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("match-metrics-total")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "match_metrics",
+        },
+        (payload) => {
+          const next = payload.new as { total_validated_matches?: number } | null;
+          if (next && typeof next.total_validated_matches === "number") {
+            queryClient.setQueryData(
+              totalValidatedQueryKey,
+              next.total_validated_matches
+            );
+            return;
+          }
+
+          refreshTotal();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient, refreshTotal, supabase, totalValidatedQueryKey]);
+
+  return query;
+}
+
 export function useHeadToHeadStats(
   userId: string | undefined,
   opponentId: string | undefined
@@ -377,9 +443,3 @@ export function useRegisterMatch() {
     },
   });
 }
-
-
-
-
-
-

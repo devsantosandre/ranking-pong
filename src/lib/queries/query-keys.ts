@@ -16,6 +16,7 @@ export const queryKeys = {
     all: ["matches"] as const,
     list: (userId?: string) => [...queryKeys.matches.all, "list", userId] as const,
     counts: (userId?: string) => [...queryKeys.matches.all, "counts", userId] as const,
+    totalValidated: () => [...queryKeys.matches.all, "total-validated"] as const,
     detail: (id: string) => [...queryKeys.matches.all, "detail", id] as const,
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
@@ -60,8 +61,5 @@ export const queryKeys = {
       ["achievements", "pending-toasts", userId] as const,
   },
 };
-
-
-
 
 
