@@ -266,64 +266,98 @@ export default function RankingPage() {
       >
         <SheetContent
           side="bottom"
-          className="right-auto bottom-2 left-1/2 max-h-[80vh] w-[calc(100%-1rem)] max-w-2xl -translate-x-1/2 gap-0 rounded-2xl border p-0"
+          className="right-auto bottom-2 left-1/2 max-h-[85vh] w-[calc(100%-0.75rem)] max-w-2xl -translate-x-1/2 gap-0 overflow-hidden rounded-2xl border border-border bg-card p-0 shadow-2xl"
         >
-          <SheetHeader className="pr-12">
-            <SheetTitle>
-              {selectedPlayer ? `H2H vs ${selectedPlayer.displayName}` : "H2H"}
-            </SheetTitle>
+          <SheetHeader className="space-y-2 border-b border-border px-4 pb-4 pt-4 pr-14 sm:px-5">
+            <SheetTitle>H2H</SheetTitle>
             <SheetDescription>
-              Confrontos validados entre você e este adversário
+              Seu histórico de confrontos validados
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-4 px-4 pb-6">
+          <div className="space-y-3 px-4 pb-6 pt-4 sm:space-y-4 sm:px-5">
+            {selectedPlayer && user && selectedPlayer.id !== user.id && (
+              <article className="rounded-xl border border-primary/25 bg-primary/5 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">
+                  Adversário
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-primary sm:text-base">
+                      {selectedPlayer.displayName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedPlayer.position}º no ranking • {(selectedPlayer.rating_atual ?? 250).toLocaleString("pt-BR")} pts
+                    </p>
+                  </div>
+                </div>
+              </article>
+            )}
+
             {!user ? (
-              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Faça login para ver seu H2H contra outros jogadores.
               </p>
             ) : !selectedPlayer ? (
-              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Selecione um jogador para ver o H2H.
               </p>
             ) : selectedPlayer.id === user.id ? (
-              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Selecione outro jogador para comparar seu histórico de confrontos.
               </p>
             ) : h2hLoading ? (
-              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Carregando H2H...
               </p>
             ) : h2hError ? (
-              <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+              <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
                 Erro ao carregar H2H. Tente novamente.
               </p>
             ) : h2hStats && h2hStats.total > 0 ? (
               <>
-                <div className="grid grid-cols-3 gap-2">
-                  <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
-                    <p className="text-xl font-bold text-emerald-700">{h2hStats.wins}</p>
-                    <p className="text-[11px] text-emerald-700/80">Você ganhou</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                      <p className="text-2xl font-bold text-emerald-700 sm:text-3xl">{h2hStats.wins}</p>
+                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Você ganhou</p>
                   </article>
-                  <article className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
-                    <p className="text-xl font-bold text-red-600">{h2hStats.losses}</p>
-                    <p className="text-[11px] text-red-600/80">Você perdeu</p>
+                  <article className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
+                      <p className="text-2xl font-bold text-red-600 sm:text-3xl">{h2hStats.losses}</p>
+                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-red-600/80">Você perdeu</p>
                   </article>
-                  <article className="rounded-xl border border-border bg-card p-3 text-center">
-                    <p className="text-xl font-bold text-foreground">{h2hStats.total}</p>
-                    <p className="text-[11px] text-muted-foreground">Total</p>
+                  <article className="col-span-2 rounded-xl border border-border bg-card p-4 text-center sm:col-span-1">
+                      <p className="text-2xl font-bold text-primary sm:text-3xl">{h2hStats.total}</p>
+                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80">Total</p>
                   </article>
                 </div>
 
-                <div className="rounded-xl border border-border bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">Aproveitamento</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {h2hStats.winRate}% de vitórias
+                <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <p className="text-sm font-semibold text-muted-foreground">Aproveitamento</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {h2hStats.winRate}%
+                    </p>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.max(0, Math.min(100, h2hStats.winRate))}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {h2hStats.wins} vitória{h2hStats.wins === 1 ? "" : "s"} em {h2hStats.total} confronto{h2hStats.total > 1 ? "s" : ""}
+                  </p>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {h2hStats.wins > h2hStats.losses
+                      ? "Você está em vantagem neste confronto."
+                      : h2hStats.wins < h2hStats.losses
+                        ? "Adversário em vantagem neste confronto."
+                        : "Confronto equilibrado entre vocês."}
                   </p>
                 </div>
               </>
             ) : (
-              <p className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
+              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Vocês ainda não têm partidas validadas entre si.
               </p>
             )}
