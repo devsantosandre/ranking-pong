@@ -27,6 +27,33 @@ const statusBadge: Record<string, { label: string; className: string }> = {
 
 const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
 
+function parseOutcome(outcome: string): { left: number; right: number } | null {
+  const match = outcome.match(/^(\d{1,2})x(\d{1,2})$/);
+  if (!match) return null;
+
+  const left = Number(match[1]);
+  const right = Number(match[2]);
+
+  if (Number.isNaN(left) || Number.isNaN(right)) return null;
+  return { left, right };
+}
+
+function toUserOutcome(matchOutcome: string, isUserPlayerA: boolean): string {
+  const parsed = parseOutcome(matchOutcome);
+  if (!parsed) return matchOutcome;
+  return isUserPlayerA
+    ? `${parsed.left}x${parsed.right}`
+    : `${parsed.right}x${parsed.left}`;
+}
+
+function toMatchOutcome(userOutcome: string, isUserPlayerA: boolean): string {
+  const parsed = parseOutcome(userOutcome);
+  if (!parsed) return userOutcome;
+  return isUserPlayerA
+    ? `${parsed.left}x${parsed.right}`
+    : `${parsed.right}x${parsed.left}`;
+}
+
 export default function PartidasPage() {
   const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
@@ -319,22 +346,30 @@ function PendingMatchCard({
 }) {
   const badge = statusBadge[match.status] || statusBadge.pendente;
   const isEditing = editingId === match.id;
-  const selected = draftOutcome[match.id] ?? `${match.resultado_a}x${match.resultado_b}`;
   const euCriei = match.criado_por === user.id;
   const opponent = match.player_a_id === user.id ? match.player_b : match.player_a;
   const opponentName = getPlayerName(opponent);
   const euDevoAgir = match.criado_por !== user.id;
   const isThisLoading = loadingMatchId === match.id;
   const meIsPlayerA = match.player_a_id === user.id;
-  const myScore = meIsPlayerA ? match.resultado_a : match.resultado_b;
-  const opponentScore = meIsPlayerA ? match.resultado_b : match.resultado_a;
+  const currentMatchOutcome = `${match.resultado_a}x${match.resultado_b}`;
+  const currentUserOutcome = toUserOutcome(currentMatchOutcome, meIsPlayerA);
+  const selectedUserOutcome = draftOutcome[match.id] ?? currentUserOutcome;
+  const selectedMatchOutcome = toMatchOutcome(selectedUserOutcome, meIsPlayerA);
+  const selectedUserScore = parseOutcome(selectedUserOutcome);
+  const defaultMyScore = meIsPlayerA ? match.resultado_a : match.resultado_b;
+  const defaultOpponentScore = meIsPlayerA ? match.resultado_b : match.resultado_a;
+  const myScore = isEditing && selectedUserScore ? selectedUserScore.left : defaultMyScore;
+  const opponentScore =
+    isEditing && selectedUserScore ? selectedUserScore.right : defaultOpponentScore;
   const iWon = myScore > opponentScore;
   const opponentWon = opponentScore > myScore;
+  const resultSummaryPrefix = isEditing ? "Novo placar:" : "Placar informado:";
   const resultSummary = iWon
-    ? "Placar informado: você venceu"
+    ? `${resultSummaryPrefix} você venceu`
     : opponentWon
-      ? "Placar informado: adversário venceu"
-      : "Placar informado: empate";
+      ? `${resultSummaryPrefix} adversário venceu`
+      : `${resultSummaryPrefix} empate`;
   const mobileBadgeLabel = badge.label === "Aguardando confirmação" ? "Aguardando" : badge.label;
 
   return (
@@ -403,14 +438,14 @@ function PendingMatchCard({
         </p>
       ) : isEditing ? (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Ajuste o placar:</p>
+          <p className="text-xs text-muted-foreground">Ajuste o placar (Você x Adversário):</p>
           <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
             {quickOutcomes.map((outcome) => (
               <button
                 key={outcome}
                 onClick={() => onDraftChange(match.id, outcome)}
                 className={`rounded-full border px-3 py-2 transition ${
-                  selected === outcome
+                  selectedUserOutcome === outcome
                     ? "border-primary bg-primary/15 text-primary"
                     : "border-border bg-card text-foreground"
                 }`}
@@ -443,7 +478,7 @@ function PendingMatchCard({
               </button>
               <button
                 onClick={() =>
-                  onStartEdit(match.id, `${match.resultado_a}x${match.resultado_b}`)
+                  onStartEdit(match.id, currentUserOutcome)
                 }
                 className="flex-1 rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
               >
@@ -453,7 +488,7 @@ function PendingMatchCard({
           ) : (
             <>
               <button
-                onClick={() => onContest(match.id, selected)}
+                onClick={() => onContest(match.id, selectedMatchOutcome)}
                 disabled={isThisLoading}
                 className="flex-1 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] disabled:opacity-50"
               >
