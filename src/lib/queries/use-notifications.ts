@@ -25,7 +25,9 @@ export function usePendingActionCount(userId?: string) {
     },
     enabled: !!userId,
     staleTime: 1000 * 10,
-    refetchInterval: 1000 * 30,
+    refetchInterval: 1000 * 15,
     refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }

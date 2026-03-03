@@ -8,6 +8,7 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
 import {
@@ -60,6 +61,24 @@ export type HeadToHeadStats = {
   total: number;
   winRate: number;
 };
+
+type MatchMetricsRealtimeRow = {
+  total_validated_matches?: number | null;
+};
+
+const NETWORK_ERROR_PATTERNS = [
+  "failed to fetch",
+  "network",
+  "connection",
+  "timeout",
+  "temporarily unavailable",
+];
+
+function isLikelyNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return NETWORK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
 
 async function fetchMatchesWithUsers(
   supabase: ReturnType<typeof createClient>,
@@ -161,6 +180,11 @@ export function usePendingMatches(userId: string | undefined) {
       return fetchMatchesWithUsers(supabase, (matchesData ?? []) as MatchData[]);
     },
     enabled: !!userId,
+    staleTime: 1000 * 5,
+    refetchInterval: 1000 * 15,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -282,7 +306,7 @@ export function useTotalValidatedMatches() {
           schema: "public",
           table: "match_metrics",
         },
-        (payload) => {
+        (payload: RealtimePostgresChangesPayload<MatchMetricsRealtimeRow>) => {
           const next = payload.new as { total_validated_matches?: number } | null;
           if (next && typeof next.total_validated_matches === "number") {
             queryClient.setQueryData(
@@ -359,6 +383,8 @@ export function useConfirmMatch() {
       }
       return result;
     },
+    networkMode: "online",
+    retry: false,
     onMutate: async ({ matchId, userId }) => {
       const matchesQueryKey = queryKeys.matches.list(userId);
       await queryClient.cancelQueries({ queryKey: matchesQueryKey });
@@ -415,6 +441,8 @@ export function useContestMatch() {
       }
       return result;
     },
+    networkMode: "online",
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
     },
@@ -430,6 +458,7 @@ export function useRegisterMatch() {
       playerId: string;
       opponentId: string;
       outcome: string;
+      requestId: string;
     }) => {
       const result = await registerMatchAction(input);
       if (!result.success) {
@@ -437,6 +466,9 @@ export function useRegisterMatch() {
       }
       return result;
     },
+    networkMode: "online",
+    retry: (failureCount, error) => isLikelyNetworkError(error) && failureCount < 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 8000),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.dailyLimits.all });

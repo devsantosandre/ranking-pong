@@ -9,6 +9,14 @@ import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type RegisterMatchRpcRow = {
+  match_id: string;
+  opponent_id: string;
+  actor_name: string | null;
+  was_inserted: boolean;
+};
 
 function createMatchActionTelemetry() {
   return {
@@ -59,18 +67,64 @@ function getUserDisplayName(user: {
   return user.full_name || user.name || user.email?.split("@")[0] || null;
 }
 
-function getCurrentDateInTimezone(timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
-  } catch {
-    // Fallback para UTC caso a timezone não seja suportada no runtime
-    return new Date().toISOString().split("T")[0];
+function isUuid(value: string): boolean {
+  return UUID_REGEX.test(value);
+}
+
+function parseRegisterMatchRpcRow(data: unknown): RegisterMatchRpcRow | null {
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (!row || typeof row !== "object") return null;
+
+  const candidate = row as Partial<RegisterMatchRpcRow>;
+  if (
+    typeof candidate.match_id !== "string" ||
+    typeof candidate.opponent_id !== "string" ||
+    typeof candidate.was_inserted !== "boolean"
+  ) {
+    return null;
   }
+
+  return {
+    match_id: candidate.match_id,
+    opponent_id: candidate.opponent_id,
+    actor_name: typeof candidate.actor_name === "string" ? candidate.actor_name : null,
+    was_inserted: candidate.was_inserted,
+  };
+}
+
+function mapRegisterMatchRpcErrorMessage(message: string | undefined): string {
+  const normalized = (message || "").toLowerCase();
+
+  if (normalized.includes("not_authenticated")) {
+    return "Usuário não autenticado";
+  }
+
+  if (normalized.includes("actor_mismatch")) {
+    return "Sessão inválida para registrar a partida";
+  }
+
+  if (normalized.includes("same_player")) {
+    return "Você não pode jogar contra si mesmo";
+  }
+
+  if (normalized.includes("invalid_score")) {
+    return "Formato de placar inválido. Use o formato NxN (ex: 3x1)";
+  }
+
+  if (normalized.includes("daily_limit_reached")) {
+    return "Limite diário de jogos contra este adversário atingido";
+  }
+
+  if (normalized.includes("invalid_input")) {
+    return "Dados inválidos para registrar a partida";
+  }
+
+  if (normalized.includes("duplicate key value violates unique constraint")) {
+    return "Solicitação duplicada detectada. Atualize a tela e tente novamente.";
+  }
+
+  return "Erro ao registrar partida";
 }
 
 async function getActorName(
@@ -100,7 +154,16 @@ async function emitPendingNotification(
     lida: false,
   });
 
-  if (error) return;
+  if (error) {
+    console.error("pending_notification_insert_failed", {
+      recipientId: userId,
+      matchId: payload.match_id,
+      event: payload.event,
+      actorId: payload.actor_id,
+      reason: error.message,
+      code: error.code,
+    });
+  }
 }
 
 async function emitPendingNotifications(
@@ -120,7 +183,16 @@ async function emitPendingNotifications(
     }))
   );
 
-  if (error) return;
+  if (error) {
+    console.error("pending_notifications_insert_failed", {
+      recipients: uniqueUserIds,
+      matchId: payload.match_id,
+      event: payload.event,
+      actorId: payload.actor_id,
+      reason: error.message,
+      code: error.code,
+    });
+  }
 }
 
 async function getAuthenticatedUserId(
@@ -541,7 +613,8 @@ export async function registerMatchAction(input: {
   playerId: string;
   opponentId: string;
   outcome: string;
-}): Promise<{ success: boolean; error?: string }> {
+  requestId: string;
+}): Promise<{ success: boolean; error?: string; matchId?: string }> {
   const telemetry = createRegisterMatchTelemetry();
   const fail = (errorMessage: string, reason: string) => {
     telemetry.finish("error", reason);
@@ -559,6 +632,10 @@ export async function registerMatchAction(input: {
     return fail("Você não pode jogar contra si mesmo", "same_player");
   }
 
+  if (!isUuid(input.requestId)) {
+    return fail("Identificador de envio inválido. Tente novamente.", "invalid_request_id");
+  }
+
   const supabase = await createClient();
   const authenticatedUserId = await getAuthenticatedUserId(supabase);
 
@@ -570,141 +647,45 @@ export async function registerMatchAction(input: {
     return fail("Sessão inválida para registrar a partida", "actor_mismatch");
   }
 
-  // Buscar limite diário das configurações
-  const { data: limiteSetting } = await supabase
-    .from("settings")
-    .select("value")
-    .eq("key", "limite_jogos_diarios")
-    .single();
-  telemetry.step("fetch_daily_limit_setting");
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "register_match_with_notification_v1",
+    {
+      p_player_id: input.playerId,
+      p_opponent_id: input.opponentId,
+      p_resultado_a: score.a,
+      p_resultado_b: score.b,
+      p_request_id: input.requestId,
+      p_timezone: BUSINESS_TIMEZONE,
+    }
+  );
+  telemetry.step("register_match_rpc");
 
-  const limiteStr = limiteSetting?.value;
-  const limiteJogosDiarios = limiteStr ? parseInt(limiteStr, 10) : 2;
-
-  if (isNaN(limiteJogosDiarios) || limiteJogosDiarios < 1) {
-    return fail("Configuração de limite diário inválida", "invalid_daily_limit_setting");
-  }
-
-  const today = getCurrentDateInTimezone(BUSINESS_TIMEZONE);
-
-  // Verificar limite diário para ambas as direções (A vs B e B vs A)
-  const { data: limitData } = await supabase
-    .from("daily_limits")
-    .select("jogos_registrados")
-    .or(
-      `and(user_id.eq.${input.playerId},opponent_id.eq.${input.opponentId}),and(user_id.eq.${input.opponentId},opponent_id.eq.${input.playerId})`
-    )
-    .eq("data", today)
-    .limit(1)
-    .single();
-  telemetry.step("check_daily_limit");
-
-  if (limitData && limitData.jogos_registrados >= limiteJogosDiarios) {
+  if (rpcError) {
     return fail(
-      `Limite de ${limiteJogosDiarios} jogos/dia contra este adversário atingido!`,
-      "daily_limit_reached"
+      mapRegisterMatchRpcErrorMessage(rpcError.message),
+      `register_match_rpc_failed:${rpcError.code || "unknown"}`
     );
   }
 
-  // Determinar vencedor
-  const vencedorId = score.a > score.b ? input.playerId : input.opponentId;
-
-  // Criar a partida
-  const { data: createdMatch, error: matchError } = await supabase
-    .from("matches")
-    .insert({
-      player_a_id: input.playerId,
-      player_b_id: input.opponentId,
-      vencedor_id: vencedorId,
-      resultado_a: score.a,
-      resultado_b: score.b,
-      status: "pendente",
-      criado_por: input.playerId,
-      tipo_resultado: score.a > score.b ? "win" : "loss",
-    })
-    .select("id, criado_por")
-    .single();
-  telemetry.step("insert_match");
-
-  if (matchError || !createdMatch) {
-    return fail("Erro ao registrar partida", "insert_match_failed");
+  const rpcRow = parseRegisterMatchRpcRow(rpcData);
+  if (!rpcRow) {
+    return fail("Erro ao registrar partida", "register_match_rpc_invalid_payload");
   }
 
-  // Atualizar limite diário usando upsert para evitar race condition
-  // Usamos uma abordagem de incremento atômico
-  if (limitData) {
-    // Já existe registro, incrementar
-    await supabase
-      .from("daily_limits")
-      .update({ jogos_registrados: limitData.jogos_registrados + 1 })
-      .eq("user_id", input.playerId)
-      .eq("opponent_id", input.opponentId)
-      .eq("data", today);
-
-    // Atualizar também o registro inverso se existir
-    await supabase
-      .from("daily_limits")
-      .update({ jogos_registrados: limitData.jogos_registrados + 1 })
-      .eq("user_id", input.opponentId)
-      .eq("opponent_id", input.playerId)
-      .eq("data", today);
-  } else {
-    // Não existe, criar para ambas as direções
-    const { error: insertError } = await supabase.from("daily_limits").insert([
-      {
-        user_id: input.playerId,
-        opponent_id: input.opponentId,
-        data: today,
-        jogos_registrados: 1,
+  if (rpcRow.was_inserted) {
+    await sendPushToUsers([rpcRow.opponent_id], {
+      title: "Nova partida para confirmar",
+      body: `${rpcRow.actor_name || "Seu adversário"} registrou ${score.a}x${score.b}. Toque para revisar.`,
+      url: "/partidas",
+      tag: `pending-match-${rpcRow.match_id}`,
+      data: {
+        matchId: rpcRow.match_id,
+        event: "pending_created",
       },
-      {
-        user_id: input.opponentId,
-        opponent_id: input.playerId,
-        data: today,
-        jogos_registrados: 1,
-      },
-    ]);
-
-    if (insertError) {
-      // Se falhou por conflito (race condition), tentar update
-      if (insertError.code === "23505") {
-        // Unique violation - outro request já inseriu, fazer update
-        await supabase
-          .from("daily_limits")
-          .update({ jogos_registrados: 1 })
-          .eq("user_id", input.playerId)
-          .eq("opponent_id", input.opponentId)
-          .eq("data", today);
-      }
-    }
+    });
   }
-  telemetry.step("update_daily_limit_counters");
-
-  const actorName = await getActorName(supabase, input.playerId);
-  const createdPayload: PendingNotificationPayloadV1 = {
-    event: "pending_created",
-    match_id: createdMatch.id,
-    status: "pendente",
-    actor_id: input.playerId,
-    actor_name: actorName,
-    created_by: createdMatch.criado_por || input.playerId,
-  };
-
-  await emitPendingNotification(supabase, input.opponentId, createdPayload);
-  telemetry.step("emit_pending_notification");
-
-  await sendPushToUsers([input.opponentId], {
-    title: "Nova partida para confirmar",
-    body: `${actorName || "Seu adversário"} registrou ${score.a}x${score.b}. Toque para revisar.`,
-    url: "/partidas",
-    tag: `pending-match-${createdMatch.id}`,
-    data: {
-      matchId: createdMatch.id,
-      event: "pending_created",
-    },
-  });
   telemetry.step("emit_pending_push");
   telemetry.finish("success");
 
-  return { success: true };
+  return { success: true, matchId: rpcRow.match_id };
 }

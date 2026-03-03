@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -11,10 +11,23 @@ import { calculateElo } from "@/lib/elo";
 
 type SetScore = { numero: number; winner: "" | "a" | "b" };
 
+function generateRequestId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const rand = Math.floor(Math.random() * 16);
+    const value = char === "x" ? rand : (rand & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 export default function RegistrarJogoPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef<string | null>(null);
   const [sets, setSets] = useState<SetScore[]>([
     { numero: 1, winner: "" },
     { numero: 2, winner: "" },
@@ -29,6 +42,10 @@ export default function RegistrarJogoPage() {
   const { data: users = [], isLoading: loadingUsers } = useUsers(user?.id);
   const { data: settings } = useSettings();
   const registerMutation = useRegisterMatch();
+
+  useEffect(() => {
+    requestIdRef.current = null;
+  }, [opponentId, selectedOutcome]);
 
   // K factor para cálculo ELO
   const kFactor = useMemo(() => {
@@ -116,15 +133,19 @@ export default function RegistrarJogoPage() {
   const handleSubmit = () => {
     if (!canSubmit || !user) return;
     setError(null);
+    const requestId = requestIdRef.current || generateRequestId();
+    requestIdRef.current = requestId;
 
     registerMutation.mutate(
       {
         playerId: user.id,
         opponentId,
         outcome: selectedOutcome,
+        requestId,
       },
       {
         onSuccess: () => {
+          requestIdRef.current = null;
           router.push("/partidas");
         },
         onError: (err) => {
@@ -252,6 +273,14 @@ export default function RegistrarJogoPage() {
           </article>
         )}
 
+        {registerMutation.isPaused && (
+          <article className="rounded-2xl border border-amber-200 bg-amber-50 p-3 shadow-sm">
+            <p className="text-sm text-amber-700">
+              Sem conexão estável. Vamos tentar enviar automaticamente assim que a internet voltar.
+            </p>
+          </article>
+        )}
+
         {/* Botão de submit */}
         <button
           disabled={!canSubmit}
@@ -265,7 +294,7 @@ export default function RegistrarJogoPage() {
           {registerMutation.isPending ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Registrando...
+              {registerMutation.isPaused ? "Aguardando conexão..." : "Registrando..."}
             </span>
           ) : (
             "Registrar partida"
