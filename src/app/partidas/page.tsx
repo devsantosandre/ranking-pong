@@ -322,27 +322,84 @@ function PendingMatchCard({
   const selected = draftOutcome[match.id] ?? `${match.resultado_a}x${match.resultado_b}`;
   const euCriei = match.criado_por === user.id;
   const opponent = match.player_a_id === user.id ? match.player_b : match.player_a;
+  const opponentName = getPlayerName(opponent);
   const euDevoAgir = match.criado_por !== user.id;
   const isThisLoading = loadingMatchId === match.id;
+  const meIsPlayerA = match.player_a_id === user.id;
+  const myScore = meIsPlayerA ? match.resultado_a : match.resultado_b;
+  const opponentScore = meIsPlayerA ? match.resultado_b : match.resultado_a;
+  const iWon = myScore > opponentScore;
+  const opponentWon = opponentScore > myScore;
+  const resultSummary = iWon
+    ? "Placar informado: você venceu"
+    : opponentWon
+      ? "Placar informado: adversário venceu"
+      : "Placar informado: empate";
+  const mobileBadgeLabel = badge.label === "Aguardando confirmação" ? "Aguardando" : badge.label;
 
   return (
     <article className="space-y-3 rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">
-          vs {getPlayerName(opponent)} • {formatDate(match.created_at)}
-        </p>
-        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${badge.className}`}>
-          {badge.label}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+        <div className="min-w-0">
+          <p
+            title={`vs ${opponentName}`}
+            className="break-words text-sm font-semibold leading-tight text-foreground"
+          >
+            vs {opponentName}
+          </p>
+          <p className="text-xs text-muted-foreground">{formatDate(match.created_at)}</p>
+        </div>
+        <span
+          className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ${badge.className}`}
+        >
+          <span className="sm:hidden">{mobileBadgeLabel}</span>
+          <span className="hidden sm:inline">{badge.label}</span>
         </span>
       </div>
 
-      <p className="text-lg font-bold text-center">
-        {match.resultado_a} x {match.resultado_b}
-      </p>
+      <div className="space-y-2 rounded-xl border border-border/70 bg-card/80 p-3">
+        <p
+          className={`text-xs font-semibold ${
+            iWon ? "text-emerald-700" : opponentWon ? "text-amber-700" : "text-foreground"
+          }`}
+        >
+          {resultSummary}
+        </p>
+
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+          <div
+            className={`rounded-lg border px-2 py-2 ${
+              iWon
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-border bg-background text-foreground"
+            }`}
+          >
+            <p className="truncate text-[11px] font-semibold text-muted-foreground">
+              Você
+            </p>
+            <p className="text-2xl font-bold leading-none tabular-nums">{myScore}</p>
+          </div>
+
+          <span className="text-lg font-semibold text-muted-foreground">x</span>
+
+          <div
+            className={`rounded-lg border px-2 py-2 text-right ${
+              opponentWon
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-border bg-background text-foreground"
+            }`}
+          >
+            <p className="truncate text-[11px] font-semibold text-muted-foreground">
+              Adversário
+            </p>
+            <p className="text-2xl font-bold leading-none tabular-nums">{opponentScore}</p>
+          </div>
+        </div>
+      </div>
 
       {euCriei && !euDevoAgir ? (
         <p className="text-xs text-muted-foreground text-center">
-          Aguardando {getPlayerName(opponent)} confirmar ou contestar.
+          Aguardando o adversário confirmar ou contestar.
         </p>
       ) : isEditing ? (
         <div className="space-y-2">
@@ -435,31 +492,76 @@ function RecentMatchCard({
   const euSouA = match.player_a_id === userId;
   const euVenci = match.vencedor_id === userId;
   const meusPoints = euSouA ? match.pontos_variacao_a : match.pontos_variacao_b;
+  const opponent = euSouA ? match.player_b : match.player_a;
+  const opponentName = getPlayerName(opponent);
+  const myScore = euSouA ? match.resultado_a : match.resultado_b;
+  const opponentScore = euSouA ? match.resultado_b : match.resultado_a;
+  const pointsLabel =
+    typeof meusPoints === "number" ? `${meusPoints > 0 ? "+" : ""}${meusPoints} pts` : null;
+  const pointsClassName =
+    typeof meusPoints === "number"
+      ? meusPoints >= 0
+        ? "text-green-600"
+        : "text-red-600"
+      : "";
+  const resultSummary = euVenci
+    ? "Você venceu esta partida"
+    : "Você perdeu esta partida";
 
   return (
     <article className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">{formatDate(match.created_at)}</p>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+        <div className="min-w-0">
+          <p
+            title={`vs ${opponentName}`}
+            className="break-words text-sm font-semibold leading-tight text-foreground"
+          >
+            vs {opponentName}
+          </p>
+          <p className="text-xs text-muted-foreground">{formatDate(match.created_at)}</p>
+        </div>
         <span
-          className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+          className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ${
             euVenci ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
           }`}
         >
           {euVenci ? "Vitória" : "Derrota"}
         </span>
       </div>
-      <p className="text-sm font-semibold text-foreground">
-        {getPlayerName(match.player_a)}{" "}
-        <span className="text-primary">
-          {match.resultado_a} x {match.resultado_b}
-        </span>{" "}
-        {getPlayerName(match.player_b)}
-      </p>
-      {meusPoints && (
-        <p className={`text-xs font-semibold ${euVenci ? "text-green-600" : "text-blue-600"}`}>
-          +{meusPoints} pts
-        </p>
-      )}
+
+      <div className="space-y-2 rounded-xl border border-border/70 bg-muted/30 p-3">
+        <p className="text-xs font-semibold text-foreground">{resultSummary}</p>
+
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+          <div
+            className={`rounded-lg border px-2 py-2 ${
+              euVenci
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-border bg-background text-foreground"
+            }`}
+          >
+            <p className="truncate text-[11px] font-semibold text-muted-foreground">Você</p>
+            <p className="text-2xl font-bold leading-none tabular-nums">{myScore}</p>
+          </div>
+
+          <span className="text-lg font-semibold text-muted-foreground">x</span>
+
+          <div
+            className={`rounded-lg border px-2 py-2 text-right ${
+              !euVenci
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-border bg-background text-foreground"
+            }`}
+          >
+            <p className="truncate text-[11px] font-semibold text-muted-foreground">
+              Adversário
+            </p>
+            <p className="text-2xl font-bold leading-none tabular-nums">{opponentScore}</p>
+          </div>
+        </div>
+      </div>
+
+      {pointsLabel ? <p className={`text-xs font-semibold ${pointsClassName}`}>{pointsLabel}</p> : null}
     </article>
   );
 }
