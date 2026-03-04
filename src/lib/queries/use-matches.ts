@@ -66,6 +66,42 @@ type MatchMetricsRealtimeRow = {
   total_validated_matches?: number | null;
 };
 
+type RankingVisibleUser = {
+  id: string;
+  name: string | null;
+  full_name: string | null;
+  email: string | null;
+  rating_atual: number | null;
+  jogos_disputados: number | null;
+};
+
+type HighlightMatchRow = {
+  player_a_id: string;
+  player_b_id: string;
+  vencedor_id: string | null;
+  created_at: string;
+};
+
+type WeeklyHighlightMatchRow = Pick<HighlightMatchRow, "player_a_id" | "player_b_id">;
+
+export type HomeStreakHighlight = {
+  userId: string;
+  userName: string;
+  streak: number;
+};
+
+export type HomeWeeklyActivityHighlight = {
+  userId: string;
+  userName: string;
+  matches: number;
+  uniqueOpponents: number;
+};
+
+export type HomeHighlights = {
+  streakLeader: HomeStreakHighlight | null;
+  weeklyActivityLeader: HomeWeeklyActivityHighlight | null;
+};
+
 const NETWORK_ERROR_PATTERNS = [
   "failed to fetch",
   "network",
@@ -78,6 +114,14 @@ function isLikelyNetworkError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   return NETWORK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
+function getDisplayName(user: {
+  full_name: string | null;
+  name: string | null;
+  email: string | null;
+}) {
+  return user.full_name || user.name || user.email?.split("@")[0] || "Jogador";
 }
 
 async function fetchMatchesWithUsers(
@@ -261,6 +305,197 @@ export function useMatchCounts(userId: string | undefined) {
       } as MatchCounts;
     },
     enabled: !!userId,
+  });
+}
+
+export function useHomeHighlights() {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: queryKeys.matches.homeHighlights(),
+    queryFn: async (): Promise<HomeHighlights> => {
+      const weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const [usersResult, validatedMatchesResult, weeklyMatchesResult] = await Promise.all([
+        supabase
+          .from("users")
+          .select("id, name, full_name, email, rating_atual, jogos_disputados")
+          .eq("is_active", true)
+          .eq("hide_from_ranking", false)
+          .gt("jogos_disputados", 0),
+        supabase
+          .from("matches")
+          .select("player_a_id, player_b_id, vencedor_id, created_at")
+          .eq("status", "validado")
+          .order("created_at", { ascending: false })
+          .limit(2000),
+        supabase
+          .from("matches")
+          .select("player_a_id, player_b_id")
+          .eq("status", "validado")
+          .gte("created_at", weekAgoIso),
+      ]);
+
+      if (usersResult.error) throw usersResult.error;
+      if (validatedMatchesResult.error) throw validatedMatchesResult.error;
+      if (weeklyMatchesResult.error) throw weeklyMatchesResult.error;
+
+      const users = (usersResult.data ?? []) as RankingVisibleUser[];
+      const validatedMatches = (validatedMatchesResult.data ?? []) as HighlightMatchRow[];
+      const weeklyMatches = (weeklyMatchesResult.data ?? []) as WeeklyHighlightMatchRow[];
+
+      if (users.length === 0) {
+        return {
+          streakLeader: null,
+          weeklyActivityLeader: null,
+        };
+      }
+
+      const usersById = new Map<string, RankingVisibleUser>(
+        users.map((user) => [user.id, user])
+      );
+      const eligibleUserIds = new Set<string>(users.map((user) => user.id));
+
+      const streakState = new Map<string, { streak: number; finished: boolean }>();
+      users.forEach((user) => {
+        streakState.set(user.id, { streak: 0, finished: false });
+      });
+
+      for (const match of validatedMatches) {
+        if (!match.vencedor_id) continue;
+
+        const participants = [
+          {
+            userId: match.player_a_id,
+            won: match.vencedor_id === match.player_a_id,
+          },
+          {
+            userId: match.player_b_id,
+            won: match.vencedor_id === match.player_b_id,
+          },
+        ];
+
+        for (const participant of participants) {
+          if (!eligibleUserIds.has(participant.userId)) continue;
+
+          const state = streakState.get(participant.userId);
+          if (!state || state.finished) continue;
+
+          if (participant.won) {
+            state.streak += 1;
+          } else {
+            state.finished = true;
+          }
+        }
+      }
+
+      let streakLeader: HomeStreakHighlight | null = null;
+
+      for (const [userId, state] of streakState.entries()) {
+        if (state.streak <= 0) continue;
+
+        const user = usersById.get(userId);
+        if (!user) continue;
+
+        if (!streakLeader) {
+          streakLeader = {
+            userId,
+            userName: getDisplayName(user),
+            streak: state.streak,
+          };
+          continue;
+        }
+
+        const leaderUser = usersById.get(streakLeader.userId);
+        const candidateRating = user.rating_atual ?? 0;
+        const leaderRating = leaderUser?.rating_atual ?? 0;
+        const candidateName = getDisplayName(user);
+        const leaderName = streakLeader.userName;
+
+        if (
+          state.streak > streakLeader.streak ||
+          (state.streak === streakLeader.streak && candidateRating > leaderRating) ||
+          (state.streak === streakLeader.streak &&
+            candidateRating === leaderRating &&
+            candidateName.localeCompare(leaderName, "pt-BR") < 0)
+        ) {
+          streakLeader = {
+            userId,
+            userName: candidateName,
+            streak: state.streak,
+          };
+        }
+      }
+
+      const weeklyState = new Map<string, { matches: number; opponents: Set<string> }>();
+
+      for (const match of weeklyMatches) {
+        const sides = [
+          { userId: match.player_a_id, opponentId: match.player_b_id },
+          { userId: match.player_b_id, opponentId: match.player_a_id },
+        ];
+
+        for (const side of sides) {
+          if (!eligibleUserIds.has(side.userId)) continue;
+
+          const current =
+            weeklyState.get(side.userId) ?? { matches: 0, opponents: new Set<string>() };
+          current.matches += 1;
+          current.opponents.add(side.opponentId);
+          weeklyState.set(side.userId, current);
+        }
+      }
+
+      let weeklyActivityLeader: HomeWeeklyActivityHighlight | null = null;
+
+      for (const [userId, state] of weeklyState.entries()) {
+        if (state.matches <= 0) continue;
+
+        const user = usersById.get(userId);
+        if (!user) continue;
+
+        const candidate = {
+          userId,
+          userName: getDisplayName(user),
+          matches: state.matches,
+          uniqueOpponents: state.opponents.size,
+        };
+
+        if (!weeklyActivityLeader) {
+          weeklyActivityLeader = candidate;
+          continue;
+        }
+
+        const leaderUser = usersById.get(weeklyActivityLeader.userId);
+        const candidateRating = user.rating_atual ?? 0;
+        const leaderRating = leaderUser?.rating_atual ?? 0;
+
+        if (
+          candidate.matches > weeklyActivityLeader.matches ||
+          (candidate.matches === weeklyActivityLeader.matches &&
+            candidate.uniqueOpponents > weeklyActivityLeader.uniqueOpponents) ||
+          (candidate.matches === weeklyActivityLeader.matches &&
+            candidate.uniqueOpponents === weeklyActivityLeader.uniqueOpponents &&
+            candidateRating > leaderRating) ||
+          (candidate.matches === weeklyActivityLeader.matches &&
+            candidate.uniqueOpponents === weeklyActivityLeader.uniqueOpponents &&
+            candidateRating === leaderRating &&
+            candidate.userName.localeCompare(weeklyActivityLeader.userName, "pt-BR") < 0)
+        ) {
+          weeklyActivityLeader = candidate;
+        }
+      }
+
+      return {
+        streakLeader,
+        weeklyActivityLeader,
+      };
+    },
+    staleTime: 1000 * 20,
+    refetchInterval: 1000 * 30,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 

@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useRanking, useMatches } from "@/lib/queries";
+import { useHomeHighlights, useRanking, useMatches } from "@/lib/queries";
 import { HomePageSkeleton, PendingMatchListSkeleton } from "@/components/skeletons";
 import Link from "next/link";
 import { useMemo } from "react";
@@ -12,6 +12,7 @@ export default function Home() {
   const { user, loading: authLoading } = useAuth();
   const { data: rankingData, isLoading: rankingLoading } = useRanking(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
+  const { data: highlightsData, isLoading: highlightsLoading } = useHomeHighlights();
 
   // Flatten paginated data
   const ranking = useMemo(() => {
@@ -21,6 +22,9 @@ export default function Home() {
   const matches = useMemo(() => {
     return matchesData?.pages.flatMap((page) => page.matches) ?? [];
   }, [matchesData]);
+
+  const streakHighlight = highlightsData?.streakLeader ?? null;
+  const weeklyActivityHighlight = highlightsData?.weeklyActivityLeader ?? null;
 
   const isLoading = authLoading || rankingLoading;
 
@@ -87,6 +91,45 @@ export default function Home() {
             </div>
           </div>
         </article>
+
+        {/* Destaques */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-sm font-semibold text-foreground">Destaques da Semana</p>
+            <p className="text-[11px] text-muted-foreground">Últimos 7 dias</p>
+          </div>
+          {highlightsLoading ? (
+            <div className="grid grid-cols-2 gap-2">
+              <article className="h-[104px] animate-pulse rounded-xl border border-orange-100 bg-orange-50/60 p-3" />
+              <article className="h-[104px] animate-pulse rounded-xl border border-sky-100 bg-sky-50/60 p-3" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <HighlightCard
+                title="Em Chamas"
+                emoji="🔥"
+                tone="fire"
+                playerName={streakHighlight?.userName ?? null}
+                metricPrimary={
+                  streakHighlight
+                    ? `${streakHighlight.streak} vitórias seguidas`
+                    : "Sem sequência ativa"
+                }
+              />
+              <HighlightCard
+                title="Mais ativo"
+                emoji="📅"
+                tone="sky"
+                playerName={weeklyActivityHighlight?.userName ?? null}
+                metricPrimary={
+                  weeklyActivityHighlight
+                    ? `${weeklyActivityHighlight.matches} partidas`
+                    : "Sem partidas na semana"
+                }
+              />
+            </div>
+          )}
+        </div>
 
         {/* Top 3 Ranking (Divisão Ouro) */}
         <div className="space-y-3">
@@ -273,5 +316,87 @@ export default function Home() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+type HighlightCardTone = "fire" | "sky";
+
+type HighlightCardProps = {
+  title: string;
+  emoji: string;
+  tone: HighlightCardTone;
+  playerName: string | null;
+  metricPrimary: string;
+};
+
+function HighlightCard({
+  title,
+  emoji,
+  tone,
+  playerName,
+  metricPrimary,
+}: HighlightCardProps) {
+  const metricMatch = metricPrimary.match(/^(\d+)\s+(.+)$/);
+  const metricValue = metricMatch ? metricMatch[1] : null;
+  const metricLabel = metricMatch ? metricMatch[2] : metricPrimary;
+
+  const toneClasses =
+    tone === "fire"
+      ? {
+          container: "border-orange-200 bg-white",
+          accentBar: "bg-orange-400",
+          chip: "bg-orange-100 text-orange-700",
+          metricCard: "border-orange-200/80 bg-orange-50/60",
+          metricValue: "text-orange-700",
+          metricLabel: "text-zinc-700",
+          player: "text-zinc-800",
+        }
+      : {
+          container: "border-sky-200 bg-white",
+          accentBar: "bg-sky-400",
+          chip: "bg-sky-100 text-sky-700",
+          metricCard: "border-sky-200/80 bg-sky-50/60",
+          metricValue: "text-sky-700",
+          metricLabel: "text-slate-700",
+          player: "text-slate-800",
+        };
+
+  return (
+    <article className={`overflow-hidden rounded-xl border shadow-sm ${toneClasses.container}`}>
+      <div className="grid grid-cols-[3px_minmax(0,1fr)]">
+        <div className={toneClasses.accentBar} />
+        <div className="space-y-1.5 p-2.5">
+          <div className="min-w-0">
+            <span
+              className={`flex w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${toneClasses.chip}`}
+            >
+              <span className="shrink-0">{emoji}</span>
+              <span className="truncate">{title}</span>
+            </span>
+          </div>
+
+          <p className={`truncate text-[11px] font-medium ${toneClasses.player}`}>
+            {playerName || "Ainda sem líder"}
+          </p>
+
+          <div className={`rounded-lg border px-2 py-1.5 text-center ${toneClasses.metricCard}`}>
+            {metricValue ? (
+              <>
+                <p className={`text-3xl font-black leading-none tabular-nums ${toneClasses.metricValue}`}>
+                  {metricValue}
+                </p>
+                <p className={`mt-0.5 text-[10px] font-medium ${toneClasses.metricLabel}`}>
+                  {metricLabel}
+                </p>
+              </>
+            ) : (
+              <p className={`text-sm font-bold leading-tight ${toneClasses.metricLabel}`}>
+                {metricPrimary}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
