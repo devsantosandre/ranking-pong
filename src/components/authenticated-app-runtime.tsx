@@ -19,8 +19,8 @@ function RealtimeRankingBridge({ userId }: { userId: string }) {
   return null;
 }
 
-function NewsPrefetchBridge() {
-  usePrefetchNews(true);
+function NewsPrefetchBridge({ userId }: { userId: string }) {
+  usePrefetchNews(true, userId);
   return null;
 }
 
@@ -35,7 +35,7 @@ export function AuthenticatedAppRuntime({
     <PushSubscriptionProvider userId={userId}>
       <RealtimePendingBridge userId={userId} />
       <RealtimeRankingBridge userId={userId} />
-      <NewsPrefetchBridge />
+      <NewsPrefetchBridge userId={userId} />
       {children}
       <NetworkStatusLayer />
       <InstallPrompt />

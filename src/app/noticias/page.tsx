@@ -1,12 +1,18 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
+import { useAuth } from "@/lib/auth-store";
 import { useNews } from "@/lib/queries";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import { NewsListSkeleton } from "@/components/skeletons";
-import { useMemo } from "react";
+import {
+  NewsReactionBarMock,
+  type NewsReactionOverlayPanel,
+} from "@/components/news/news-reaction-bar-mock";
+import { useMemo, useState } from "react";
 
 export default function NoticiasPage() {
+  const { user, loading: authLoading } = useAuth();
   const {
     data,
     isLoading,
@@ -14,12 +20,16 @@ export default function NoticiasPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useNews();
+  } = useNews(user?.id, !authLoading);
 
   // Flatten paginated data
   const news = useMemo(() => {
     return data?.pages.flatMap((page) => page.news) ?? [];
   }, [data]);
+  const [openReactionOverlay, setOpenReactionOverlay] = useState<{
+    matchId: string;
+    panel: NewsReactionOverlayPanel;
+  } | null>(null);
 
   const formatTimeAgo = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -37,7 +47,7 @@ export default function NoticiasPage() {
     return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   };
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <AppShell
         title="Notícias"
@@ -118,6 +128,24 @@ export default function NoticiasPage() {
                     <p className="text-sm font-semibold text-red-500">-{Math.abs(item.pointsLoser)} pts</p>
                   </div>
                 </div>
+
+                <NewsReactionBarMock
+                  matchId={item.id}
+                  userId={user?.id}
+                  reactionCounts={item.reactionCounts}
+                  reactionsTotal={item.reactionsTotal}
+                  myReaction={item.myReaction}
+                  openPanel={
+                    openReactionOverlay?.matchId === item.id
+                      ? openReactionOverlay.panel
+                      : null
+                  }
+                  onOpenPanelChange={(panel) =>
+                    setOpenReactionOverlay(
+                      panel ? { matchId: item.id, panel } : null
+                    )
+                  }
+                />
               </article>
             ))}
 

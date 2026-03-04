@@ -35,6 +35,9 @@ export const queryKeys = {
   // News
   news: {
     all: ["news"] as const,
+    feed: (userId?: string) => [...queryKeys.news.all, "feed", userId] as const,
+    reactionPeople: (matchId: string) =>
+      [...queryKeys.news.all, "reaction-people", matchId] as const,
   },
 
   // Ranking search
@@ -61,5 +64,3 @@ export const queryKeys = {
       ["achievements", "pending-toasts", userId] as const,
   },
 };
-
-

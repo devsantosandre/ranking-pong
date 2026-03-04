@@ -30,13 +30,14 @@ function scheduleIdleTask(task: () => void) {
   return () => window.clearTimeout(handle);
 }
 
-export function usePrefetchNews(enabled: boolean) {
+export function usePrefetchNews(enabled: boolean, userId?: string) {
   const queryClient = useQueryClient();
   const supabase = useMemo(() => createClient(), []);
   const prefetchedRef = useRef(false);
+  const isEnabled = enabled && !!userId;
 
   useEffect(() => {
-    if (!enabled) {
+    if (!isEnabled) {
       prefetchedRef.current = false;
       return;
     }
@@ -49,8 +50,8 @@ export function usePrefetchNews(enabled: boolean) {
 
     const cancelIdleSchedule = scheduleIdleTask(() => {
       void queryClient.prefetchInfiniteQuery({
-        queryKey: queryKeys.news.all,
-        queryFn: ({ pageParam = 0 }) => fetchNewsPage(supabase, pageParam),
+        queryKey: queryKeys.news.feed(userId),
+        queryFn: ({ pageParam = 0 }) => fetchNewsPage(supabase, pageParam, userId),
         getNextPageParam: (lastPage: NewsPage) => lastPage.nextPage,
         initialPageParam: 0,
         staleTime: NEWS_STALE_TIME_MS,
@@ -61,5 +62,5 @@ export function usePrefetchNews(enabled: boolean) {
     return () => {
       cancelIdleSchedule();
     };
-  }, [enabled, queryClient, supabase]);
+  }, [isEnabled, queryClient, supabase, userId]);
 }

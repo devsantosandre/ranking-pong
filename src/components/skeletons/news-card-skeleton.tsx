@@ -22,6 +22,8 @@ export function NewsCardSkeleton() {
       </div>
       {/* Points bar */}
       <Skeleton className="h-10 w-full rounded-xl" />
+      {/* Reactions mock bar */}
+      <Skeleton className="h-10 w-full rounded-xl" />
     </article>
   );
 }
