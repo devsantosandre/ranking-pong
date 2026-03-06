@@ -20,7 +20,7 @@ export const queryKeys = {
     homeHighlights: () => [...queryKeys.matches.all, "home-highlights"] as const,
     detail: (id: string) => [...queryKeys.matches.all, "detail", id] as const,
     playerValidated: (playerId?: string) =>
-      [...queryKeys.matches.all, "player-validated", playerId] as const,
+      [...queryKeys.matches.all, "player-validated-v2", playerId] as const,
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
       [...queryKeys.matches.all, "pending-actions", userId] as const,
