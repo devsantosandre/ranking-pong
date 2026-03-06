@@ -45,8 +45,28 @@ export type MatchWithUsers = MatchData & {
   player_b: UserInfo;
 };
 
+export type PlayerValidatedMatch = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  vencedor_id: string | null;
+  resultado_a: number;
+  resultado_b: number;
+  created_at: string;
+  pontos_variacao_a: number | null;
+  pontos_variacao_b: number | null;
+  player_a: UserInfo;
+  player_b: UserInfo;
+};
+
 type MatchesPage = {
   matches: MatchWithUsers[];
+  nextPage: number | undefined;
+};
+
+type PlayerValidatedMatchesPage = {
+  matches: PlayerValidatedMatch[];
+  totalCount: number;
   nextPage: number | undefined;
 };
 
@@ -64,6 +84,29 @@ export type HeadToHeadStats = {
 
 type MatchMetricsRealtimeRow = {
   total_validated_matches?: number | null;
+};
+
+type UserRelation = UserInfo | UserInfo[] | null;
+
+type PlayerValidatedMatchRow = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  vencedor_id: string | null;
+  resultado_a: number;
+  resultado_b: number;
+  created_at: string;
+  pontos_variacao_a: number | null;
+  pontos_variacao_b: number | null;
+  player_a: UserRelation;
+  player_b: UserRelation;
+};
+
+type HeadToHeadStatsRpcRow = {
+  wins: number | string | null;
+  losses: number | string | null;
+  total: number | string | null;
+  win_rate: number | string | null;
 };
 
 type RankingVisibleUser = {
@@ -122,6 +165,26 @@ function getDisplayName(user: {
   email: string | null;
 }) {
   return user.full_name || user.name || user.email?.split("@")[0] || "Jogador";
+}
+
+function normalizeRelationUser(user: UserRelation, fallbackId: string): UserInfo {
+  const normalized = Array.isArray(user) ? (user[0] ?? null) : user;
+
+  if (!normalized) {
+    return {
+      id: fallbackId,
+      name: null,
+      full_name: null,
+      email: null,
+    };
+  }
+
+  return {
+    id: normalized.id || fallbackId,
+    name: normalized.name ?? null,
+    full_name: normalized.full_name ?? null,
+    email: normalized.email ?? null,
+  };
 }
 
 async function fetchMatchesWithUsers(
@@ -268,6 +331,79 @@ export function useRecentMatches(userId: string | undefined) {
     getNextPageParam: (lastPage) => lastPage.nextPage,
     initialPageParam: 0,
     enabled: !!userId,
+  });
+}
+
+export function usePlayerValidatedMatches(playerId: string | undefined) {
+  const supabase = createClient();
+
+  return useInfiniteQuery({
+    queryKey: queryKeys.matches.playerValidated(playerId),
+    queryFn: async ({ pageParam = 0 }) => {
+      if (!playerId) {
+        return {
+          matches: [] as PlayerValidatedMatch[],
+          totalCount: 0,
+          nextPage: undefined,
+        } as PlayerValidatedMatchesPage;
+      }
+
+      const from = pageParam * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data: matchesData, error: matchesError, count } = await supabase
+        .from("matches")
+        .select(
+          `
+          id,
+          player_a_id,
+          player_b_id,
+          vencedor_id,
+          resultado_a,
+          resultado_b,
+          created_at,
+          pontos_variacao_a,
+          pontos_variacao_b,
+          player_a:users!player_a_id(id, name, full_name, email),
+          player_b:users!player_b_id(id, name, full_name, email)
+          `,
+          { count: "exact" }
+        )
+        .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+        .eq("status", "validado")
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (matchesError) throw matchesError;
+
+      const rows = (matchesData ?? []) as PlayerValidatedMatchRow[];
+      const matches = rows.map((match) => ({
+        id: match.id,
+        player_a_id: match.player_a_id,
+        player_b_id: match.player_b_id,
+        vencedor_id: match.vencedor_id,
+        resultado_a: match.resultado_a,
+        resultado_b: match.resultado_b,
+        created_at: match.created_at,
+        pontos_variacao_a: match.pontos_variacao_a,
+        pontos_variacao_b: match.pontos_variacao_b,
+        player_a: normalizeRelationUser(match.player_a, match.player_a_id),
+        player_b: normalizeRelationUser(match.player_b, match.player_b_id),
+      })) as PlayerValidatedMatch[];
+
+      const resolvedTotalCount = typeof count === "number" ? count : rows.length;
+      const nextPage = to + 1 < resolvedTotalCount ? pageParam + 1 : undefined;
+
+      return {
+        matches,
+        totalCount: resolvedTotalCount,
+        nextPage,
+      } as PlayerValidatedMatchesPage;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    initialPageParam: 0,
+    enabled: !!playerId,
+    staleTime: 1000 * 60,
   });
 }
 
@@ -577,28 +713,25 @@ export function useHeadToHeadStats(
         return { wins: 0, losses: 0, total: 0, winRate: 0 };
       }
 
-      const pairFilter =
-        `and(player_a_id.eq.${userId},player_b_id.eq.${opponentId}),` +
-        `and(player_a_id.eq.${opponentId},player_b_id.eq.${userId})`;
-
       const { data, error } = await supabase
-        .from("matches")
-        .select("id, vencedor_id")
-        .eq("status", "validado")
-        .or(pairFilter);
+        .rpc("get_head_to_head_stats_v1", {
+          p_user_id: userId,
+          p_opponent_id: opponentId,
+        });
 
       if (error) throw error;
 
-      const rows = (data ?? []) as Array<{ id: string; vencedor_id: string | null }>;
-      const wins = rows.filter((match) => match.vencedor_id === userId).length;
-      const losses = rows.filter((match) => match.vencedor_id === opponentId).length;
-      const total = rows.length;
+      const row = (Array.isArray(data) ? (data[0] ?? null) : data) as HeadToHeadStatsRpcRow | null;
+      const wins = Number(row?.wins ?? 0);
+      const losses = Number(row?.losses ?? 0);
+      const total = Number(row?.total ?? 0);
+      const winRate = Number(row?.win_rate ?? 0);
 
       return {
-        wins,
-        losses,
-        total,
-        winRate: total > 0 ? Math.round((wins / total) * 100) : 0,
+        wins: Number.isFinite(wins) ? wins : 0,
+        losses: Number.isFinite(losses) ? losses : 0,
+        total: Number.isFinite(total) ? total : 0,
+        winRate: Number.isFinite(winRate) ? winRate : 0,
       };
     },
     enabled: Boolean(userId && opponentId),

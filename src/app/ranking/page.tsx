@@ -2,10 +2,17 @@
 
 import { AppShell } from "@/components/app-shell";
 import { ChevronRight, Search, X } from "lucide-react";
-import { useState, useMemo, useCallback } from "react";
-import { useHeadToHeadStats, useRankingAll, useTotalValidatedMatches } from "@/lib/queries";
+import { memo, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import {
+  useHeadToHeadStats,
+  usePlayerValidatedMatches,
+  useRankingAll,
+  useTotalValidatedMatches,
+  type PlayerValidatedMatch,
+} from "@/lib/queries";
 import { PlayerListSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth-store";
+import { LoadMoreButton } from "@/components/ui/load-more-button";
 import {
   Sheet,
   SheetContent,
@@ -21,10 +28,30 @@ import {
   isTopThree,
 } from "@/lib/divisions";
 
+function getDisplayName(user: {
+  full_name: string | null;
+  name: string | null;
+  email: string | null;
+}) {
+  return user.full_name || user.name || user.email?.split("@")[0] || "Jogador";
+}
+
+function formatSheetDate(dateStr: string) {
+  const date = new Date(dateStr);
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function RankingPage() {
   const { user } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const sheetScrollRef = useRef<HTMLDivElement | null>(null);
+  const historySentinelRef = useRef<HTMLDivElement | null>(null);
   const normalizedSearch = searchInput.trim().toLowerCase();
   const isSearching = normalizedSearch.length >= 2;
 
@@ -69,6 +96,53 @@ export default function RankingPage() {
     user?.id,
     selectedPlayer && selectedPlayer.id !== user?.id ? selectedPlayer.id : undefined
   );
+  const {
+    data: selectedPlayerMatchesData,
+    isLoading: selectedPlayerMatchesLoading,
+    error: selectedPlayerMatchesError,
+    fetchNextPage: fetchNextPlayerMatchesPage,
+    hasNextPage: hasNextPlayerMatchesPage,
+    isFetchingNextPage: isFetchingNextPlayerMatchesPage,
+  } = usePlayerValidatedMatches(selectedPlayer?.id);
+  const selectedPlayerMatches = useMemo(() => {
+    return selectedPlayerMatchesData?.pages.flatMap((page) => page.matches) ?? [];
+  }, [selectedPlayerMatchesData]);
+  const selectedPlayerMatchesTotal = useMemo(() => {
+    return selectedPlayerMatchesData?.pages[0]?.totalCount ?? selectedPlayerMatches.length;
+  }, [selectedPlayerMatches.length, selectedPlayerMatchesData]);
+
+  useEffect(() => {
+    if (!selectedPlayerId || !hasNextPlayerMatchesPage || isFetchingNextPlayerMatchesPage) {
+      return;
+    }
+
+    const root = sheetScrollRef.current;
+    const sentinel = historySentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const firstEntry = entries[0];
+        if (!firstEntry?.isIntersecting) return;
+        if (isFetchingNextPlayerMatchesPage || !hasNextPlayerMatchesPage) return;
+        void fetchNextPlayerMatchesPage();
+      },
+      {
+        root,
+        rootMargin: "180px 0px",
+        threshold: 0.01,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    fetchNextPlayerMatchesPage,
+    hasNextPlayerMatchesPage,
+    isFetchingNextPlayerMatchesPage,
+    selectedPlayerId,
+    selectedPlayerMatches.length,
+  ]);
 
   // Handler para input
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -266,16 +340,19 @@ export default function RankingPage() {
       >
         <SheetContent
           side="bottom"
-          className="right-auto bottom-2 left-1/2 max-h-[85vh] w-[calc(100%-0.75rem)] max-w-2xl -translate-x-1/2 gap-0 overflow-hidden rounded-2xl border border-border bg-card p-0 shadow-2xl"
+          className="right-auto bottom-2 left-1/2 flex max-h-[85vh] w-[calc(100%-0.75rem)] max-w-2xl -translate-x-1/2 flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-card p-0 shadow-2xl"
         >
           <SheetHeader className="space-y-2 border-b border-border px-4 pb-4 pt-4 pr-14 sm:px-5">
             <SheetTitle>H2H</SheetTitle>
             <SheetDescription>
-              Seu histórico de confrontos validados
+              Seu H2H e histórico do jogador selecionado
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-3 px-4 pb-6 pt-4 sm:space-y-4 sm:px-5">
+          <div
+            ref={sheetScrollRef}
+            className="flex-1 space-y-3 overflow-y-auto px-4 pb-6 pt-4 sm:space-y-4 sm:px-5"
+          >
             {selectedPlayer && user && selectedPlayer.id !== user.id && (
               <article className="rounded-xl border border-primary/25 bg-primary/5 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">
@@ -361,12 +438,162 @@ export default function RankingPage() {
                 Vocês ainda não têm partidas validadas entre si.
               </p>
             )}
+
+            {selectedPlayer && (
+              <section className="space-y-3 rounded-2xl border border-border bg-card p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Todas as partidas de {selectedPlayer.displayName}
+                  </h3>
+                  {!selectedPlayerMatchesLoading && !selectedPlayerMatchesError && (
+                    <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                      {selectedPlayerMatchesTotal.toLocaleString("pt-BR")} jogos
+                    </span>
+                  )}
+                </div>
+
+                {selectedPlayerMatchesLoading ? (
+                  <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    Carregando partidas...
+                  </p>
+                ) : selectedPlayerMatchesError ? (
+                  <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                    Erro ao carregar partidas do jogador.
+                  </p>
+                ) : selectedPlayerMatches.length > 0 ? (
+                  <>
+                    <div className="space-y-2">
+                      {selectedPlayerMatches.map((match) => (
+                        <PlayerMatchHistoryCard
+                          key={match.id}
+                          match={match}
+                          playerId={selectedPlayer.id}
+                          loggedUserId={user?.id}
+                        />
+                      ))}
+                    </div>
+
+                    <div ref={historySentinelRef} className="h-1 w-full" />
+
+                    {isFetchingNextPlayerMatchesPage && (
+                      <p className="rounded-xl border border-border bg-muted/40 p-3 text-center text-xs font-medium text-muted-foreground">
+                        Carregando mais partidas...
+                      </p>
+                    )}
+
+                    <LoadMoreButton
+                      onClick={() => fetchNextPlayerMatchesPage()}
+                      isLoading={isFetchingNextPlayerMatchesPage}
+                      hasMore={Boolean(hasNextPlayerMatchesPage)}
+                      className="py-1"
+                    />
+                  </>
+                ) : (
+                  <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    Nenhuma partida validada encontrada para este jogador.
+                  </p>
+                )}
+              </section>
+            )}
           </div>
         </SheetContent>
       </Sheet>
     </AppShell>
   );
 }
+
+const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
+  match,
+  playerId,
+  loggedUserId,
+}: {
+  match: PlayerValidatedMatch;
+  playerId: string;
+  loggedUserId?: string;
+}) {
+  const playerIsA = match.player_a_id === playerId;
+  const opponent = playerIsA ? match.player_b : match.player_a;
+  const opponentName = getDisplayName(opponent);
+  const isAgainstLoggedUser = Boolean(loggedUserId && opponent.id === loggedUserId);
+  const playerScore = playerIsA ? match.resultado_a : match.resultado_b;
+  const opponentScore = playerIsA ? match.resultado_b : match.resultado_a;
+  const playerPoints = playerIsA ? match.pontos_variacao_a : match.pontos_variacao_b;
+  const playerWon = match.vencedor_id === playerId;
+  const playerLost = Boolean(match.vencedor_id && match.vencedor_id !== playerId);
+  const resultLabel = playerWon ? "Vitória" : playerLost ? "Derrota" : "Sem vencedor";
+  const resultClassName = playerWon
+    ? "bg-emerald-100 text-emerald-700"
+    : playerLost
+      ? "bg-red-100 text-red-600"
+      : "bg-muted text-muted-foreground";
+  const pointsLabel =
+    typeof playerPoints === "number" ? `${playerPoints > 0 ? "+" : ""}${playerPoints} pts` : null;
+  const pointsClassName =
+    typeof playerPoints === "number"
+      ? playerPoints >= 0
+        ? "text-emerald-600"
+        : "text-red-600"
+      : "text-muted-foreground";
+
+  return (
+    <article
+      className={`space-y-2 rounded-xl border p-3 ${
+        isAgainstLoggedUser
+          ? "border-primary/40 bg-primary/10 shadow-sm shadow-primary/10"
+          : "border-border bg-muted/40"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-foreground">vs {opponentName}</p>
+          <p className="text-xs text-muted-foreground">{formatSheetDate(match.created_at)}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isAgainstLoggedUser && (
+            <span className="whitespace-nowrap rounded-full border border-primary/20 bg-primary/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              Você
+            </span>
+          )}
+          <span
+            className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${resultClassName}`}
+          >
+            {resultLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5">
+        <div
+          className={`rounded-md border px-2 py-2 ${
+            playerWon
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-border bg-background text-foreground"
+          }`}
+        >
+          <p className="text-[11px] font-semibold text-muted-foreground">Jogador</p>
+          <p className="text-xl font-bold leading-none tabular-nums">{playerScore}</p>
+        </div>
+
+        <span className="text-lg font-semibold text-muted-foreground">x</span>
+
+        <div
+          className={`rounded-md border px-2 py-2 text-right ${
+            playerLost
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-border bg-background text-foreground"
+          }`}
+        >
+          <p className="text-[11px] font-semibold text-muted-foreground">Adversário</p>
+          <p className="text-xl font-bold leading-none tabular-nums">{opponentScore}</p>
+        </div>
+      </div>
+
+      {pointsLabel ? (
+        <p className={`text-xs font-semibold ${pointsClassName}`}>{pointsLabel}</p>
+      ) : null}
+    </article>
+  );
+});
 
 // Componente do input de busca
 function SearchInput({
