@@ -79,6 +79,122 @@ export type AdminUpdateUserNameResult = {
   updatedName: string;
 };
 
+export type AdminAnalyticsSummary = {
+  registrations: number;
+  registrationsDelta: number;
+  validated: number;
+  validationRate: number;
+  activePlayers: number;
+  activePlayersDelta: number;
+  activeAccounts: number;
+  participationRate: number;
+  averagePerDay: number;
+  daysWithoutMatches: number;
+  newUsers: number;
+  newUsersDelta: number;
+  openPending: number;
+  adminActions: number;
+};
+
+export type AdminAnalyticsWeekday = {
+  key: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+  label: string;
+  shortLabel: string;
+  registrations: number;
+  validated: number;
+  pending: number;
+  edited: number;
+  canceled: number;
+  uniquePlayers: number;
+};
+
+export type AdminAnalyticsDay = {
+  date: string;
+  label: string;
+  weekday: string;
+  registrations: number;
+  validated: number;
+  pending: number;
+  edited: number;
+  canceled: number;
+  uniquePlayers: number;
+};
+
+export type AdminAnalyticsTrendPoint = {
+  month: string;
+  label: string;
+  registrations: number;
+  validated: number;
+  activePlayers: number;
+  newUsers: number;
+};
+
+export type AdminAnalyticsPlayer = {
+  userId: string;
+  userName: string;
+  registrations: number;
+  validated: number;
+  wins: number;
+  uniqueOpponents: number;
+};
+
+export type AdminAnalyticsRivalry = {
+  id: string;
+  playersLabel: string;
+  registrations: number;
+  validated: number;
+};
+
+export type AdminAnalyticsPendingMatch = {
+  id: string;
+  status: "pendente" | "edited";
+  playersLabel: string;
+  scoreLabel: string;
+  waitingForUserId: string | null;
+  waitingForUserName: string;
+  lastActorUserId: string | null;
+  lastActorUserName: string;
+  createdAt: string;
+  matchDate: string;
+  ageHours: number;
+  isStale: boolean;
+};
+
+export type AdminPendingMatchesResponse = {
+  openCount: number;
+  staleCount: number;
+  pendingCount: number;
+  editedCount: number;
+  items: AdminAnalyticsPendingMatch[];
+};
+
+export type AdminAnalyticsStatus = {
+  key: "pendente" | "edited" | "validado" | "cancelado";
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+export type AdminAnalyticsResponse = {
+  selectedMonth: string;
+  selectedMonthLabel: string;
+  previousMonthLabel: string;
+  firstAvailableMonth: string;
+  firstAvailableMonthLabel: string;
+  isFirstAvailableMonth: boolean;
+  isCurrentMonth: boolean;
+  last7DaysRangeLabel: string;
+  summary: AdminAnalyticsSummary;
+  weekdayStats: AdminAnalyticsWeekday[];
+  dayStats: AdminAnalyticsDay[];
+  trend: AdminAnalyticsTrendPoint[];
+  topPlayersMonth: AdminAnalyticsPlayer[];
+  topPlayersLast7Days: AdminAnalyticsPlayer[];
+  topRivalries: AdminAnalyticsRivalry[];
+  statusBreakdown: AdminAnalyticsStatus[];
+  insights: string[];
+};
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -86,12 +202,362 @@ export type AdminUpdateUserNameResult = {
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
 type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
+const WEEKDAY_METADATA = [
+  { day: 1, key: "mon", label: "Segunda-feira", shortLabel: "Seg" },
+  { day: 2, key: "tue", label: "Terca-feira", shortLabel: "Ter" },
+  { day: 3, key: "wed", label: "Quarta-feira", shortLabel: "Qua" },
+  { day: 4, key: "thu", label: "Quinta-feira", shortLabel: "Qui" },
+  { day: 5, key: "fri", label: "Sexta-feira", shortLabel: "Sex" },
+  { day: 6, key: "sat", label: "Sabado", shortLabel: "Sab" },
+  { day: 0, key: "sun", label: "Domingo", shortLabel: "Dom" },
+] as const;
+
+type AnalyticsMatchRow = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  vencedor_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string | null;
+  data_partida: string;
+};
+
+type AnalyticsUserRow = {
+  id: string;
+  name: string | null;
+  full_name: string | null;
+  email: string | null;
+  created_at: string | null;
+  is_active: boolean | null;
+};
+
+type AnalyticsLogRow = {
+  id: string;
+  created_at: string | null;
+};
+
+type AnalyticsFirstMatchRow = {
+  data_partida: string;
+};
+
+type AnalyticsRelationUser = {
+  id?: string | null;
+  name?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+};
+
+type AnalyticsUserRelation = AnalyticsRelationUser | AnalyticsRelationUser[] | null;
+
+type AnalyticsPendingMatchRow = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  criado_por: string | null;
+  resultado_a: number | null;
+  resultado_b: number | null;
+  status: "pendente" | "edited";
+  created_at: string;
+  data_partida: string;
+  player_a: AnalyticsUserRelation;
+  player_b: AnalyticsUserRelation;
+  creator: AnalyticsUserRelation;
+};
 
 function validatePage(page: number): number {
   if (typeof page !== "number" || isNaN(page)) return 0;
   if (page < 0) return 0;
   if (page > MAX_PAGE) return MAX_PAGE;
   return Math.floor(page);
+}
+
+function padTwoDigits(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function normalizeMonthInput(month?: string): string {
+  const fallback = getDateInTimezone(new Date(), BUSINESS_TIMEZONE).slice(0, 7);
+
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return fallback;
+  }
+
+  const [year, monthNumber] = month.split("-").map(Number);
+
+  if (!year || monthNumber < 1 || monthNumber > 12) {
+    return fallback;
+  }
+
+  return `${year}-${padTwoDigits(monthNumber)}`;
+}
+
+function shiftMonth(month: string, offset: number): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shiftedDate = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+  return `${shiftedDate.getUTCFullYear()}-${padTwoDigits(shiftedDate.getUTCMonth() + 1)}`;
+}
+
+function getMonthRange(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+
+  return {
+    startDate: `${month}-01`,
+    endDate: `${month}-${padTwoDigits(lastDay)}`,
+  };
+}
+
+function getMonthsBetween(startMonth: string, endMonth: string): string[] {
+  const months: string[] = [];
+  let cursor = startMonth;
+
+  while (cursor <= endMonth) {
+    months.push(cursor);
+    cursor = shiftMonth(cursor, 1);
+  }
+
+  return months;
+}
+
+function getEarlierMonth(left: string, right: string): string {
+  return left <= right ? left : right;
+}
+
+function getLaterMonth(left: string, right: string): string {
+  return left >= right ? left : right;
+}
+
+function formatMonthLabel(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const referenceDate = new Date(Date.UTC(year, monthNumber - 1, 1));
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(referenceDate);
+}
+
+function getMonthKeyFromTimestamp(dateInput: string | null): string | null {
+  if (!dateInput) return null;
+  return getDateInTimezone(dateInput, BUSINESS_TIMEZONE).slice(0, 7);
+}
+
+function getTodayDateKey(): string {
+  return getDateInTimezone(new Date(), BUSINESS_TIMEZONE);
+}
+
+function getUtcWeekday(dateKey: string): number {
+  const [year, monthNumber, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay();
+}
+
+function getDaysInMonth(month: string): string[] {
+  const { endDate } = getMonthRange(month);
+  const todayDateKey = getTodayDateKey();
+  const currentMonthKey = todayDateKey.slice(0, 7);
+  const totalDays =
+    month === currentMonthKey
+      ? Number(todayDateKey.slice(-2))
+      : Number(endDate.slice(-2));
+  const dates: string[] = [];
+
+  for (let day = 1; day <= totalDays; day += 1) {
+    dates.push(`${month}-${padTwoDigits(day)}`);
+  }
+
+  return dates;
+}
+
+function formatDayLabel(dateKey: string): string {
+  const [year, monthNumber, day] = dateKey.split("-").map(Number);
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, monthNumber - 1, day)));
+}
+
+function formatDateRangeLabel(startDate: string, endDate: string): string {
+  if (!startDate || !endDate) {
+    return "";
+  }
+
+  if (startDate === endDate) {
+    return formatDayLabel(startDate);
+  }
+
+  return `${formatDayLabel(startDate)} a ${formatDayLabel(endDate)}`;
+}
+
+function getUserDisplayName(user: Pick<AnalyticsUserRow, "full_name" | "name" | "email">) {
+  return user.full_name || user.name || user.email?.split("@")[0] || "Jogador";
+}
+
+function normalizeAnalyticsUserRelation(
+  user: AnalyticsUserRelation,
+  fallbackId: string | null
+) {
+  const normalized = Array.isArray(user) ? (user[0] ?? null) : user;
+
+  return {
+    id: normalized?.id ?? fallbackId,
+    name: normalized?.name ?? null,
+    full_name: normalized?.full_name ?? null,
+    email: normalized?.email ?? null,
+  };
+}
+
+function getPendingResponsibleUserId(match: {
+  player_a_id: string;
+  player_b_id: string;
+  criado_por: string | null;
+}) {
+  if (match.criado_por === match.player_a_id) {
+    return match.player_b_id;
+  }
+
+  if (match.criado_por === match.player_b_id) {
+    return match.player_a_id;
+  }
+
+  return null;
+}
+
+function getHoursSince(dateInput: string): number {
+  return Math.max(
+    0,
+    Math.floor((Date.now() - new Date(dateInput).getTime()) / (1000 * 60 * 60))
+  );
+}
+
+function buildAnalyticsTopPlayers(
+  matches: AnalyticsMatchRow[],
+  userNames: Map<string, string>
+): AdminAnalyticsPlayer[] {
+  const playerAccumulator = new Map<
+    string,
+    {
+      registrations: number;
+      validated: number;
+      wins: number;
+      opponents: Set<string>;
+    }
+  >();
+
+  for (const match of matches) {
+    const playerAEntry = playerAccumulator.get(match.player_a_id) ?? {
+      registrations: 0,
+      validated: 0,
+      wins: 0,
+      opponents: new Set<string>(),
+    };
+    const playerBEntry = playerAccumulator.get(match.player_b_id) ?? {
+      registrations: 0,
+      validated: 0,
+      wins: 0,
+      opponents: new Set<string>(),
+    };
+
+    playerAEntry.registrations += 1;
+    playerBEntry.registrations += 1;
+    playerAEntry.opponents.add(match.player_b_id);
+    playerBEntry.opponents.add(match.player_a_id);
+
+    if (match.status === "validado") {
+      playerAEntry.validated += 1;
+      playerBEntry.validated += 1;
+    }
+
+    if (match.vencedor_id === match.player_a_id) {
+      playerAEntry.wins += 1;
+    }
+
+    if (match.vencedor_id === match.player_b_id) {
+      playerBEntry.wins += 1;
+    }
+
+    playerAccumulator.set(match.player_a_id, playerAEntry);
+    playerAccumulator.set(match.player_b_id, playerBEntry);
+  }
+
+  return Array.from(playerAccumulator.entries())
+    .map(([userId, entry]) => ({
+      userId,
+      userName: userNames.get(userId) || "Jogador",
+      registrations: entry.registrations,
+      validated: entry.validated,
+      wins: entry.wins,
+      uniqueOpponents: entry.opponents.size,
+    }))
+    .sort((left, right) => {
+      if (right.registrations !== left.registrations) {
+        return right.registrations - left.registrations;
+      }
+
+      if (right.validated !== left.validated) {
+        return right.validated - left.validated;
+      }
+
+      if (right.wins !== left.wins) {
+        return right.wins - left.wins;
+      }
+
+      return left.userName.localeCompare(right.userName, "pt-BR");
+    })
+    .slice(0, 5);
+}
+
+function mapPendingMatchRows(
+  rows: AnalyticsPendingMatchRow[]
+): AdminAnalyticsPendingMatch[] {
+  return rows
+    .map((match) => {
+      const playerA = normalizeAnalyticsUserRelation(match.player_a, match.player_a_id);
+      const playerB = normalizeAnalyticsUserRelation(match.player_b, match.player_b_id);
+      const creator = normalizeAnalyticsUserRelation(match.creator, match.criado_por);
+      const waitingForUserId = getPendingResponsibleUserId(match);
+      const waitingForUserName =
+        waitingForUserId === match.player_a_id
+          ? getUserDisplayName(playerA)
+          : waitingForUserId === match.player_b_id
+            ? getUserDisplayName(playerB)
+            : "Responsavel indefinido";
+      const ageHours = getHoursSince(match.created_at);
+
+      return {
+        id: match.id,
+        status: match.status,
+        playersLabel: `${getUserDisplayName(playerA)} x ${getUserDisplayName(playerB)}`,
+        scoreLabel: `${match.resultado_a ?? 0}x${match.resultado_b ?? 0}`,
+        waitingForUserId,
+        waitingForUserName,
+        lastActorUserId: creator.id ?? match.criado_por,
+        lastActorUserName: getUserDisplayName(creator),
+        createdAt: match.created_at,
+        matchDate: match.data_partida,
+        ageHours,
+        isStale: ageHours >= 24,
+      };
+    })
+    .sort((left, right) => {
+      if (left.isStale !== right.isStale) {
+        return Number(right.isStale) - Number(left.isStale);
+      }
+
+      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    });
+}
+
+function roundToOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function getPercentage(count: number, total: number): number {
+  if (total <= 0) return 0;
+  return roundToOneDecimal((count / total) * 100);
 }
 
 async function createAdminLog(params: {
@@ -1215,5 +1681,510 @@ export async function adminGetLogs(page = 0) {
   return {
     logs: data as AdminLog[],
     hasMore: data && data.length === PAGE_SIZE,
+  };
+}
+
+export async function adminGetAnalytics(
+  month?: string
+): Promise<AdminAnalyticsResponse> {
+  await requireModerator();
+
+  const supabase = createAdminClient();
+  const requestedMonth = normalizeMonthInput(month);
+  const todayMonth = getTodayDateKey().slice(0, 7);
+
+  const [firstMatchResponse, firstUserResponse] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("data_partida")
+      .order("data_partida", { ascending: true })
+      .limit(1),
+    supabase
+      .from("users")
+      .select("created_at")
+      .order("created_at", { ascending: true })
+      .limit(1),
+  ]);
+
+  if (firstMatchResponse.error || firstUserResponse.error) {
+    throw new Error("Erro ao definir inicio do historico");
+  }
+
+  const firstMatchMonth = (firstMatchResponse.data?.[0] as AnalyticsFirstMatchRow | undefined)
+    ?.data_partida?.slice(0, 7);
+  const firstUserMonth = getMonthKeyFromTimestamp(
+    (firstUserResponse.data?.[0] as AnalyticsUserRow | undefined)?.created_at ?? null
+  );
+  const firstAvailableMonth = [firstMatchMonth, firstUserMonth]
+    .filter((value): value is string => !!value)
+    .reduce((earliest, value) => getEarlierMonth(earliest, value), requestedMonth);
+
+  const selectedMonth = getLaterMonth(requestedMonth, firstAvailableMonth);
+  const previousMonth = shiftMonth(selectedMonth, -1);
+  const isCurrentMonth = selectedMonth === todayMonth;
+  const isFirstAvailableMonth = selectedMonth === firstAvailableMonth;
+  const trendStartMonth = getLaterMonth(shiftMonth(selectedMonth, -5), firstAvailableMonth);
+  const trendMonths = getMonthsBetween(trendStartMonth, selectedMonth);
+  const selectedRange = getMonthRange(selectedMonth);
+  const trendStart = getMonthRange(trendMonths[0]).startDate;
+  const monthDays = getDaysInMonth(selectedMonth);
+
+  const [
+    matchesResponse,
+    usersResponse,
+    logsResponse,
+    openPendingResponse,
+  ] = await Promise.all([
+    supabase
+      .from("matches")
+      .select(
+        "id, player_a_id, player_b_id, vencedor_id, status, created_at, updated_at, data_partida"
+      )
+      .gte("data_partida", trendStart)
+      .lte("data_partida", selectedRange.endDate),
+    supabase.from("users").select("id, name, full_name, email, created_at, is_active"),
+    supabase.from("admin_logs").select("id, created_at"),
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pendente", "edited"]),
+  ]);
+
+  if (matchesResponse.error) {
+    throw new Error("Erro ao buscar metricas de partidas");
+  }
+
+  if (usersResponse.error) {
+    throw new Error("Erro ao buscar metricas de usuarios");
+  }
+
+  if (logsResponse.error) {
+    throw new Error("Erro ao buscar metricas administrativas");
+  }
+
+  if (openPendingResponse.error) {
+    throw new Error("Erro ao buscar pendencias abertas");
+  }
+
+  const matches = (matchesResponse.data ?? []) as AnalyticsMatchRow[];
+  const users = (usersResponse.data ?? []) as AnalyticsUserRow[];
+  const logRows = (logsResponse.data ?? []) as AnalyticsLogRow[];
+  const activeAccounts = users.filter((user) => user.is_active !== false).length;
+  const userNames = new Map(users.map((user) => [user.id, getUserDisplayName(user)]));
+
+  const monthMatches = matches.filter((match) => match.data_partida.startsWith(selectedMonth));
+  const previousMonthMatches = matches.filter((match) =>
+    match.data_partida.startsWith(previousMonth)
+  );
+  const activityMatches = monthMatches.filter((match) => match.status !== "cancelado");
+  const previousActivityMatches = previousMonthMatches.filter(
+    (match) => match.status !== "cancelado"
+  );
+  const validatedMatches = monthMatches.filter((match) => match.status === "validado");
+  const recentDayWindow = monthDays.slice(-7);
+  const last7DaysStartDate = recentDayWindow[0] ?? monthDays[0] ?? selectedRange.startDate;
+  const last7DaysEndDate =
+    recentDayWindow[recentDayWindow.length - 1] ??
+    monthDays[monthDays.length - 1] ??
+    selectedRange.startDate;
+  const recentActivityMatches = activityMatches.filter(
+    (match) =>
+      match.data_partida >= last7DaysStartDate && match.data_partida <= last7DaysEndDate
+  );
+
+  const selectedPlayerIds = new Set<string>();
+  const previousPlayerIds = new Set<string>();
+
+  for (const match of activityMatches) {
+    selectedPlayerIds.add(match.player_a_id);
+    selectedPlayerIds.add(match.player_b_id);
+  }
+
+  for (const match of previousActivityMatches) {
+    previousPlayerIds.add(match.player_a_id);
+    previousPlayerIds.add(match.player_b_id);
+  }
+
+  const trendAccumulator = new Map<
+    string,
+    {
+      registrations: number;
+      validated: number;
+      activePlayerIds: Set<string>;
+      newUsers: number;
+    }
+  >();
+
+  for (const trendMonth of trendMonths) {
+    trendAccumulator.set(trendMonth, {
+      registrations: 0,
+      validated: 0,
+      activePlayerIds: new Set<string>(),
+      newUsers: 0,
+    });
+  }
+
+  for (const match of matches) {
+    const monthKey = match.data_partida.slice(0, 7);
+    const entry = trendAccumulator.get(monthKey);
+
+    if (!entry) continue;
+
+    entry.registrations += 1;
+
+    if (match.status === "validado") {
+      entry.validated += 1;
+    }
+
+    if (match.status !== "cancelado") {
+      entry.activePlayerIds.add(match.player_a_id);
+      entry.activePlayerIds.add(match.player_b_id);
+    }
+  }
+
+  for (const user of users) {
+    const monthKey = getMonthKeyFromTimestamp(user.created_at);
+    if (!monthKey) continue;
+
+    const entry = trendAccumulator.get(monthKey);
+    if (!entry) continue;
+
+    entry.newUsers += 1;
+  }
+
+  const trend = trendMonths.map((trendMonth) => {
+    const entry = trendAccumulator.get(trendMonth);
+
+    return {
+      month: trendMonth,
+      label: formatMonthLabel(trendMonth),
+      registrations: entry?.registrations ?? 0,
+      validated: entry?.validated ?? 0,
+      activePlayers: entry?.activePlayerIds.size ?? 0,
+      newUsers: entry?.newUsers ?? 0,
+    };
+  });
+
+  const dayAccumulator = new Map<
+    string,
+    {
+      registrations: number;
+      validated: number;
+      pending: number;
+      edited: number;
+      canceled: number;
+      playerIds: Set<string>;
+    }
+  >();
+
+  for (const dateKey of monthDays) {
+    dayAccumulator.set(dateKey, {
+      registrations: 0,
+      validated: 0,
+      pending: 0,
+      edited: 0,
+      canceled: 0,
+      playerIds: new Set<string>(),
+    });
+  }
+
+  const weekdayAccumulator = new Map<
+    AdminAnalyticsWeekday["key"],
+    {
+      registrations: number;
+      validated: number;
+      pending: number;
+      edited: number;
+      canceled: number;
+      playerIds: Set<string>;
+    }
+  >();
+
+  for (const weekday of WEEKDAY_METADATA) {
+    weekdayAccumulator.set(weekday.key, {
+      registrations: 0,
+      validated: 0,
+      pending: 0,
+      edited: 0,
+      canceled: 0,
+      playerIds: new Set<string>(),
+    });
+  }
+
+  for (const match of monthMatches) {
+    const dayEntry = dayAccumulator.get(match.data_partida);
+    const weekdayNumber = getUtcWeekday(match.data_partida);
+    const weekdayMeta = WEEKDAY_METADATA.find((weekday) => weekday.day === weekdayNumber);
+    const weekdayEntry = weekdayMeta ? weekdayAccumulator.get(weekdayMeta.key) : null;
+
+    if (dayEntry) {
+      dayEntry.registrations += 1;
+
+      if (match.status === "validado") {
+        dayEntry.validated += 1;
+      } else if (match.status === "pendente") {
+        dayEntry.pending += 1;
+      } else if (match.status === "edited") {
+        dayEntry.edited += 1;
+      } else if (match.status === "cancelado") {
+        dayEntry.canceled += 1;
+      }
+
+      if (match.status !== "cancelado") {
+        dayEntry.playerIds.add(match.player_a_id);
+        dayEntry.playerIds.add(match.player_b_id);
+      }
+    }
+
+    if (weekdayEntry) {
+      weekdayEntry.registrations += 1;
+
+      if (match.status === "validado") {
+        weekdayEntry.validated += 1;
+      } else if (match.status === "pendente") {
+        weekdayEntry.pending += 1;
+      } else if (match.status === "edited") {
+        weekdayEntry.edited += 1;
+      } else if (match.status === "cancelado") {
+        weekdayEntry.canceled += 1;
+      }
+
+      if (match.status !== "cancelado") {
+        weekdayEntry.playerIds.add(match.player_a_id);
+        weekdayEntry.playerIds.add(match.player_b_id);
+      }
+    }
+  }
+
+  const dayStats = monthDays.map((dateKey) => {
+    const entry = dayAccumulator.get(dateKey);
+    const weekdayMeta = WEEKDAY_METADATA.find((weekday) => weekday.day === getUtcWeekday(dateKey));
+
+    return {
+      date: dateKey,
+      label: formatDayLabel(dateKey),
+      weekday: weekdayMeta?.shortLabel || "",
+      registrations: entry?.registrations ?? 0,
+      validated: entry?.validated ?? 0,
+      pending: entry?.pending ?? 0,
+      edited: entry?.edited ?? 0,
+      canceled: entry?.canceled ?? 0,
+      uniquePlayers: entry?.playerIds.size ?? 0,
+    };
+  });
+
+  const weekdayStats = WEEKDAY_METADATA.map((weekday) => {
+    const entry = weekdayAccumulator.get(weekday.key);
+
+    return {
+      key: weekday.key,
+      label: weekday.label,
+      shortLabel: weekday.shortLabel,
+      registrations: entry?.registrations ?? 0,
+      validated: entry?.validated ?? 0,
+      pending: entry?.pending ?? 0,
+      edited: entry?.edited ?? 0,
+      canceled: entry?.canceled ?? 0,
+      uniquePlayers: entry?.playerIds.size ?? 0,
+    };
+  });
+
+  const topPlayersMonth = buildAnalyticsTopPlayers(activityMatches, userNames);
+  const topPlayersLast7Days = buildAnalyticsTopPlayers(recentActivityMatches, userNames);
+
+  const rivalryAccumulator = new Map<
+    string,
+    { playerAId: string; playerBId: string; registrations: number; validated: number }
+  >();
+
+  for (const match of activityMatches) {
+    const [playerAId, playerBId] = [match.player_a_id, match.player_b_id].sort();
+    const key = `${playerAId}:${playerBId}`;
+    const rivalry = rivalryAccumulator.get(key) ?? {
+      playerAId,
+      playerBId,
+      registrations: 0,
+      validated: 0,
+    };
+
+    rivalry.registrations += 1;
+
+    if (match.status === "validado") {
+      rivalry.validated += 1;
+    }
+
+    rivalryAccumulator.set(key, rivalry);
+  }
+
+  const topRivalries = Array.from(rivalryAccumulator.entries())
+    .map(([id, rivalry]) => ({
+      id,
+      playersLabel: `${userNames.get(rivalry.playerAId) || "Jogador"} x ${
+        userNames.get(rivalry.playerBId) || "Jogador"
+      }`,
+      registrations: rivalry.registrations,
+      validated: rivalry.validated,
+    }))
+    .sort((left, right) => {
+      if (right.registrations !== left.registrations) {
+        return right.registrations - left.registrations;
+      }
+
+      if (right.validated !== left.validated) {
+        return right.validated - left.validated;
+      }
+
+      return left.playersLabel.localeCompare(right.playersLabel, "pt-BR");
+    })
+    .slice(0, 5);
+
+  const statusCounts: Record<AdminAnalyticsStatus["key"], number> = {
+    pendente: 0,
+    edited: 0,
+    validado: 0,
+    cancelado: 0,
+  };
+
+  for (const match of monthMatches) {
+    if (match.status in statusCounts) {
+      statusCounts[match.status as AdminAnalyticsStatus["key"]] += 1;
+    }
+  }
+
+  const statusMetadata: Array<Pick<AdminAnalyticsStatus, "key" | "label">> = [
+    { key: "pendente", label: "Pendentes" },
+    { key: "edited", label: "Contestadas" },
+    { key: "validado", label: "Validadas" },
+    { key: "cancelado", label: "Canceladas" },
+  ];
+
+  const statusBreakdown: AdminAnalyticsStatus[] = statusMetadata.map((status) => ({
+    ...status,
+    count: statusCounts[status.key],
+    percentage: getPercentage(statusCounts[status.key], monthMatches.length),
+  }));
+
+  const newUsers = users.filter(
+    (user) => getMonthKeyFromTimestamp(user.created_at) === selectedMonth
+  ).length;
+  const previousNewUsers = users.filter(
+    (user) => getMonthKeyFromTimestamp(user.created_at) === previousMonth
+  ).length;
+  const adminActions = logRows.filter(
+    (row) => getMonthKeyFromTimestamp(row.created_at) === selectedMonth
+  ).length;
+  const dayRegistrations = dayStats.reduce((total, day) => total + day.registrations, 0);
+
+  const summary: AdminAnalyticsSummary = {
+    registrations: monthMatches.length,
+    registrationsDelta: monthMatches.length - previousMonthMatches.length,
+    validated: validatedMatches.length,
+    validationRate: getPercentage(validatedMatches.length, monthMatches.length),
+    activePlayers: selectedPlayerIds.size,
+    activePlayersDelta: selectedPlayerIds.size - previousPlayerIds.size,
+    activeAccounts,
+    participationRate: getPercentage(selectedPlayerIds.size, activeAccounts),
+    averagePerDay:
+      monthDays.length > 0
+        ? roundToOneDecimal(dayRegistrations / monthDays.length)
+        : 0,
+    daysWithoutMatches: dayStats.filter((day) => day.registrations === 0).length,
+    newUsers,
+    newUsersDelta: newUsers - previousNewUsers,
+    openPending: openPendingResponse.count ?? 0,
+    adminActions,
+  };
+
+  const busiestWeekday = [...weekdayStats].sort((left, right) => {
+    if (right.registrations !== left.registrations) {
+      return right.registrations - left.registrations;
+    }
+
+    return right.validated - left.validated;
+  })[0];
+  const busiestDay = [...dayStats].sort((left, right) => {
+    if (right.registrations !== left.registrations) {
+      return right.registrations - left.registrations;
+    }
+
+    return right.validated - left.validated;
+  })[0];
+
+  const insights = [
+    busiestWeekday && busiestWeekday.registrations > 0
+      ? `${busiestWeekday.label} concentrou ${busiestWeekday.registrations} registro(s) no periodo.`
+      : `Ainda nao houve registros ao longo da semana em ${formatMonthLabel(selectedMonth)}.`,
+    summary.participationRate > 0
+      ? `${summary.participationRate}% da base ativa participou de pelo menos uma partida no mes.`
+      : `Nenhum jogador ativo apareceu em partidas neste mes.`,
+    summary.openPending > 0
+      ? `${summary.openPending} pendencia(s) abertas pedem acompanhamento do admin.`
+      : `Nao ha pendencias abertas agora, sinal de operacao em dia.`,
+    statusCounts.edited > 0
+      ? `${statusCounts.edited} partida(s) contestada(s) passaram por revisao no periodo.`
+      : `Nao houve partidas contestadas no periodo.`,
+    busiestDay && busiestDay.registrations > 0
+      ? `${busiestDay.label} (${busiestDay.weekday}) foi o dia mais movimentado do mes.`
+      : `${summary.daysWithoutMatches} dia(s) do mes ficaram sem registros no periodo.`,
+  ].slice(0, 4);
+
+  return {
+    selectedMonth,
+    selectedMonthLabel: formatMonthLabel(selectedMonth),
+    previousMonthLabel: formatMonthLabel(previousMonth),
+    firstAvailableMonth,
+    firstAvailableMonthLabel: formatMonthLabel(firstAvailableMonth),
+    isFirstAvailableMonth,
+    isCurrentMonth,
+    last7DaysRangeLabel: formatDateRangeLabel(last7DaysStartDate, last7DaysEndDate),
+    summary,
+    weekdayStats,
+    dayStats,
+    trend,
+    topPlayersMonth,
+    topPlayersLast7Days,
+    topRivalries,
+    statusBreakdown,
+    insights,
+  };
+}
+
+export async function adminGetPendingMatches(): Promise<AdminPendingMatchesResponse> {
+  await requireModerator();
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("matches")
+    .select(
+      `
+      id,
+      player_a_id,
+      player_b_id,
+      criado_por,
+      resultado_a,
+      resultado_b,
+      status,
+      created_at,
+      data_partida,
+      player_a:users!player_a_id(id, name, full_name, email),
+      player_b:users!player_b_id(id, name, full_name, email),
+      creator:users!criado_por(id, name, full_name, email)
+    `
+    )
+    .in("status", ["pendente", "edited"])
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error("Erro ao carregar pendencias");
+  }
+
+  const items = mapPendingMatchRows((data ?? []) as AnalyticsPendingMatchRow[]);
+
+  return {
+    openCount: items.length,
+    staleCount: items.filter((item) => item.isStale).length,
+    pendingCount: items.filter((item) => item.status === "pendente").length,
+    editedCount: items.filter((item) => item.status === "edited").length,
+    items,
   };
 }
