@@ -58,7 +58,7 @@ export default function PerfilPage() {
   const history = useMemo(() => {
     const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     const today = new Date();
-    const currentRating = userStats?.rating_atual || 250;
+    const currentRating = userStats?.rating_atual ?? 250;
     const result: { label: string; value: number; date: Date }[] = [];
     
     // Criar array dos últimos 7 dias com rating atual
@@ -86,9 +86,9 @@ export default function PerfilPage() {
       // Encontrar a variação de pontos para o usuário
       let variacao = 0;
       if (match.player_a_id === user?.id) {
-        variacao = match.pontos_variacao_a || 0;
+        variacao = match.pontos_variacao_a ?? 0;
       } else if (match.player_b_id === user?.id) {
-        variacao = match.pontos_variacao_b || 0;
+        variacao = match.pontos_variacao_b ?? 0;
       }
       
       // Atualizar os dias anteriores à partida
@@ -104,9 +104,13 @@ export default function PerfilPage() {
   }, [validatedMatches, userStats?.rating_atual, user?.id]);
 
   // Calcular escala máxima para o gráfico
-  const maxRating = useMemo(() => {
-    const max = Math.max(...history.map((h) => h.value));
-    return Math.ceil(max / 50) * 50 + 50;
+  const chartRange = useMemo(() => {
+    const values = history.map((point) => point.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = Math.max(max - min, 1);
+
+    return { min, range };
   }, [history]);
 
   const getPlayerName = (player: { full_name: string | null; name: string | null; email: string | null }) => {
@@ -203,7 +207,7 @@ export default function PerfilPage() {
         <div className="grid grid-cols-4 gap-2">
           <article className="rounded-2xl border border-border bg-card p-3 shadow-sm text-center">
             <p className="text-xl font-bold text-primary">
-              {userStats?.rating_atual || user.rating || 250}
+              {userStats?.rating_atual ?? user.rating ?? 250}
             </p>
             <p className="text-[10px] text-muted-foreground">pontos</p>
           </article>
@@ -248,7 +252,9 @@ export default function PerfilPage() {
                   </span>
                   <div
                     className="w-full rounded-md bg-primary/80 min-h-[4px]"
-                    style={{ height: `${Math.max((point.value / maxRating) * 80, 4)}px` }}
+                    style={{
+                      height: `${Math.max(((point.value - chartRange.min) / chartRange.range) * 80, 4)}px`,
+                    }}
                   />
                   <span className="text-[10px] text-muted-foreground">
                     {point.label}

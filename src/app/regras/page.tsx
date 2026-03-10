@@ -208,7 +208,7 @@ export default function RegrasPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 mt-0.5">✓</span>
-              <span>Rating minimo de 100 pontos para evitar valores negativos</span>
+              <span>O rating segue exatamente a soma das vitórias e derrotas, inclusive abaixo de zero</span>
             </li>
           </ul>
         </section>

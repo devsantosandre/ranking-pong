@@ -7,7 +7,6 @@
  */
 
 const DEFAULT_K_FACTOR = 24;
-const MIN_RATING = 100;
 
 /**
  * Calcula a expectativa de vitória (0 a 1)
@@ -49,13 +48,6 @@ export function calculateElo(
 }
 
 /**
- * Aplica o rating mínimo para evitar valores negativos extremos
- */
-export function applyMinRating(rating: number): number {
-  return Math.max(rating, MIN_RATING);
-}
-
-/**
  * Calcula os novos ratings após uma partida
  *
  * @param winnerRating - Rating atual do vencedor
@@ -76,8 +68,8 @@ export function calculateNewRatings(
   const { winnerDelta, loserDelta } = calculateElo(winnerRating, loserRating, kFactor);
 
   return {
-    winnerNewRating: applyMinRating(winnerRating + winnerDelta),
-    loserNewRating: applyMinRating(loserRating + loserDelta),
+    winnerNewRating: winnerRating + winnerDelta,
+    loserNewRating: loserRating + loserDelta,
     winnerDelta,
     loserDelta,
   };

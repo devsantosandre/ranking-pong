@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { calculateElo, applyMinRating } from "@/lib/elo";
+import { calculateElo } from "@/lib/elo";
 import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements";
 import { sendPushToUsers } from "@/lib/push";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
@@ -318,7 +318,7 @@ export async function confirmMatchAction(
     return fail("Dados do vencedor/perdedor não encontrados", "winner_or_loser_data_missing");
   }
 
-  // 6. Calcular ratings finais com proteção de mínimo
+  // 6. Calcular ratings finais usando a variacao real da partida
   const playerARating = euSouPlayerA ? myRating : opponentRating;
   const playerBRating = euSouPlayerA ? opponentRating : myRating;
   const playerADelta = euSouPlayerA ? myDelta : opponentDelta;
@@ -333,8 +333,8 @@ export async function confirmMatchAction(
       aprovado_por: userId,
       pontos_variacao_a: playerADelta,
       pontos_variacao_b: playerBDelta,
-      rating_final_a: applyMinRating(playerARating + playerADelta),
-      rating_final_b: applyMinRating(playerBRating + playerBDelta),
+      rating_final_a: playerARating + playerADelta,
+      rating_final_b: playerBRating + playerBDelta,
       k_factor_used: kFactor, // Armazena o K factor usado para auditoria e reversão
     })
     .eq("id", matchId)
@@ -349,8 +349,8 @@ export async function confirmMatchAction(
   }
 
   // 8. Atualizar stats dos jogadores em paralelo
-  const newWinnerRating = applyMinRating((winnerData.rating_atual ?? 1000) + winnerDelta);
-  const newLoserRating = applyMinRating((loserData.rating_atual ?? 1000) + loserDelta);
+  const newWinnerRating = winnerRating + winnerDelta;
+  const newLoserRating = loserRating + loserDelta;
 
   const [winnerUpdateResult, loserUpdateResult] = await Promise.all([
     adminClient
@@ -450,7 +450,7 @@ export async function confirmMatchAction(
     rating: newWinnerRating,
     streak: winnerStreak,
     isWinner: true,
-    opponentRating: loserData.rating_atual ?? 1000,
+    opponentRating: loserRating,
     resultado: `${match.resultado_a}x${match.resultado_b}`,
   };
 
@@ -463,7 +463,7 @@ export async function confirmMatchAction(
     rating: newLoserRating,
     streak: 0, // Perdedor perde o streak
     isWinner: false,
-    opponentRating: winnerData.rating_atual ?? 1000,
+    opponentRating: winnerRating,
     resultado: `${match.resultado_a}x${match.resultado_b}`,
   };
 

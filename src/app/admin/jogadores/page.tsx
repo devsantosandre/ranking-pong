@@ -279,11 +279,11 @@ export default function AdminJogadoresPage() {
     if (isNaN(rating)) {
       errors.rating = "Rating deve ser um numero";
       isValid = false;
-    } else if (rating < 0) {
-      errors.rating = "Rating deve ser maior ou igual a zero";
+    } else if (rating < -9999) {
+      errors.rating = "Rating deve ser maior ou igual a -9999";
       isValid = false;
-    } else if (rating > 10000) {
-      errors.rating = "Rating deve ser menor que 10.000";
+    } else if (rating > 9999) {
+      errors.rating = "Rating deve ser menor ou igual a 9999";
       isValid = false;
     }
 

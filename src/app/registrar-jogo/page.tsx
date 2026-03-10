@@ -89,8 +89,8 @@ export default function RegistrarJogoPage() {
     if (winsA === winsB) return null;
 
     // Ratings dos jogadores
-    const myRating = user?.rating || 1000;
-    const oppRating = selectedOpponent?.rating_atual || 1000;
+    const myRating = user?.rating ?? 250;
+    const oppRating = selectedOpponent?.rating_atual ?? 250;
 
     const isWin = winsA > winsB;
 

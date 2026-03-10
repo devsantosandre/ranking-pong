@@ -315,7 +315,7 @@ export default function RankingPage() {
                       {/* Pontuação */}
                       <div className="min-w-[4.5rem] shrink-0 text-right">
                         <p className={`text-lg font-bold tabular-nums ${playerStyle.text}`}>
-                          {player.rating_atual || 1000}
+                          {player.rating_atual ?? 250}
                         </p>
                         <p className="text-[11px] text-muted-foreground">pontos</p>
                         {canOpenH2H && (

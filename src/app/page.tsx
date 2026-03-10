@@ -32,7 +32,7 @@ export default function Home() {
   const topRanking = ranking.slice(0, 3).map((player, index) => ({
     pos: index + 1,
     nome: player.full_name || player.name || player.email?.split("@")[0] || "Jogador",
-    pts: player.rating_atual || 250,
+    pts: player.rating_atual ?? 250,
     vitorias: player.vitorias || 0,
     derrotas: player.derrotas || 0,
   }));
@@ -76,7 +76,7 @@ export default function Home() {
             <div>
               <p className="text-xs text-muted-foreground">Seus pontos</p>
               <p className="text-3xl font-bold text-foreground">
-                {userStats?.rating_atual || user?.rating || 250}
+                {userStats?.rating_atual ?? user?.rating ?? 250}
               </p>
             </div>
             <div className="text-right">

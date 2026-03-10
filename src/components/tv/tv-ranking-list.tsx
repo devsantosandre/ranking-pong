@@ -303,7 +303,7 @@ function GridView({
             {/* Pontuação */}
             <div className="text-right flex-shrink-0">
               <p className={`text-xs font-bold ${playerStyle.text}`}>
-                {player.rating_atual || 1000}
+                {player.rating_atual ?? 250}
               </p>
               <p className="text-[8px] text-muted-foreground leading-tight">pts</p>
             </div>
@@ -402,7 +402,7 @@ function TableView({
                 </td>
                 <td className="tv-table-td text-right">
                   <span className={`font-bold ${playerStyle.text}`}>
-                    {player.rating_atual || 1000}
+                    {player.rating_atual ?? 250}
                   </span>
                 </td>
               </tr>

@@ -843,8 +843,8 @@ export async function adminUpdateUserRating(
     throw new Error("Motivo obrigatorio (minimo 3 caracteres)");
   }
 
-  if (newRating < 0 || newRating > 9999) {
-    throw new Error("Rating deve estar entre 0 e 9999");
+  if (newRating < -9999 || newRating > 9999) {
+    throw new Error("Rating deve estar entre -9999 e 9999");
   }
 
   const supabase = createAdminClient();

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "ratings:audit": "node --env-file=.env.local scripts/repair-rating-history.mjs",
+    "ratings:repair": "node --env-file=.env.local scripts/repair-rating-history.mjs --apply",
     "db:push:hml": "supabase link --project-ref \"$SUPABASE_PROJECT_ID_HML\" && supabase db push --dry-run && supabase db push",
     "db:push:prod": "supabase link --project-ref \"$SUPABASE_PROJECT_ID_PROD\" && supabase db push --dry-run && supabase db push"
   },
