@@ -27,6 +27,10 @@ const actionLabels: Record<string, { label: string; color: string }> = {
   user_hidden_from_ranking: { label: "Jogador oculto", color: "bg-amber-100 text-amber-700" },
   user_shown_in_ranking: { label: "Jogador visível", color: "bg-emerald-100 text-emerald-700" },
   match_cancelled: { label: "Partida cancelada", color: "bg-red-100 text-red-700" },
+  match_validated_by_admin: {
+    label: "Partida aceita pelo admin",
+    color: "bg-emerald-100 text-emerald-700",
+  },
   setting_changed: { label: "Config alterada", color: "bg-amber-100 text-amber-700" },
 };
 
@@ -81,6 +85,39 @@ function formatValue(value: unknown, action: string): React.ReactNode {
         <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
           {parts.map((part, i) => (
             <div key={i}>{part}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  if (action === "match_validated_by_admin" && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (obj.player_a && obj.player_b) {
+      parts.push(`${obj.player_a} vs ${obj.player_b}`);
+    }
+    if (obj.placar !== undefined) {
+      parts.push(`Placar: ${String(obj.placar)}`);
+    }
+    if (
+      obj.pontos_variacao_a !== undefined &&
+      obj.pontos_variacao_b !== undefined
+    ) {
+      const deltaA = Number(obj.pontos_variacao_a) || 0;
+      const deltaB = Number(obj.pontos_variacao_b) || 0;
+      parts.push(`Pontos aplicados: ${deltaA >= 0 ? "+" : ""}${deltaA} / ${deltaB >= 0 ? "+" : ""}${deltaB}`);
+    }
+    if (obj.status !== undefined) {
+      parts.push(`Status: ${String(obj.status)}`);
+    }
+
+    if (parts.length > 0) {
+      return (
+        <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
+          {parts.map((part, index) => (
+            <div key={index}>{part}</div>
           ))}
         </div>
       );

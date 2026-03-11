@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  CheckCircle2,
   AlertTriangle,
   Clock3,
   Filter,
@@ -13,7 +14,9 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import {
+  adminCancelMatch,
   adminGetPendingMatches,
+  adminValidatePendingMatch,
   type AdminAnalyticsPendingMatch,
   type AdminPendingMatchesResponse,
 } from "@/app/actions/admin";
@@ -84,7 +87,114 @@ function SummaryCard({
   );
 }
 
-function PendingMatchRow({ match }: { match: AdminAnalyticsPendingMatch }) {
+type PendingActionModalState = {
+  mode: "accept" | "cancel";
+  match: AdminAnalyticsPendingMatch;
+};
+
+function PendingActionModal({
+  state,
+  reason,
+  fieldError,
+  actionError,
+  loading,
+  onClose,
+  onConfirm,
+  onReasonChange,
+}: {
+  state: PendingActionModalState | null;
+  reason: string;
+  fieldError: string;
+  actionError: string;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+  onReasonChange: (value: string) => void;
+}) {
+  if (!state) return null;
+
+  const isCancel = state.mode === "cancel";
+  const title = isCancel ? "Cancelar partida" : "Aceitar partida";
+  const confirmText = isCancel ? "Cancelar partida" : "Aceitar partida";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+      <div className="w-full max-w-md rounded-3xl border border-border bg-card p-5 shadow-xl">
+        <div className="space-y-1">
+          <p className="text-base font-semibold text-foreground">{title}</p>
+          <p className="text-sm text-muted-foreground">{state.match.playersLabel}</p>
+          <p className="text-xs text-muted-foreground">
+            Placar atual {state.match.scoreLabel}
+          </p>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-border/70 bg-muted/15 p-3 text-sm text-foreground">
+          {isCancel ? (
+            <p>
+              Esta ação cancela a partida diretamente por aqui. Como ela ainda não foi
+              validada, não há pontos para reverter.
+            </p>
+          ) : (
+            <p>
+              Esta ação valida a partida pelo admin, aplica os pontos do placar atual e
+              encerra a pendência.
+            </p>
+          )}
+        </div>
+
+        {isCancel ? (
+          <div className="mt-4 space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Motivo do cancelamento
+            </label>
+            <textarea
+              value={reason}
+              onChange={(event) => onReasonChange(event.target.value)}
+              placeholder="Explique por que a partida está sendo cancelada"
+              rows={3}
+              className={`w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none ${
+                fieldError ? "border-red-500 focus:border-red-500" : "border-border focus:border-primary"
+              }`}
+            />
+            {fieldError ? <p className="text-xs text-red-600">{fieldError}</p> : null}
+          </div>
+        ) : null}
+
+        {actionError ? (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {actionError}
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex gap-3">
+          <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+            Voltar
+          </Button>
+          <Button
+            type="button"
+            className={`flex-1 ${isCancel ? "bg-red-600 hover:bg-red-700 text-white" : ""}`}
+            onClick={() => void onConfirm()}
+            disabled={loading}
+          >
+            {loading ? "Aguarde..." : confirmText}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingMatchRow({
+  match,
+  loading,
+  onAccept,
+  onCancel,
+}: {
+  match: AdminAnalyticsPendingMatch;
+  loading: boolean;
+  onAccept: (match: AdminAnalyticsPendingMatch) => void;
+  onCancel: (match: AdminAnalyticsPendingMatch) => void;
+}) {
   const statusLabel = match.status === "edited" ? "Contestada" : "Pendente";
   const statusTone =
     match.status === "edited"
@@ -99,10 +209,10 @@ function PendingMatchRow({ match }: { match: AdminAnalyticsPendingMatch }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-semibold text-foreground">
-              {match.playersLabel}
-            </p>
+          <p className="text-sm font-semibold leading-tight text-foreground">
+            {match.playersLabel}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusTone}`}>
               {statusLabel}
             </span>
@@ -130,13 +240,34 @@ function PendingMatchRow({ match }: { match: AdminAnalyticsPendingMatch }) {
           <span className="font-semibold text-foreground">{match.waitingForUserName}</span>
         </div>
         <div className="rounded-lg bg-background/80 px-3 py-2">
-          Ultima acao:{" "}
+          Última ação:{" "}
           <span className="font-semibold text-foreground">{match.lastActorUserName}</span>
         </div>
         <div className="rounded-lg bg-background/80 px-3 py-2">
           Partida de {formatDateOnly(match.matchDate)}. Registrada em{" "}
           {formatDateTime(match.createdAt)}
         </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+        <Button
+          type="button"
+          size="sm"
+          className="rounded-full px-4 whitespace-nowrap"
+          onClick={() => onAccept(match)}
+          disabled={loading}
+        >
+          <CheckCircle2 className="mr-2 h-4 w-4" />
+          Aceitar
+        </Button>
+        <button
+          type="button"
+          className="text-sm font-semibold text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => onCancel(match)}
+          disabled={loading}
+        >
+          Cancelar
+        </button>
       </div>
     </article>
   );
@@ -163,6 +294,11 @@ export default function AdminPendenciasPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState<PendingFilter>("all");
+  const [actionState, setActionState] = useState<PendingActionModalState | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [fieldError, setFieldError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   const loadPendingMatches = useCallback(async (preserveData: boolean) => {
     if (preserveData) {
@@ -176,7 +312,7 @@ export default function AdminPendenciasPage() {
       setData(response);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar pendencias");
+      setError(err instanceof Error ? err.message : "Erro ao carregar pendências");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -186,6 +322,73 @@ export default function AdminPendenciasPage() {
   useEffect(() => {
     void loadPendingMatches(false);
   }, [loadPendingMatches]);
+
+  const resetActionModal = useCallback(() => {
+    setActionState(null);
+    setActionReason("");
+    setFieldError("");
+    setActionError("");
+    setActionLoading(false);
+  }, []);
+
+  const handleReasonChange = useCallback((value: string) => {
+    setActionReason(value);
+    if (!value.trim()) {
+      setFieldError("Motivo do cancelamento é obrigatório.");
+      return;
+    }
+    if (value.trim().length < 5) {
+      setFieldError("Motivo deve ter pelo menos 5 caracteres.");
+      return;
+    }
+    setFieldError("");
+  }, []);
+
+  const handleOpenAccept = useCallback((match: AdminAnalyticsPendingMatch) => {
+    setActionState({ mode: "accept", match });
+    setActionReason("");
+    setFieldError("");
+    setActionError("");
+  }, []);
+
+  const handleOpenCancel = useCallback((match: AdminAnalyticsPendingMatch) => {
+    setActionState({ mode: "cancel", match });
+    setActionReason("");
+    setFieldError("");
+    setActionError("");
+  }, []);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!actionState) return;
+
+    if (actionState.mode === "cancel") {
+      if (!actionReason.trim()) {
+        setFieldError("Motivo do cancelamento é obrigatório.");
+        return;
+      }
+      if (actionReason.trim().length < 5) {
+        setFieldError("Motivo deve ter pelo menos 5 caracteres.");
+        return;
+      }
+    }
+
+    setActionLoading(true);
+    setActionError("");
+
+    try {
+      if (actionState.mode === "accept") {
+        await adminValidatePendingMatch(actionState.match.id);
+      } else {
+        await adminCancelMatch(actionState.match.id, actionReason.trim());
+      }
+
+      await loadPendingMatches(true);
+      resetActionModal();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Erro ao concluir ação");
+      setActionLoading(false);
+    }
+  }, [actionReason, actionState, loadPendingMatches, resetActionModal]);
 
   const filteredItems = useMemo(() => {
     const items = data?.items ?? [];
@@ -204,11 +407,22 @@ export default function AdminPendenciasPage() {
 
   return (
     <AppShell
-      title="Pendencias"
-      subtitle="Confirmacoes e contestacoes em acompanhamento"
+      title="Pendências"
+      subtitle="Confirmações e contestações em acompanhamento"
       showBack
     >
       <div className="space-y-4">
+        <PendingActionModal
+          state={actionState}
+          reason={actionReason}
+          fieldError={fieldError}
+          actionError={actionError}
+          loading={actionLoading}
+          onClose={resetActionModal}
+          onConfirm={handleConfirmAction}
+          onReasonChange={handleReasonChange}
+        />
+
         <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
@@ -216,11 +430,11 @@ export default function AdminPendenciasPage() {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-semibold text-foreground">
-                Pendencias do ranking
+                Pendências do ranking
               </p>
               <p className="text-xs text-muted-foreground">
-                Aqui o admin enxerga rapidamente quais jogos ainda esperam resposta e de
-                quem e a pendencia agora.
+                Aqui o admin enxerga rapidamente quais jogos ainda esperam resposta, de
+                quem é a pendência agora e pode resolver os casos direto por esta tela.
               </p>
             </div>
           </div>
@@ -236,13 +450,13 @@ export default function AdminPendenciasPage() {
               className="w-full"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Atualizar pendencias
+              Atualizar pendências
             </Button>
             <Link
               href="/admin/partidas"
               className="inline-flex h-10 w-full items-center justify-center rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
             >
-              Abrir gestao de partidas
+              Abrir gestão de partidas
             </Link>
           </div>
         </section>
@@ -273,19 +487,19 @@ export default function AdminPendenciasPage() {
               <SummaryCard
                 title="Mais de 24h"
                 value={formatNumber(data.staleCount)}
-                description="Pendencias que precisam de atencao do admin"
+                description="Pendências que precisam de atenção do admin"
                 tone="border-amber-200 bg-amber-50"
               />
               <SummaryCard
                 title="Pendentes"
                 value={formatNumber(data.pendingCount)}
-                description="Jogos aguardando primeira confirmacao"
+                description="Jogos aguardando primeira confirmação"
                 tone="border-violet-200 bg-violet-50"
               />
               <SummaryCard
                 title="Contestadas"
                 value={formatNumber(data.editedCount)}
-                description="Jogos que voltaram para revisao"
+                description="Jogos que voltaram para revisão"
                 tone="border-blue-200 bg-blue-50"
               />
             </div>
@@ -296,9 +510,9 @@ export default function AdminPendenciasPage() {
                   <Filter className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-foreground">Filtros rapidos</h2>
+                  <h2 className="text-sm font-semibold text-foreground">Filtros rápidos</h2>
                   <p className="text-xs text-muted-foreground">
-                    Aguardando mostra quem precisa confirmar ou responder ao placar agora.
+                    Aguardando mostra quem precisa confirmar ou responder ao placar neste momento.
                   </p>
                 </div>
               </div>
@@ -329,17 +543,25 @@ export default function AdminPendenciasPage() {
                 <div className="min-w-0">
                   <h2 className="text-sm font-semibold text-foreground">Jogos aguardando resposta</h2>
                   <p className="text-xs text-muted-foreground">
-                    Ordenacao prioriza pendencias antigas e depois os registros mais velhos.
+                    Ordenação prioriza pendências antigas e depois os registros mais velhos.
                   </p>
                 </div>
               </div>
 
               {filteredItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/15 p-4 text-sm text-muted-foreground">
-                  Nenhuma pendencia encontrada para este filtro.
+                  Nenhuma pendência encontrada para este filtro.
                 </div>
               ) : (
-                filteredItems.map((match) => <PendingMatchRow key={match.id} match={match} />)
+                filteredItems.map((match) => (
+                  <PendingMatchRow
+                    key={match.id}
+                    match={match}
+                    loading={actionLoading && actionState?.match.id === match.id}
+                    onAccept={handleOpenAccept}
+                    onCancel={handleOpenCancel}
+                  />
+                ))
               )}
             </section>
           </>
@@ -353,21 +575,21 @@ export default function AdminPendenciasPage() {
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-foreground">Como acompanhar</h2>
               <p className="text-xs text-muted-foreground">
-                Use este painel para saber quem precisa responder e a tela de partidas
-                para a gestao completa.
+                Use este painel para saber quem precisa responder e agir nos casos mais
+                urgentes sem sair da lista.
               </p>
             </div>
           </div>
           <div className="mt-4 space-y-3 text-sm text-foreground">
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-              Pendente significa que o adversario ainda nao confirmou o placar enviado.
+              Pendente significa que o adversário ainda não confirmou o placar enviado.
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-              Contestada significa que alguem alterou o placar e a outra pessoa precisa
+              Contestada significa que alguém alterou o placar e a outra pessoa precisa
               responder.
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-              Pendencias com mais de 24h merecem acompanhamento porque costumam travar o
+              Pendências com mais de 24h merecem acompanhamento porque costumam travar o
               fechamento correto do ranking.
             </div>
           </div>

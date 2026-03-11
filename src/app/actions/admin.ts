@@ -7,6 +7,7 @@ import {
   getCurrentUser,
 } from "@/lib/admin";
 import { revalidatePath } from "next/cache";
+import { validatePendingMatchByActor } from "@/lib/matches/validate-pending-match";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 
 // ============================================================
@@ -228,6 +229,11 @@ const ADMIN_ACTION_METADATA: Record<
     key: "match_cancelled",
     label: "Cancelamentos de partidas",
     description: "Partidas canceladas manualmente pelo admin.",
+  },
+  match_validated_by_admin: {
+    key: "match_validated_by_admin",
+    label: "Partidas validadas pelo admin",
+    description: "Partidas pendentes aceitas diretamente pelo admin.",
   },
   user_created: {
     key: "user_created",
@@ -1095,6 +1101,63 @@ export async function adminCancelMatch(matchId: string, reason: string) {
   });
 
   revalidatePath("/admin");
+  revalidatePath("/admin/logs");
+  revalidatePath("/admin/metricas");
+  revalidatePath("/admin/pendencias");
+  revalidatePath("/admin/partidas");
+  revalidatePath("/partidas");
+  revalidatePath("/ranking");
+
+  return { success: true };
+}
+
+export async function adminValidatePendingMatch(matchId: string) {
+  await requireModerator();
+
+  const adminActor = await getCurrentUser();
+
+  if (!adminActor) {
+    throw new Error("Usuário não autenticado");
+  }
+
+  const result = await validatePendingMatchByActor({
+    matchId,
+    actorUserId: adminActor.id,
+    actorName: adminActor.full_name || adminActor.name || null,
+    actorType: "admin",
+  });
+
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+
+  await createAdminLog({
+    action: "match_validated_by_admin",
+    action_description: "Partida aceita pelo admin",
+    target_type: "match",
+    target_id: matchId,
+    target_name: result.targetName,
+    old_value: {
+      status: result.oldStatus,
+      placar: result.scoreLabel,
+      player_a: result.playerAName,
+      player_b: result.playerBName,
+    },
+    new_value: {
+      status: "validado",
+      placar: result.scoreLabel,
+      player_a: result.playerAName,
+      player_b: result.playerBName,
+      pontos_variacao_a: result.playerADelta,
+      pontos_variacao_b: result.playerBDelta,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/logs");
+  revalidatePath("/admin/metricas");
+  revalidatePath("/admin/pendencias");
+  revalidatePath("/admin/partidas");
   revalidatePath("/partidas");
   revalidatePath("/ranking");
 
