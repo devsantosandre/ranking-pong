@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -25,6 +26,10 @@ import {
 
 const BUSINESS_TIMEZONE = "America/Sao_Paulo";
 const numberFormatter = new Intl.NumberFormat("pt-BR");
+const hourFormatter = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
 
 function getCurrentMonthKey() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -38,6 +43,10 @@ function formatNumber(value: number) {
   return numberFormatter.format(value);
 }
 
+function formatHours(value: number) {
+  return hourFormatter.format(value);
+}
+
 function formatPercentage(value: number | null) {
   if (value === null) return "Sem base";
   return `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`;
@@ -45,11 +54,11 @@ function formatPercentage(value: number | null) {
 
 function formatDelta(delta: number, comparisonLabel: string, enabled = true) {
   if (!enabled) {
-    return "Inicio do historico do app";
+    return "Início do histórico do app";
   }
 
   if (delta === 0) {
-    return `Mesmo nivel de ${comparisonLabel}`;
+    return `Mesmo nível de ${comparisonLabel}`;
   }
 
   const prefix = delta > 0 ? "+" : "";
@@ -66,19 +75,31 @@ function MetricCard({
   value,
   description,
   tone,
+  actionHref,
+  actionLabel,
 }: {
   title: string;
   value: string;
   description: string;
   tone: string;
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   return (
-    <article className={`rounded-2xl border p-4 shadow-sm ${tone}`}>
+    <article className={`flex h-full flex-col rounded-2xl border p-4 shadow-sm ${tone}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {title}
       </p>
       <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
       <p className="mt-2 text-xs text-muted-foreground">{description}</p>
+      {actionHref && actionLabel ? (
+        <Link
+          href={actionHref}
+          className="mt-3 inline-flex items-center text-xs font-semibold text-primary underline-offset-4 hover:underline"
+        >
+          {actionLabel}
+        </Link>
+      ) : null}
     </article>
   );
 }
@@ -233,7 +254,7 @@ function MetricBarRow({
             </div>
             <div className="rounded-lg bg-background px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Nao validadas
+                Não validadas
               </p>
               <p className="mt-1 text-sm font-semibold text-foreground">
                 {formatNumber(unresolved)}
@@ -278,8 +299,8 @@ function TopPlayerRow({
         </p>
       </div>
       <div className="shrink-0 text-right text-[11px] text-muted-foreground">
-        <p>{formatNumber(wins)} vitorias</p>
-        <p>{formatNumber(uniqueOpponents)} adversarios</p>
+        <p>{formatNumber(wins)} vitórias</p>
+        <p>{formatNumber(uniqueOpponents)} adversários</p>
       </div>
     </div>
   );
@@ -340,7 +361,7 @@ function RivalryRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-          <p className="text-[11px] text-muted-foreground">Par mais recorrente no mes</p>
+          <p className="text-[11px] text-muted-foreground">Par mais recorrente no mês</p>
         </div>
         <div className="shrink-0 text-right text-[11px] text-muted-foreground">
           <p>{formatNumber(registrations)} registros</p>
@@ -410,7 +431,7 @@ export default function AdminMetricasPage() {
         return;
       }
 
-      setError(err instanceof Error ? err.message : "Erro ao carregar metricas");
+      setError(err instanceof Error ? err.message : "Erro ao carregar métricas");
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
@@ -476,7 +497,7 @@ export default function AdminMetricasPage() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
               {index === analytics!.trend.length - 1
-                ? `${capitalizeLabel(item.label)} (mes atual)`
+                ? `${capitalizeLabel(item.label)} (mês atual)`
                 : capitalizeLabel(item.label)}
             </p>
             <p className="text-[11px] text-muted-foreground">
@@ -536,7 +557,7 @@ export default function AdminMetricasPage() {
 
   return (
     <AppShell
-      title="Metricas"
+      title="Métricas"
       subtitle="Uso registrado do app, jogos e status das partidas"
       showBack
     >
@@ -548,12 +569,12 @@ export default function AdminMetricasPage() {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-semibold text-foreground">
-                Uso do app baseado em eventos reais
+                Leitura do app com base nos dados já registrados
               </p>
               <p className="text-xs text-muted-foreground">
-                Este painel usa registros de partidas, confirmacoes, noticias e acoes
-                administrativas. Ele mostra o comportamento de uso do app na escola,
-                mas ainda nao mede pageviews nem sessoes de navegacao.
+                Este painel reúne registros de partidas, confirmações, cadastros,
+                pendências e ações administrativas. Ele mostra como o app está sendo
+                usado na escola com base no que já foi registrado no sistema.
               </p>
             </div>
           </div>
@@ -566,7 +587,7 @@ export default function AdminMetricasPage() {
                 htmlFor="analytics-month"
                 className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
               >
-                Mes analisado
+                Mês analisado
               </label>
               <Input
                 id="analytics-month"
@@ -596,7 +617,7 @@ export default function AdminMetricasPage() {
               </span>
               {analytics.isFirstAvailableMonth ? (
                 <>
-                  . Inicio do historico do app em{" "}
+                  . Início do histórico do app em{" "}
                   <span className="font-medium text-foreground">
                     {capitalizeLabel(analytics.firstAvailableMonthLabel)}
                   </span>
@@ -636,10 +657,10 @@ export default function AdminMetricasPage() {
           <Tabs defaultValue="resumo" className="space-y-4">
             <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-muted p-1">
               <TabsTrigger value="resumo" className="px-2 py-2 text-[11px] sm:px-3 sm:text-xs">
-                Resumo do mes
+                Resumo do mês
               </TabsTrigger>
               <TabsTrigger value="dias" className="px-2 py-2 text-[11px] sm:px-3 sm:text-xs">
-                Mes
+                Mês
               </TabsTrigger>
               <TabsTrigger value="jogadores" className="px-2 py-2 text-[11px] sm:px-3 sm:text-xs">
                 Jogadores
@@ -661,7 +682,7 @@ export default function AdminMetricasPage() {
                 <MetricCard
                   title="Validadas"
                   value={formatNumber(analytics.summary.validated)}
-                  description={`${formatPercentage(analytics.summary.validationRate)} do total do mes`}
+                  description={`${formatPercentage(analytics.summary.validationRate)} do total do mês`}
                   tone="border-emerald-200 bg-emerald-50"
                 />
                 <MetricCard
@@ -673,13 +694,15 @@ export default function AdminMetricasPage() {
                   tone="border-violet-200 bg-violet-50"
                 />
                 <MetricCard
-                  title="Media por dia"
+                  title="Média por dia"
                   value={String(analytics.summary.averagePerDay)}
-                  description={`${formatNumber(analytics.summary.daysWithoutMatches)} ${
+                  description={
                     analytics.isCurrentMonth
-                      ? "dia(s) ja passados sem registros"
-                      : "dia(s) do mes sem registros"
-                  }`}
+                      ? analytics.summary.registrations > 0
+                        ? `${formatHours(analytics.summary.hoursSinceLastRegistration)} h desde o último registro`
+                        : `${formatHours(analytics.summary.hoursSinceLastRegistration)} h já passadas sem registros no mês`
+                      : `${formatHours(analytics.summary.longestGapWithoutRegistrations)} h no maior intervalo sem registros`
+                  }
                   tone="border-amber-200 bg-amber-50"
                 />
                 <MetricCard
@@ -693,17 +716,19 @@ export default function AdminMetricasPage() {
                   tone="border-blue-200 bg-blue-50"
                 />
                 <MetricCard
-                  title="Pendencias abertas"
+                  title="Pendências abertas"
                   value={formatNumber(analytics.summary.openPending)}
                   description="Jogos aguardando acompanhamento do admin"
                   tone="border-rose-200 bg-rose-50"
+                  actionHref="/admin/pendencias"
+                  actionLabel="Abrir pendências"
                 />
               </div>
 
               <SectionCard
                 icon={Activity}
-                title="Leituras rapidas"
-                description="Sinais que ajudam a entender ritmo de uso e gargalos do mes."
+                title="Leituras rápidas"
+                description="Sinais que ajudam a entender o ritmo de uso e gargalos do mês."
               >
                 <div className="space-y-3">
                   {analytics.insights.map((insight) => (
@@ -720,7 +745,7 @@ export default function AdminMetricasPage() {
               <SectionCard
                 icon={Clock3}
                 title="Status das partidas"
-                description="Distribuicao de status e pontos que costumam pedir acompanhamento do admin."
+                description="Distribuição de status e pontos que costumam pedir acompanhamento do admin."
               >
                 <div className="space-y-3">
                   {analytics.statusBreakdown.map((status) => (
@@ -744,29 +769,29 @@ export default function AdminMetricasPage() {
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Pendentes no mes
+                      Pendentes no mês
                     </p>
                     <p className="mt-2 text-lg font-semibold text-foreground">
                       {formatNumber(statusSummary.pending)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Jogos ainda aguardando confirmacao
+                      Jogos ainda aguardando confirmação
                     </p>
                   </div>
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Contestadas no mes
+                      Contestadas no mês
                     </p>
                     <p className="mt-2 text-lg font-semibold text-foreground">
                       {formatNumber(statusSummary.edited)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Jogos que voltaram para revisao
+                      Jogos que voltaram para revisão
                     </p>
                   </div>
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Canceladas no mes
+                      Canceladas no mês
                     </p>
                     <p className="mt-2 text-lg font-semibold text-foreground">
                       {formatNumber(statusSummary.canceled)}
@@ -777,13 +802,13 @@ export default function AdminMetricasPage() {
                   </div>
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Acoes admin
+                      Ações admin
                     </p>
                     <p className="mt-2 text-lg font-semibold text-foreground">
                       {formatNumber(analytics.summary.adminActions)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Intervencoes registradas no periodo
+                      Intervenções registradas no período
                     </p>
                   </div>
                 </div>
@@ -791,7 +816,7 @@ export default function AdminMetricasPage() {
 
               <SectionCard
                 icon={TrendingUp}
-                title="Tendencia de 6 meses"
+                title="Tendência de 6 meses"
                 description="Barra azul mostra registros. Barra verde mostra jogos validados."
               >
                 <div className="space-y-3">
@@ -803,8 +828,8 @@ export default function AdminMetricasPage() {
             <TabsContent value="dias" className="space-y-4">
               <SectionCard
                 icon={CalendarDays}
-                title="Todos os dias do mes"
-                description="Leitura dia a dia do mes, com divisores entre as semanas."
+                title="Todos os dias do mês"
+                description="Leitura dia a dia do mês, com divisores entre as semanas."
               >
                 <div className="space-y-3">
                   {renderDayRowsWithWeekDividers(analytics.dayStats)}
@@ -816,20 +841,20 @@ export default function AdminMetricasPage() {
               <SectionCard
                 icon={Users}
                 title="Jogadores mais ativos"
-                description="Comparativo entre o mes inteiro e o recorte mais recente dentro do periodo."
+                description="Comparativo entre o mês inteiro e o recorte mais recente dentro do período."
               >
                 <div className="space-y-3">
                   <TopPlayersGroup
-                    title="Do mes"
-                    description="Ranking do recorte mensal com registros nao cancelados."
+                    title="Do mês"
+                    description="Ranking do recorte mensal com registros não cancelados."
                     players={analytics.topPlayersMonth}
-                    emptyMessage="Ainda nao ha jogadores com atividade suficiente neste mes."
+                    emptyMessage="Ainda não há jogadores com atividade suficiente neste mês."
                   />
                   <TopPlayersGroup
-                    title="Dos ultimos 7 dias"
-                    description={`Recorte mais recente do periodo: ${analytics.last7DaysRangeLabel}.`}
+                    title="Dos últimos 7 dias"
+                    description={`Recorte mais recente do período: ${analytics.last7DaysRangeLabel}.`}
                     players={analytics.topPlayersLast7Days}
-                    emptyMessage="Ainda nao ha jogadores com atividade suficiente nos ultimos 7 dias."
+                    emptyMessage="Ainda não há jogadores com atividade suficiente nos últimos 7 dias."
                   />
                 </div>
               </SectionCard>
@@ -841,7 +866,7 @@ export default function AdminMetricasPage() {
               >
                 <div className="space-y-3">
                   {analytics.topRivalries.length === 0 ? (
-                    <EmptyList message="Ainda nao ha rivalidades suficientes para comparar neste mes." />
+                    <EmptyList message="Ainda não há rivalidades suficientes para comparar neste mês." />
                   ) : (
                     analytics.topRivalries.map((rivalry) => (
                       <RivalryRow
@@ -862,16 +887,16 @@ export default function AdminMetricasPage() {
               >
                 <div className="space-y-3 text-sm text-foreground">
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    Compare registros com validadas para entender se o app esta sendo usado
-                    e se as partidas estao fechando sem atrito.
+                    Compare registros com validadas para entender se o app está sendo usado
+                    e se as partidas estão sendo concluídas sem atrito.
                   </div>
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    Use a aba do mes para identificar em quais dias vale
-                    reforcar divulgacao, torneios internos ou lembretes de confirmacao.
+                    Use a aba do mês para identificar em quais dias vale
+                    reforçar divulgação, torneios internos ou lembretes de confirmação.
                   </div>
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    Se quiser medir navegacao real do app depois, o proximo passo e salvar
-                    eventos de pageview/sessao em uma tabela propria.
+                    Use as abas de resumo, mês e jogadores para acompanhar frequência de uso,
+                    concentração dos jogos e quem mais movimenta o ranking na escola.
                   </div>
                 </div>
               </SectionCard>

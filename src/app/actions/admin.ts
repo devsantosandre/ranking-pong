@@ -89,7 +89,8 @@ export type AdminAnalyticsSummary = {
   activeAccounts: number;
   participationRate: number;
   averagePerDay: number;
-  daysWithoutMatches: number;
+  hoursSinceLastRegistration: number;
+  longestGapWithoutRegistrations: number;
   newUsers: number;
   newUsersDelta: number;
   openPending: number;
@@ -204,11 +205,11 @@ type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
 const WEEKDAY_METADATA = [
   { day: 1, key: "mon", label: "Segunda-feira", shortLabel: "Seg" },
-  { day: 2, key: "tue", label: "Terca-feira", shortLabel: "Ter" },
+  { day: 2, key: "tue", label: "Terça-feira", shortLabel: "Ter" },
   { day: 3, key: "wed", label: "Quarta-feira", shortLabel: "Qua" },
   { day: 4, key: "thu", label: "Quinta-feira", shortLabel: "Qui" },
   { day: 5, key: "fri", label: "Sexta-feira", shortLabel: "Sex" },
-  { day: 6, key: "sat", label: "Sabado", shortLabel: "Sab" },
+  { day: 6, key: "sat", label: "Sábado", shortLabel: "Sáb" },
   { day: 0, key: "sun", label: "Domingo", shortLabel: "Dom" },
 ] as const;
 
@@ -623,6 +624,81 @@ function getDateInTimezone(dateInput: string | Date, timeZone: string): string {
   } catch {
     return new Date(dateInput).toISOString().split("T")[0];
   }
+}
+
+function normalizeUtcOffset(offsetValue: string): string {
+  if (!offsetValue || offsetValue === "GMT") {
+    return "+00:00";
+  }
+
+  const normalizedValue = offsetValue.replace("GMT", "");
+  const match = normalizedValue.match(/^([+-])(\d{1,2})(?::?(\d{2}))?$/);
+
+  if (!match) {
+    return "+00:00";
+  }
+
+  const [, sign, hours, minutes = "00"] = match;
+  return `${sign}${hours.padStart(2, "0")}:${minutes}`;
+}
+
+function getDateAtTimezoneBoundary(
+  dateKey: string,
+  timeZone: string,
+  boundary: "start" | "end"
+): Date {
+  const time = boundary === "start" ? "00:00:00.000" : "23:59:59.999";
+
+  try {
+    const offsetValue =
+      new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        timeZoneName: "longOffset",
+      })
+        .formatToParts(new Date(`${dateKey}T12:00:00Z`))
+        .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+
+    const offset = normalizeUtcOffset(offsetValue);
+    return new Date(`${dateKey}T${time}${offset}`);
+  } catch {
+    return new Date(`${dateKey}T${time}Z`);
+  }
+}
+
+function getHoursBetween(startDate: Date, endDate: Date): number {
+  return roundToOneDecimal(
+    Math.max(0, (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60))
+  );
+}
+
+function getLongestGapWithoutRegistrations(
+  timestamps: string[],
+  rangeStartAt: Date,
+  rangeEndAt: Date
+): number {
+  if (timestamps.length === 0) {
+    return getHoursBetween(rangeStartAt, rangeEndAt);
+  }
+
+  const sortedDates = timestamps
+    .map((timestamp) => new Date(timestamp))
+    .sort((left, right) => left.getTime() - right.getTime());
+
+  let longestGap = getHoursBetween(rangeStartAt, sortedDates[0]);
+
+  for (let index = 1; index < sortedDates.length; index += 1) {
+    longestGap = Math.max(
+      longestGap,
+      getHoursBetween(sortedDates[index - 1], sortedDates[index])
+    );
+  }
+
+  longestGap = Math.max(
+    longestGap,
+    getHoursBetween(sortedDates[sortedDates.length - 1], rangeEndAt)
+  );
+
+  return roundToOneDecimal(longestGap);
 }
 
 async function revertDailyLimitForCancelledMatch(
@@ -1707,7 +1783,7 @@ export async function adminGetAnalytics(
   ]);
 
   if (firstMatchResponse.error || firstUserResponse.error) {
-    throw new Error("Erro ao definir inicio do historico");
+    throw new Error("Erro ao definir início do histórico");
   }
 
   const firstMatchMonth = (firstMatchResponse.data?.[0] as AnalyticsFirstMatchRow | undefined)
@@ -1751,19 +1827,19 @@ export async function adminGetAnalytics(
   ]);
 
   if (matchesResponse.error) {
-    throw new Error("Erro ao buscar metricas de partidas");
+    throw new Error("Erro ao buscar métricas de partidas");
   }
 
   if (usersResponse.error) {
-    throw new Error("Erro ao buscar metricas de usuarios");
+    throw new Error("Erro ao buscar métricas de usuários");
   }
 
   if (logsResponse.error) {
-    throw new Error("Erro ao buscar metricas administrativas");
+    throw new Error("Erro ao buscar métricas administrativas");
   }
 
   if (openPendingResponse.error) {
-    throw new Error("Erro ao buscar pendencias abertas");
+    throw new Error("Erro ao buscar pendências abertas");
   }
 
   const matches = (matchesResponse.data ?? []) as AnalyticsMatchRow[];
@@ -1781,6 +1857,14 @@ export async function adminGetAnalytics(
     (match) => match.status !== "cancelado"
   );
   const validatedMatches = monthMatches.filter((match) => match.status === "validado");
+  const monthRangeStartAt = getDateAtTimezoneBoundary(
+    selectedRange.startDate,
+    BUSINESS_TIMEZONE,
+    "start"
+  );
+  const monthRangeEndAt = isCurrentMonth
+    ? new Date()
+    : getDateAtTimezoneBoundary(selectedRange.endDate, BUSINESS_TIMEZONE, "end");
   const recentDayWindow = monthDays.slice(-7);
   const last7DaysStartDate = recentDayWindow[0] ?? monthDays[0] ?? selectedRange.startDate;
   const last7DaysEndDate =
@@ -2074,6 +2158,17 @@ export async function adminGetAnalytics(
     (row) => getMonthKeyFromTimestamp(row.created_at) === selectedMonth
   ).length;
   const dayRegistrations = dayStats.reduce((total, day) => total + day.registrations, 0);
+  const latestMonthRegistration = [...monthMatches].sort((left, right) =>
+    right.created_at.localeCompare(left.created_at)
+  )[0];
+  const hoursSinceLastRegistration = latestMonthRegistration
+    ? getHoursBetween(new Date(latestMonthRegistration.created_at), new Date())
+    : getHoursBetween(monthRangeStartAt, new Date());
+  const longestGapWithoutRegistrations = getLongestGapWithoutRegistrations(
+    monthMatches.map((match) => match.created_at),
+    monthRangeStartAt,
+    monthRangeEndAt
+  );
 
   const summary: AdminAnalyticsSummary = {
     registrations: monthMatches.length,
@@ -2088,20 +2183,14 @@ export async function adminGetAnalytics(
       monthDays.length > 0
         ? roundToOneDecimal(dayRegistrations / monthDays.length)
         : 0,
-    daysWithoutMatches: dayStats.filter((day) => day.registrations === 0).length,
+    hoursSinceLastRegistration,
+    longestGapWithoutRegistrations,
     newUsers,
     newUsersDelta: newUsers - previousNewUsers,
     openPending: openPendingResponse.count ?? 0,
     adminActions,
   };
 
-  const busiestWeekday = [...weekdayStats].sort((left, right) => {
-    if (right.registrations !== left.registrations) {
-      return right.registrations - left.registrations;
-    }
-
-    return right.validated - left.validated;
-  })[0];
   const busiestDay = [...dayStats].sort((left, right) => {
     if (right.registrations !== left.registrations) {
       return right.registrations - left.registrations;
@@ -2111,21 +2200,19 @@ export async function adminGetAnalytics(
   })[0];
 
   const insights = [
-    busiestWeekday && busiestWeekday.registrations > 0
-      ? `${busiestWeekday.label} concentrou ${busiestWeekday.registrations} registro(s) no periodo.`
-      : `Ainda nao houve registros ao longo da semana em ${formatMonthLabel(selectedMonth)}.`,
-    summary.participationRate > 0
-      ? `${summary.participationRate}% da base ativa participou de pelo menos uma partida no mes.`
-      : `Nenhum jogador ativo apareceu em partidas neste mes.`,
-    summary.openPending > 0
-      ? `${summary.openPending} pendencia(s) abertas pedem acompanhamento do admin.`
-      : `Nao ha pendencias abertas agora, sinal de operacao em dia.`,
-    statusCounts.edited > 0
-      ? `${statusCounts.edited} partida(s) contestada(s) passaram por revisao no periodo.`
-      : `Nao houve partidas contestadas no periodo.`,
     busiestDay && busiestDay.registrations > 0
-      ? `${busiestDay.label} (${busiestDay.weekday}) foi o dia mais movimentado do mes.`
-      : `${summary.daysWithoutMatches} dia(s) do mes ficaram sem registros no periodo.`,
+      ? `${busiestDay.label} foi o dia com mais registros no período, com ${busiestDay.registrations} registro(s).`
+      : `Ainda não houve registros em ${formatMonthLabel(selectedMonth)}.`,
+    summary.participationRate > 0
+      ? `${summary.participationRate}% da base ativa participou de pelo menos uma partida no mês.`
+      : `Nenhum jogador ativo apareceu em partidas neste mês.`,
+    summary.openPending > 0
+      ? `${summary.openPending} pendência(s) abertas pedem acompanhamento do admin.`
+      : `Não há pendências abertas agora, sinal de operação em dia.`,
+    statusCounts.edited > 0
+      ? `${statusCounts.edited} partida(s) contestada(s) passaram por revisão no período.`
+      : `Não houve partidas contestadas no período.`,
+    `${summary.longestGapWithoutRegistrations} h foi o maior intervalo sem registros no período.`,
   ].slice(0, 4);
 
   return {
