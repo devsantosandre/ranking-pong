@@ -176,6 +176,13 @@ export type AdminAnalyticsStatus = {
   percentage: number;
 };
 
+export type AdminAnalyticsActionBreakdown = {
+  key: string;
+  label: string;
+  description: string;
+  count: number;
+};
+
 export type AdminAnalyticsResponse = {
   selectedMonth: string;
   selectedMonthLabel: string;
@@ -193,6 +200,7 @@ export type AdminAnalyticsResponse = {
   topPlayersLast7Days: AdminAnalyticsPlayer[];
   topRivalries: AdminAnalyticsRivalry[];
   statusBreakdown: AdminAnalyticsStatus[];
+  adminActionBreakdown: AdminAnalyticsActionBreakdown[];
   insights: string[];
 };
 
@@ -212,6 +220,71 @@ const WEEKDAY_METADATA = [
   { day: 6, key: "sat", label: "Sábado", shortLabel: "Sáb" },
   { day: 0, key: "sun", label: "Domingo", shortLabel: "Dom" },
 ] as const;
+const ADMIN_ACTION_METADATA: Record<
+  string,
+  Pick<AdminAnalyticsActionBreakdown, "key" | "label" | "description">
+> = {
+  match_cancelled: {
+    key: "match_cancelled",
+    label: "Cancelamentos de partidas",
+    description: "Partidas canceladas manualmente pelo admin.",
+  },
+  user_created: {
+    key: "user_created",
+    label: "Jogadores criados",
+    description: "Novos jogadores cadastrados pelo admin.",
+  },
+  user_password_reset: {
+    key: "user_password_reset",
+    label: "Senhas resetadas",
+    description: "Redefinições de senha feitas para jogadores.",
+  },
+  user_name_updated: {
+    key: "user_name_updated",
+    label: "Nomes alterados",
+    description: "Correções ou mudanças de nome de jogador.",
+  },
+  user_rating_changed: {
+    key: "user_rating_changed",
+    label: "Ajustes de pontuação",
+    description: "Alterações manuais de rating ou pontos.",
+  },
+  user_activated: {
+    key: "user_status_changed",
+    label: "Status de jogadores",
+    description: "Jogadores ativados ou desativados pelo admin.",
+  },
+  user_deactivated: {
+    key: "user_status_changed",
+    label: "Status de jogadores",
+    description: "Jogadores ativados ou desativados pelo admin.",
+  },
+  user_hidden_from_ranking: {
+    key: "user_ranking_visibility",
+    label: "Visibilidade no ranking",
+    description: "Jogadores ocultados ou exibidos no ranking.",
+  },
+  user_shown_in_ranking: {
+    key: "user_ranking_visibility",
+    label: "Visibilidade no ranking",
+    description: "Jogadores ocultados ou exibidos no ranking.",
+  },
+  user_stats_reset: {
+    key: "user_stats_reset",
+    label: "Estatísticas resetadas",
+    description: "Zeragem de estatísticas e retorno ao rating inicial.",
+  },
+  user_role_changed: {
+    key: "user_role_changed",
+    label: "Permissões alteradas",
+    description: "Mudanças de perfil entre jogador, moderador e admin.",
+  },
+  setting_changed: {
+    key: "setting_changed",
+    label: "Configurações alteradas",
+    description: "Ajustes nas regras e parâmetros do sistema.",
+  },
+};
 
 type AnalyticsMatchRow = {
   id: string;
@@ -235,6 +308,7 @@ type AnalyticsUserRow = {
 
 type AnalyticsLogRow = {
   id: string;
+  action: string | null;
   created_at: string | null;
 };
 
@@ -1819,7 +1893,7 @@ export async function adminGetAnalytics(
       .gte("data_partida", trendStart)
       .lte("data_partida", selectedRange.endDate),
     supabase.from("users").select("id, name, full_name, email, created_at, is_active"),
-    supabase.from("admin_logs").select("id, created_at"),
+    supabase.from("admin_logs").select("id, action, created_at"),
     supabase
       .from("matches")
       .select("id", { count: "exact", head: true })
@@ -2154,9 +2228,36 @@ export async function adminGetAnalytics(
   const previousNewUsers = users.filter(
     (user) => getMonthKeyFromTimestamp(user.created_at) === previousMonth
   ).length;
-  const adminActions = logRows.filter(
+  const monthAdminLogs = logRows.filter(
     (row) => getMonthKeyFromTimestamp(row.created_at) === selectedMonth
-  ).length;
+  );
+  const adminActions = monthAdminLogs.length;
+  const adminActionAccumulator = new Map<string, AdminAnalyticsActionBreakdown>();
+  for (const row of monthAdminLogs) {
+    const metadata = row.action ? ADMIN_ACTION_METADATA[row.action] : null;
+    const breakdownKey = metadata?.key ?? "other_admin_actions";
+    const breakdownLabel = metadata?.label ?? "Outras ações";
+    const breakdownDescription =
+      metadata?.description ?? "Outras intervenções administrativas registradas no período.";
+    const current = adminActionAccumulator.get(breakdownKey) ?? {
+      key: breakdownKey,
+      label: breakdownLabel,
+      description: breakdownDescription,
+      count: 0,
+    };
+
+    current.count += 1;
+    adminActionAccumulator.set(breakdownKey, current);
+  }
+  const adminActionBreakdown = Array.from(adminActionAccumulator.values()).sort(
+    (left, right) => {
+      if (right.count !== left.count) {
+        return right.count - left.count;
+      }
+
+      return left.label.localeCompare(right.label, "pt-BR");
+    }
+  );
   const dayRegistrations = dayStats.reduce((total, day) => total + day.registrations, 0);
   const latestMonthRegistration = [...monthMatches].sort((left, right) =>
     right.created_at.localeCompare(left.created_at)
@@ -2232,6 +2333,7 @@ export async function adminGetAnalytics(
     topPlayersLast7Days,
     topRivalries,
     statusBreakdown,
+    adminActionBreakdown,
     insights,
   };
 }
