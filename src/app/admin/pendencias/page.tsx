@@ -22,10 +22,11 @@ import {
 } from "@/app/actions/admin";
 
 type PendingFilter = "all" | "stale" | "pendente" | "edited";
+const PENDING_ATTENTION_HOURS = 6;
 
 const filterOptions: Array<{ key: PendingFilter; label: string }> = [
   { key: "all", label: "Todas" },
-  { key: "stale", label: "Mais de 24h" },
+  { key: "stale", label: `Mais de ${PENDING_ATTENTION_HOURS}h` },
   { key: "pendente", label: "Pendentes" },
   { key: "edited", label: "Contestadas" },
 ];
@@ -41,6 +42,14 @@ function formatDateTime(dateInput: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function describeTimelineEvent(event: AdminAnalyticsPendingMatch["timeline"][number]) {
+  if (event.type === "registered") {
+    return `Registrada por ${event.actorName}`;
+  }
+
+  return `Placar contestado por ${event.actorName}`;
 }
 
 function formatDateOnly(dateInput: string) {
@@ -116,6 +125,13 @@ function PendingActionModal({
   const isCancel = state.mode === "cancel";
   const title = isCancel ? "Cancelar partida" : "Aceitar partida";
   const confirmText = isCancel ? "Cancelar partida" : "Aceitar partida";
+  const playerAWon = state.match.scoreA > state.match.scoreB;
+  const playerBWon = state.match.scoreB > state.match.scoreA;
+  const resultSummary = playerAWon
+    ? `Placar informado: ${state.match.playerAName} venceu`
+    : playerBWon
+      ? `Placar informado: ${state.match.playerBName} venceu`
+      : "Placar informado";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
@@ -123,9 +139,50 @@ function PendingActionModal({
         <div className="space-y-1">
           <p className="text-base font-semibold text-foreground">{title}</p>
           <p className="text-sm text-muted-foreground">{state.match.playersLabel}</p>
-          <p className="text-xs text-muted-foreground">
-            Placar atual {state.match.scoreLabel}
+        </div>
+
+        <div className="mt-4 space-y-2 rounded-2xl border border-border/70 bg-card/80 p-3">
+          <p
+            className={`text-xs font-semibold ${
+              playerAWon || playerBWon ? "text-emerald-700" : "text-foreground"
+            }`}
+          >
+            {resultSummary}
           </p>
+
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+            <div
+              className={`rounded-lg border px-2 py-2 ${
+                playerAWon
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-border bg-background text-foreground"
+              }`}
+            >
+              <p className="truncate text-[11px] font-semibold text-muted-foreground">
+                {state.match.playerAName}
+              </p>
+              <p className="text-2xl font-bold leading-none tabular-nums">
+                {state.match.scoreA}
+              </p>
+            </div>
+
+            <span className="text-lg font-semibold text-muted-foreground">x</span>
+
+            <div
+              className={`rounded-lg border px-2 py-2 text-right ${
+                playerBWon
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-border bg-background text-foreground"
+              }`}
+            >
+              <p className="truncate text-[11px] font-semibold text-muted-foreground">
+                {state.match.playerBName}
+              </p>
+              <p className="text-2xl font-bold leading-none tabular-nums">
+                {state.match.scoreB}
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 rounded-2xl border border-border/70 bg-muted/15 p-3 text-sm text-foreground">
@@ -200,6 +257,15 @@ function PendingMatchRow({
     match.status === "edited"
       ? "bg-blue-100 text-blue-700"
       : "bg-amber-100 text-amber-700";
+  const playerAWon = match.scoreA > match.scoreB;
+  const playerBWon = match.scoreB > match.scoreA;
+  const hasTimelineHistory = match.timeline.length > 1;
+  const hasPendingStateChange = match.pendingSinceAt !== match.createdAt;
+  const resultSummary = playerAWon
+    ? `Placar informado: ${match.playerAName} venceu`
+    : playerBWon
+      ? `Placar informado: ${match.playerBName} venceu`
+      : "Placar informado";
 
   return (
     <article
@@ -218,13 +284,10 @@ function PendingMatchRow({
             </span>
             {match.isStale ? (
               <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
-                Mais de 24h
+                Mais de {PENDING_ATTENTION_HOURS}h
               </span>
             ) : null}
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Placar atual {match.scoreLabel}
-          </p>
         </div>
         <div className="shrink-0 text-right">
           <p className="text-sm font-semibold text-foreground">
@@ -234,20 +297,86 @@ function PendingMatchRow({
         </div>
       </div>
 
+      <div className="mt-3 space-y-2 rounded-xl border border-border/70 bg-card/80 p-3">
+        <p
+          className={`text-xs font-semibold ${
+            playerAWon || playerBWon ? "text-emerald-700" : "text-foreground"
+          }`}
+        >
+          {resultSummary}
+        </p>
+
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+          <div
+            className={`rounded-lg border px-2 py-2 ${
+              playerAWon
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-border bg-background text-foreground"
+            }`}
+          >
+            <p className="truncate text-[11px] font-semibold text-muted-foreground">
+              {match.playerAName}
+            </p>
+            <p className="text-2xl font-bold leading-none tabular-nums">
+              {match.scoreA}
+            </p>
+          </div>
+
+          <span className="text-lg font-semibold text-muted-foreground">x</span>
+
+          <div
+            className={`rounded-lg border px-2 py-2 text-right ${
+              playerBWon
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-border bg-background text-foreground"
+            }`}
+          >
+            <p className="truncate text-[11px] font-semibold text-muted-foreground">
+              {match.playerBName}
+            </p>
+            <p className="text-2xl font-bold leading-none tabular-nums">
+              {match.scoreB}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground">
         <div className="rounded-lg bg-background/80 px-3 py-2">
           Aguardando:{" "}
           <span className="font-semibold text-foreground">{match.waitingForUserName}</span>
         </div>
-        <div className="rounded-lg bg-background/80 px-3 py-2">
-          Última ação:{" "}
-          <span className="font-semibold text-foreground">{match.lastActorUserName}</span>
-        </div>
+        {hasPendingStateChange ? (
+          <div className="rounded-lg bg-background/80 px-3 py-2">
+            Pendência atual desde{" "}
+            <span className="font-semibold text-foreground">
+              {formatDateTime(match.pendingSinceAt)}
+            </span>
+          </div>
+        ) : null}
         <div className="rounded-lg bg-background/80 px-3 py-2">
           Partida de {formatDateOnly(match.matchDate)}. Registrada em{" "}
           {formatDateTime(match.createdAt)}
         </div>
       </div>
+
+      {hasTimelineHistory ? (
+        <div className="mt-3 rounded-lg bg-background/80 px-3 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Histórico da pendência
+          </p>
+          <div className="mt-2 space-y-2">
+            {[...match.timeline].reverse().map((event) => (
+              <div key={event.id} className="flex items-start justify-between gap-3 text-[11px]">
+                <p className="text-foreground">{describeTimelineEvent(event)}</p>
+                <span className="shrink-0 text-muted-foreground">
+                  {formatDateTime(event.occurredAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
         <Button
@@ -377,9 +506,9 @@ export default function AdminPendenciasPage() {
 
     try {
       if (actionState.mode === "accept") {
-        await adminValidatePendingMatch(actionState.match.id);
+        await adminValidatePendingMatch(actionState.match.id, "pendencias");
       } else {
-        await adminCancelMatch(actionState.match.id, actionReason.trim());
+        await adminCancelMatch(actionState.match.id, actionReason.trim(), "pendencias");
       }
 
       await loadPendingMatches(true);
@@ -485,9 +614,9 @@ export default function AdminPendenciasPage() {
                 tone="border-sky-200 bg-sky-50"
               />
               <SummaryCard
-                title="Mais de 24h"
+                title={`Mais de ${PENDING_ATTENTION_HOURS}h`}
                 value={formatNumber(data.staleCount)}
-                description="Pendências que precisam de atenção do admin"
+                description="Pendências que pedem mais atenção do admin"
                 tone="border-amber-200 bg-amber-50"
               />
               <SummaryCard
@@ -589,8 +718,8 @@ export default function AdminPendenciasPage() {
               responder.
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-              Pendências com mais de 24h merecem acompanhamento porque costumam travar o
-              fechamento correto do ranking.
+              Pendências com mais de {PENDING_ATTENTION_HOURS}h merecem acompanhamento
+              porque costumam travar o fechamento correto do ranking.
             </div>
           </div>
         </section>

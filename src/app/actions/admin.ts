@@ -152,14 +152,25 @@ export type AdminAnalyticsPendingMatch = {
   status: "pendente" | "edited";
   playersLabel: string;
   scoreLabel: string;
+  playerAName: string;
+  playerBName: string;
+  scoreA: number;
+  scoreB: number;
   waitingForUserId: string | null;
   waitingForUserName: string;
+  pendingSinceAt: string;
   lastActorUserId: string | null;
   lastActorUserName: string;
   createdAt: string;
   matchDate: string;
   ageHours: number;
   isStale: boolean;
+  timeline: {
+    id: string;
+    type: "registered" | "contested";
+    actorName: string;
+    occurredAt: string;
+  }[];
 };
 
 export type AdminPendingMatchesResponse = {
@@ -212,6 +223,16 @@ export type AdminAnalyticsResponse = {
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
 type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
+const PENDING_ATTENTION_HOURS = 6;
+type AdminMatchActionSource = "partidas" | "pendencias";
+const ADMIN_MATCH_ACTION_SOURCE_LABEL: Record<AdminMatchActionSource, string> = {
+  partidas: "Partidas",
+  pendencias: "Pendências",
+};
+const ADMIN_MATCH_ACTION_SOURCE_TEXT: Record<AdminMatchActionSource, string> = {
+  partidas: "pela tela de Partidas",
+  pendencias: "pela tela de Pendências",
+};
 const WEEKDAY_METADATA = [
   { day: 1, key: "mon", label: "Segunda-feira", shortLabel: "Seg" },
   { day: 2, key: "tue", label: "Terça-feira", shortLabel: "Ter" },
@@ -344,6 +365,11 @@ type AnalyticsPendingMatchRow = {
   player_a: AnalyticsUserRelation;
   player_b: AnalyticsUserRelation;
   creator: AnalyticsUserRelation;
+};
+
+type AnalyticsNotificationRow = {
+  created_at: string;
+  payload: unknown;
 };
 
 function validatePage(page: number): number {
@@ -592,35 +618,71 @@ function buildAnalyticsTopPlayers(
 }
 
 function mapPendingMatchRows(
-  rows: AnalyticsPendingMatchRow[]
+  rows: AnalyticsPendingMatchRow[],
+  timelineByMatchId: Map<
+    string,
+    {
+      pendingSinceAt: string;
+      timeline: {
+        id: string;
+        type: "registered" | "contested";
+        actorName: string;
+        occurredAt: string;
+      }[];
+    }
+  >
 ): AdminAnalyticsPendingMatch[] {
   return rows
     .map((match) => {
       const playerA = normalizeAnalyticsUserRelation(match.player_a, match.player_a_id);
       const playerB = normalizeAnalyticsUserRelation(match.player_b, match.player_b_id);
       const creator = normalizeAnalyticsUserRelation(match.creator, match.criado_por);
+      const playerAName = getUserDisplayName(playerA);
+      const playerBName = getUserDisplayName(playerB);
+      const scoreA = match.resultado_a ?? 0;
+      const scoreB = match.resultado_b ?? 0;
+      const timelineEntry = timelineByMatchId.get(match.id);
       const waitingForUserId = getPendingResponsibleUserId(match);
       const waitingForUserName =
         waitingForUserId === match.player_a_id
-          ? getUserDisplayName(playerA)
+          ? playerAName
           : waitingForUserId === match.player_b_id
-            ? getUserDisplayName(playerB)
+            ? playerBName
             : "Responsavel indefinido";
       const ageHours = getHoursSince(match.created_at);
+      const fallbackActorName = getUserDisplayName(creator);
+      const timeline =
+        timelineEntry?.timeline.length
+          ? timelineEntry.timeline
+          : [
+              {
+                id: `${match.id}-registered`,
+                type: "registered" as const,
+                actorName: fallbackActorName,
+                occurredAt: match.created_at,
+              },
+            ];
+      const pendingSinceAt = timelineEntry?.pendingSinceAt ?? match.created_at;
 
       return {
         id: match.id,
         status: match.status,
-        playersLabel: `${getUserDisplayName(playerA)} x ${getUserDisplayName(playerB)}`,
-        scoreLabel: `${match.resultado_a ?? 0}x${match.resultado_b ?? 0}`,
+        playersLabel: `${playerAName} x ${playerBName}`,
+        scoreLabel: `${scoreA}x${scoreB}`,
+        playerAName,
+        playerBName,
+        scoreA,
+        scoreB,
         waitingForUserId,
         waitingForUserName,
+        pendingSinceAt,
         lastActorUserId: creator.id ?? match.criado_por,
         lastActorUserName: getUserDisplayName(creator),
         createdAt: match.created_at,
         matchDate: match.data_partida,
         ageHours,
-        isStale: ageHours >= 24,
+        isStale: ageHours >= PENDING_ATTENTION_HOURS,
+        timeline,
       };
     })
     .sort((left, right) => {
@@ -630,6 +692,86 @@ function mapPendingMatchRows(
 
       return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
     });
+}
+
+function parsePendingNotificationPayload(
+  payload: unknown
+): PendingNotificationPayloadV1 | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const candidate = payload as Partial<PendingNotificationPayloadV1>;
+  if (
+    candidate.event !== "pending_created" &&
+    candidate.event !== "pending_transferred" &&
+    candidate.event !== "pending_resolved"
+  ) {
+    return null;
+  }
+
+  if (
+    typeof candidate.match_id !== "string" ||
+    typeof candidate.status !== "string" ||
+    typeof candidate.actor_id !== "string" ||
+    typeof candidate.created_by !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    event: candidate.event,
+    match_id: candidate.match_id,
+    status: candidate.status as PendingNotificationPayloadV1["status"],
+    actor_id: candidate.actor_id,
+    actor_name: typeof candidate.actor_name === "string" ? candidate.actor_name : null,
+    created_by: candidate.created_by,
+  };
+}
+
+function buildPendingTimelineByMatchId(
+  matches: AnalyticsPendingMatchRow[],
+  notifications: AnalyticsNotificationRow[]
+) {
+  const openMatchIds = new Set(matches.map((match) => match.id));
+  const timelineByMatchId = new Map<
+    string,
+    {
+      pendingSinceAt: string;
+      timeline: {
+        id: string;
+        type: "registered" | "contested";
+        actorName: string;
+        occurredAt: string;
+      }[];
+    }
+  >();
+
+  for (const row of notifications) {
+    const payload = parsePendingNotificationPayload(row.payload);
+    if (!payload || !openMatchIds.has(payload.match_id)) {
+      continue;
+    }
+
+    if (payload.event !== "pending_created" && payload.event !== "pending_transferred") {
+      continue;
+    }
+
+    const current = timelineByMatchId.get(payload.match_id) ?? {
+      pendingSinceAt: row.created_at,
+      timeline: [],
+    };
+
+    current.timeline.push({
+      id: `${payload.match_id}-${payload.event}-${row.created_at}`,
+      type: payload.event === "pending_created" ? "registered" : "contested",
+      actorName: payload.actor_name || "Jogador",
+      occurredAt: row.created_at,
+    });
+    current.pendingSinceAt = row.created_at;
+
+    timelineByMatchId.set(payload.match_id, current);
+  }
+
+  return timelineByMatchId;
 }
 
 function roundToOneDecimal(value: number): number {
@@ -859,7 +1001,11 @@ export async function adminGetAllMatches(
   };
 }
 
-export async function adminCancelMatch(matchId: string, reason: string) {
+export async function adminCancelMatch(
+  matchId: string,
+  reason: string,
+  source: AdminMatchActionSource = "partidas"
+) {
   await requireModerator();
 
   if (!reason || reason.trim().length < 3) {
@@ -1086,17 +1232,19 @@ export async function adminCancelMatch(matchId: string, reason: string) {
 
   // Registrar log
   const achievementsRevoked = revokedAchievements?.length || 0;
+  const sourceLabel = ADMIN_MATCH_ACTION_SOURCE_LABEL[source];
+  const sourceText = ADMIN_MATCH_ACTION_SOURCE_TEXT[source];
   await createAdminLog({
     action: "match_cancelled",
     action_description:
       oldStatus === "validado"
-        ? `Partida cancelada, pontos revertidos${achievementsRevoked > 0 ? ` e ${achievementsRevoked} conquista(s) revogada(s)` : ""}`
-        : "Partida cancelada",
+        ? `Partida cancelada ${sourceText}, com pontos revertidos${achievementsRevoked > 0 ? ` e ${achievementsRevoked} conquista(s) revogada(s)` : ""}`
+        : `Partida cancelada ${sourceText}`,
     target_type: "match",
     target_id: matchId,
     target_name: targetName,
-    old_value: { status: oldStatus },
-    new_value: { status: "cancelado" },
+    old_value: { status: oldStatus, origem: sourceLabel },
+    new_value: { status: "cancelado", origem: sourceLabel },
     reason: reason.trim(),
   });
 
@@ -1111,7 +1259,10 @@ export async function adminCancelMatch(matchId: string, reason: string) {
   return { success: true };
 }
 
-export async function adminValidatePendingMatch(matchId: string) {
+export async function adminValidatePendingMatch(
+  matchId: string,
+  source: AdminMatchActionSource = "pendencias"
+) {
   await requireModerator();
 
   const adminActor = await getCurrentUser();
@@ -1131,20 +1282,24 @@ export async function adminValidatePendingMatch(matchId: string) {
     throw new Error(result.error);
   }
 
+  const sourceLabel = ADMIN_MATCH_ACTION_SOURCE_LABEL[source];
+  const sourceText = ADMIN_MATCH_ACTION_SOURCE_TEXT[source];
   await createAdminLog({
     action: "match_validated_by_admin",
-    action_description: "Partida aceita pelo admin",
+    action_description: `Partida aceita pelo admin ${sourceText}`,
     target_type: "match",
     target_id: matchId,
     target_name: result.targetName,
     old_value: {
       status: result.oldStatus,
+      origem: sourceLabel,
       placar: result.scoreLabel,
       player_a: result.playerAName,
       player_b: result.playerBName,
     },
     new_value: {
       status: "validado",
+      origem: sourceLabel,
       placar: result.scoreLabel,
       player_a: result.playerAName,
       player_b: result.playerBName,
@@ -2430,7 +2585,30 @@ export async function adminGetPendingMatches(): Promise<AdminPendingMatchesRespo
     throw new Error("Erro ao carregar pendencias");
   }
 
-  const items = mapPendingMatchRows((data ?? []) as AnalyticsPendingMatchRow[]);
+  const pendingRows = (data ?? []) as AnalyticsPendingMatchRow[];
+  if (pendingRows.length === 0) {
+    return {
+      openCount: 0,
+      staleCount: 0,
+      pendingCount: 0,
+      editedCount: 0,
+      items: [],
+    };
+  }
+
+  const oldestCreatedAt = pendingRows[0]?.created_at;
+  const { data: notificationRows } = await supabase
+    .from("notifications")
+    .select("created_at, payload")
+    .eq("tipo", "confirmacao")
+    .gte("created_at", oldestCreatedAt)
+    .order("created_at", { ascending: true });
+
+  const timelineByMatchId = buildPendingTimelineByMatchId(
+    pendingRows,
+    (notificationRows ?? []) as AnalyticsNotificationRow[]
+  );
+  const items = mapPendingMatchRows(pendingRows, timelineByMatchId);
 
   return {
     openCount: items.length,

@@ -68,6 +68,9 @@ function formatValue(value: unknown, action: string): React.ReactNode {
     const obj = value as Record<string, unknown>;
     const parts: string[] = [];
 
+    if (obj.origem) {
+      parts.push(`Origem: ${String(obj.origem)}`);
+    }
     if (obj.player_a && obj.player_b) {
       parts.push(`${obj.player_a} vs ${obj.player_b}`);
     }
@@ -95,6 +98,9 @@ function formatValue(value: unknown, action: string): React.ReactNode {
     const obj = value as Record<string, unknown>;
     const parts: string[] = [];
 
+    if (obj.origem) {
+      parts.push(`Origem: ${String(obj.origem)}`);
+    }
     if (obj.player_a && obj.player_b) {
       parts.push(`${obj.player_a} vs ${obj.player_b}`);
     }

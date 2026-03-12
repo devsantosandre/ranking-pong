@@ -115,6 +115,10 @@ function mapRegisterMatchRpcErrorMessage(message: string | undefined): string {
     return "Solicitação duplicada detectada. Atualize a tela e tente novamente.";
   }
 
+  if (normalized.includes("invalid_k_factor")) {
+    return "Configuração de fator K inválida. Avise o administrador.";
+  }
+
   return "Erro ao registrar partida";
 }
 

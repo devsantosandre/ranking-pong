@@ -13,6 +13,7 @@ type ValidationMatchRow = {
   resultado_a: number;
   resultado_b: number;
   criado_por: string | null;
+  k_factor_used: number | null;
   status: "pendente" | "edited" | "validado" | "cancelado";
 };
 
@@ -128,7 +129,7 @@ export async function validatePendingMatchByActor(
   const { data: match, error: matchFetchError } = await supabase
     .from("matches")
     .select(
-      "id, player_a_id, player_b_id, vencedor_id, resultado_a, resultado_b, criado_por, status"
+      "id, player_a_id, player_b_id, vencedor_id, resultado_a, resultado_b, criado_por, k_factor_used, status"
     )
     .eq("id", params.matchId)
     .in("status", ["pendente", "edited"])
@@ -202,14 +203,27 @@ export async function validatePendingMatchByActor(
     return fail("Dados dos jogadores não encontrados", "users_missing");
   }
 
+  const storedKFactor = match.k_factor_used;
+
+  if (typeof storedKFactor === "number") {
+    if (isNaN(storedKFactor) || storedKFactor < 1 || storedKFactor > 100) {
+      return fail("K factor salvo na partida é inválido", "invalid_stored_k_factor");
+    }
+  }
+
   const kFactorStr = (settingsData as ValidationSettingsRow[] | null)?.find(
     (setting) => setting.key === "k_factor"
   )?.value;
-  const kFactor = kFactorStr ? parseInt(kFactorStr, 10) : 24;
+  const currentKFactor = kFactorStr ? parseInt(kFactorStr, 10) : 24;
 
-  if (isNaN(kFactor) || kFactor < 1 || kFactor > 100) {
+  if (
+    storedKFactor === null &&
+    (isNaN(currentKFactor) || currentKFactor < 1 || currentKFactor > 100)
+  ) {
     return fail("Configuração de K factor inválida", "invalid_k_factor");
   }
+
+  const kFactor = storedKFactor ?? currentKFactor;
 
   const winnerId = match.vencedor_id;
   const loserId =

@@ -82,7 +82,7 @@ Registro de todas as partidas do sistema.
 | `pontos_variacao_b` | integer | 0 | Sim | Delta ELO do jogador B |
 | `rating_final_a` | integer | - | Sim | Rating final do jogador A |
 | `rating_final_b` | integer | - | Sim | Rating final do jogador B |
-| `k_factor_used` | integer | - | Sim | K factor usado no cálculo |
+| `k_factor_used` | integer | - | Sim | K factor congelado no momento do registro da partida |
 | `status` | match_status | 'pendente' | Não | Status da partida |
 | `tipo_resultado` | resultado_tipo | - | Sim | Tipo: win, loss, wo |
 | `criado_por` | uuid | - | Sim | FK -> users.id (quem registrou) |
