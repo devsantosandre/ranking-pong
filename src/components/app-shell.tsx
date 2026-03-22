@@ -53,11 +53,13 @@ export function AppShell({
   subtitle,
   children,
   showBack = false,
+  layoutWidth = "compact",
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   showBack?: boolean;
+  layoutWidth?: "compact" | "wide";
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -75,6 +77,16 @@ export function AppShell({
   const hasPendingAlert = !loading && !!user && pendingActionsCount > 0;
   const showPushSoftAsk =
     !!user && canShowSoftAsk && !pathname.startsWith("/perfil/configuracoes");
+  const widthClasses =
+    layoutWidth === "wide"
+      ? {
+          header: "max-w-[1120px]",
+          content: "max-w-[1040px]",
+        }
+      : {
+          header: "max-w-[440px]",
+          content: "max-w-[420px]",
+        };
 
   // Construir navItems dinamicamente baseado nas permissoes
   const navItems = useMemo(() => {
@@ -129,7 +141,7 @@ export function AppShell({
   return (
     <main className="min-h-screen bg-[#f5f4fa] text-foreground">
       <header className="fixed inset-x-0 top-0 z-50 flex justify-center bg-primary text-primary-foreground shadow-xl ring-1 ring-primary">
-        <div className="w-full max-w-[440px]">
+        <div className={`w-full ${widthClasses.header}`}>
           <div className="flex items-center gap-3 px-4 py-4 sm:px-6">
             {showBack ? (
               <button
@@ -200,7 +212,7 @@ export function AppShell({
       </header>
 
       <div
-        className={`mx-auto flex w-full max-w-[420px] flex-col gap-8 px-4 pb-32 sm:px-6 ${
+        className={`mx-auto flex w-full ${widthClasses.content} flex-col gap-8 px-4 pb-32 sm:px-6 ${
           hasPendingAlert ? "pt-48" : "pt-32"
         }`}
       >
