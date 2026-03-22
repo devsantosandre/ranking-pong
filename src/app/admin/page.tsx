@@ -4,10 +4,12 @@ import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import Link from "next/link";
 import {
+  ShieldAlert,
   Gamepad2,
   Users,
   Settings,
   History,
+  BarChart3,
   ChevronRight,
   ExternalLink,
   Shield,
@@ -15,6 +17,13 @@ import {
 } from "lucide-react";
 
 const adminSections = [
+  {
+    href: "/admin/pendencias",
+    label: "Pendencias",
+    icon: ShieldAlert,
+    description: "Jogos abertos antes da confirmação automática",
+    color: "text-amber-700 bg-amber-100",
+  },
   {
     href: "/admin/partidas",
     label: "Partidas",
@@ -28,6 +37,13 @@ const adminSections = [
     icon: Users,
     description: "Adicionar jogadores, resetar senhas",
     color: "text-green-600 bg-green-100",
+  },
+  {
+    href: "/admin/metricas",
+    label: "Metricas",
+    icon: BarChart3,
+    description: "Frequencia, engajamento e status do app",
+    color: "text-cyan-700 bg-cyan-100",
   },
   {
     href: "/admin/configuracoes",

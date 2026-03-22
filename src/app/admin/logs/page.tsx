@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
   X,
@@ -27,6 +27,22 @@ const actionLabels: Record<string, { label: string; color: string }> = {
   user_hidden_from_ranking: { label: "Jogador oculto", color: "bg-amber-100 text-amber-700" },
   user_shown_in_ranking: { label: "Jogador visível", color: "bg-emerald-100 text-emerald-700" },
   match_cancelled: { label: "Partida cancelada", color: "bg-red-100 text-red-700" },
+  match_validated_by_admin: {
+    label: "Partida aceita pelo admin",
+    color: "bg-emerald-100 text-emerald-700",
+  },
+  match_auto_validated: {
+    label: "Confirmação automática",
+    color: "bg-cyan-100 text-cyan-700",
+  },
+  match_confirmation_overdue: {
+    label: "Histórico do modelo anterior",
+    color: "bg-amber-100 text-amber-700",
+  },
+  match_confirmation_extension_granted: {
+    label: "Prorrogação do modelo anterior",
+    color: "bg-sky-100 text-sky-700",
+  },
   setting_changed: { label: "Config alterada", color: "bg-amber-100 text-amber-700" },
 };
 
@@ -34,12 +50,35 @@ const actionLabels: Record<string, { label: string; color: string }> = {
 const settingNames: Record<string, string> = {
   k_factor: "Fator K (ELO)",
   limite_jogos_diarios: "Limite jogos diarios",
+  pending_confirmation_deadline_hours: "Prazo da confirmação automática",
   rating_inicial: "Rating inicial",
   achievements_rating_min_players: "Conquistas rating: min jogadores",
   achievements_rating_min_validated_matches: "Conquistas rating: min partidas",
   pontos_vitoria: "Pontos vitoria",
   pontos_derrota: "Pontos derrota",
 };
+
+function getAutoValidationDeadlineHours(log: AdminLog): number | null {
+  if (log.action !== "match_auto_validated") return null;
+
+  const candidate = log.new_value?.prazo_confirmacao_horas;
+  const parsedCandidate =
+    typeof candidate === "number"
+      ? candidate
+      : typeof candidate === "string"
+        ? Number(candidate)
+        : null;
+
+  if (parsedCandidate && Number.isFinite(parsedCandidate)) {
+    return parsedCandidate;
+  }
+
+  const match = log.action_description.match(/(\d+)h/);
+  if (!match) return null;
+
+  const parsedFromDescription = Number(match[1]);
+  return Number.isFinite(parsedFromDescription) ? parsedFromDescription : null;
+}
 
 // Formatar valor para exibicao
 function formatValue(value: unknown, action: string): React.ReactNode {
@@ -64,6 +103,9 @@ function formatValue(value: unknown, action: string): React.ReactNode {
     const obj = value as Record<string, unknown>;
     const parts: string[] = [];
 
+    if (obj.origem) {
+      parts.push(`Origem: ${String(obj.origem)}`);
+    }
     if (obj.player_a && obj.player_b) {
       parts.push(`${obj.player_a} vs ${obj.player_b}`);
     }
@@ -81,6 +123,104 @@ function formatValue(value: unknown, action: string): React.ReactNode {
         <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
           {parts.map((part, i) => (
             <div key={i}>{part}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  if (
+    (action === "match_validated_by_admin" || action === "match_auto_validated") &&
+    typeof value === "object"
+  ) {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (obj.origem) {
+      parts.push(`Origem: ${String(obj.origem)}`);
+    }
+    if (action === "match_auto_validated" && obj.prazo_confirmacao_horas !== undefined) {
+      parts.push(`Prazo aplicado: ${String(obj.prazo_confirmacao_horas)}h`);
+    }
+    if (obj.player_a && obj.player_b) {
+      parts.push(`${obj.player_a} vs ${obj.player_b}`);
+    }
+    if (obj.placar !== undefined) {
+      parts.push(`Placar: ${String(obj.placar)}`);
+    }
+    if (
+      obj.pontos_variacao_a !== undefined &&
+      obj.pontos_variacao_b !== undefined
+    ) {
+      const deltaA = Number(obj.pontos_variacao_a) || 0;
+      const deltaB = Number(obj.pontos_variacao_b) || 0;
+      parts.push(`Pontos aplicados: ${deltaA >= 0 ? "+" : ""}${deltaA} / ${deltaB >= 0 ? "+" : ""}${deltaB}`);
+    }
+    if (obj.status !== undefined) {
+      parts.push(`Status: ${String(obj.status)}`);
+    }
+
+    if (parts.length > 0) {
+      return (
+        <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
+          {parts.map((part, index) => (
+            <div key={index}>{part}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  if (
+    action === "match_confirmation_overdue" &&
+    typeof value === "object"
+  ) {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (obj.current_deadline_at) {
+      parts.push(`Prazo anterior: ${String(obj.current_deadline_at)}`);
+    }
+    if (obj.responsible_user_id) {
+      parts.push(`Responsável na época: ${String(obj.responsible_user_id)}`);
+    }
+    if (obj.escalated_at) {
+      parts.push(`Registrado em: ${String(obj.escalated_at)}`);
+    }
+
+    if (parts.length > 0) {
+      return (
+        <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
+          {parts.map((part, index) => (
+            <div key={index}>{part}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  if (
+    action === "match_confirmation_extension_granted" &&
+    typeof value === "object"
+  ) {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (obj.current_deadline_at) {
+      parts.push(`Prazo prorrogado para: ${String(obj.current_deadline_at)}`);
+    }
+    if (obj.responsible_user_id) {
+      parts.push(`Responsável na época: ${String(obj.responsible_user_id)}`);
+    }
+    if (obj.extension_count !== undefined) {
+      parts.push(`Prorrogações usadas: ${String(obj.extension_count)}`);
+    }
+
+    if (parts.length > 0) {
+      return (
+        <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
+          {parts.map((part, index) => (
+            <div key={index}>{part}</div>
           ))}
         </div>
       );
@@ -153,38 +293,37 @@ export default function AdminLogsPage() {
   const [error, setError] = useState("");
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
-  const loadLogs = async (reset = true) => {
+  const loadLogs = useCallback(async (pageToLoad: number, reset: boolean) => {
     if (reset) {
       setLoading(true);
       setPage(0);
     } else {
       setLoadingMore(true);
     }
+
     try {
-      const currentPage = reset ? 0 : page;
-      const result = await adminGetLogs(currentPage);
+      const result = await adminGetLogs(pageToLoad);
       if (reset) {
         setLogs(result.logs);
       } else {
         setLogs((prev) => [...prev, ...result.logs]);
       }
+
+      setError("");
       setHasMore(result.hasMore);
-      if (!reset) {
-        setPage((p) => p + 1);
-      } else {
-        setPage(1);
-      }
+
+      setPage(pageToLoad + 1);
     } catch {
       setError("Erro ao carregar historico");
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadLogs(true);
-  }, []);
+    void loadLogs(0, true);
+  }, [loadLogs]);
 
   return (
     <AppShell title="Historico" subtitle="Acoes administrativas" showBack>
@@ -216,6 +355,7 @@ export default function AdminLogsPage() {
               };
               const TargetIcon = targetIcons[log.target_type] || User;
               const isExpanded = expandedLog === log.id;
+              const autoValidationDeadlineHours = getAutoValidationDeadlineHours(log);
 
               return (
                 <article
@@ -244,6 +384,11 @@ export default function AdminLogsPage() {
                         <p className="mt-1 text-sm font-medium break-words [overflow-wrap:anywhere]">
                           {log.action_description}
                         </p>
+                        {autoValidationDeadlineHours ? (
+                          <p className="mt-1 text-xs font-medium text-cyan-700">
+                            Prazo aplicado: {autoValidationDeadlineHours}h sem resposta
+                          </p>
+                        ) : null}
                         {log.target_name && (
                           <p className="text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
                             {log.target_name}
@@ -269,7 +414,9 @@ export default function AdminLogsPage() {
                       <div className="text-xs break-words [overflow-wrap:anywhere]">
                         <span className="text-muted-foreground">Admin: </span>
                         <span className="font-medium">
-                          {log.admin?.full_name || log.admin?.name || "Desconhecido"}
+                          {log.admin?.full_name ||
+                            log.admin?.name ||
+                            (log.admin_role === "system" ? "Sistema" : "Desconhecido")}
                         </span>
                         <span className="ml-1 text-muted-foreground">
                           ({log.admin_role})
@@ -312,7 +459,7 @@ export default function AdminLogsPage() {
 
             {/* Botao Carregar mais */}
             <LoadMoreButton
-              onClick={() => loadLogs(false)}
+              onClick={() => void loadLogs(page, false)}
               isLoading={loadingMore}
               hasMore={hasMore}
             />

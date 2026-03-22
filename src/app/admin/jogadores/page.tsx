@@ -2,22 +2,25 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import {
+  ArrowRight,
+  Eye,
+  EyeOff,
   Loader2,
-  Plus,
-  X,
-  Search,
   Key,
-  TrendingUp,
   Power,
+  Plus,
   RotateCcw,
+  Search,
   Shield,
+  ShieldCheck,
+  TrendingUp,
+  X,
   ChevronDown,
   ChevronUp,
-  EyeOff,
-  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,43 +134,39 @@ export default function AdminJogadoresPage() {
   }>({ isOpen: false, action: null });
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const loadUsers = async (reset = true) => {
+  const loadUsers = useCallback(async (pageToLoad: number, reset: boolean) => {
     if (reset) {
       setLoading(true);
       setPage(0);
     } else {
       setLoadingMore(true);
     }
+
     try {
-      const currentPage = reset ? 0 : page;
       const filters = {
         status: statusFilter !== "todos" ? statusFilter : undefined,
         role: roleFilter !== "todos" ? roleFilter : undefined,
       };
-      const result = await adminGetAllUsers(filters, currentPage);
+      const result = await adminGetAllUsers(filters, pageToLoad);
       if (reset) {
         setUsers(result.users);
       } else {
         setUsers((prev) => [...prev, ...result.users]);
       }
       setHasMore(result.hasMore);
-      if (!reset) {
-        setPage((p) => p + 1);
-      } else {
-        setPage(1);
-      }
+      setPage(pageToLoad + 1);
     } catch {
       // Error handling
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [roleFilter, statusFilter]);
 
   // Recarregar quando filtros mudarem
   useEffect(() => {
-    loadUsers(true);
-  }, [statusFilter, roleFilter]);
+    void loadUsers(0, true);
+  }, [loadUsers]);
 
   // Busca server-side quando tem 2+ caracteres
   useEffect(() => {
@@ -246,7 +245,7 @@ export default function AdminJogadoresPage() {
     const currentDisplayName = (user.full_name || user.name || "").trim();
 
     if (currentUser?.id === user.id) {
-      errors.name = "Voce nao pode alterar seu proprio nome nesta tela";
+      errors.name = "Você não pode alterar seu próprio nome nesta tela";
       isValid = false;
     } else if (!trimmedName) {
       errors.name = "Nome e obrigatorio";
@@ -309,7 +308,7 @@ export default function AdminJogadoresPage() {
       setShowAddForm(false);
       setNewUser({ name: "", email: "", password: "" });
       setAddErrors({ name: "", email: "", password: "" });
-      loadUsers();
+      await loadUsers(0, true);
     } catch (err) {
       setAddErrors({
         ...addErrors,
@@ -350,7 +349,7 @@ export default function AdminJogadoresPage() {
       setRatingErrors({ rating: "", reason: "" });
       // Invalidar queries de ranking pois rating mudou
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      loadUsers();
+      await loadUsers(0, true);
     } catch (err) {
       setRatingErrors({
         ...ratingErrors,
@@ -486,7 +485,7 @@ export default function AdminJogadoresPage() {
         }
       }
 
-      loadUsers();
+      await loadUsers(0, true);
     } catch (err) {
       // Mostrar erro ao usuário
       const errorMessage = err instanceof Error ? err.message : "Erro ao executar acao";
@@ -510,8 +509,8 @@ export default function AdminJogadoresPage() {
           title: extra === "desativar" ? "Desativar jogador" : "Ativar jogador",
           description:
             extra === "desativar"
-              ? `Deseja desativar "${userName}"? O jogador nao podera fazer login e nao aparecera no ranking.`
-              : `Deseja ativar "${userName}"? O jogador podera fazer login novamente.`,
+              ? `Deseja desativar "${userName}"? A conta deixará de aparecer nas listagens e leituras que consideram apenas jogadores ativos.`
+              : `Deseja ativar "${userName}"? A conta voltará a entrar nas listagens e leituras que usam apenas jogadores ativos.`,
           variant: extra === "desativar" ? ("danger" as const) : ("default" as const),
         };
       case "toggle_hide_from_ranking":
@@ -519,20 +518,20 @@ export default function AdminJogadoresPage() {
           title: extra === "ocultar" ? "Ocultar do ranking" : "Mostrar no ranking",
           description:
             extra === "ocultar"
-              ? `Deseja ocultar "${userName}" do ranking? O jogador continuara ativo e podera fazer login, mas nao aparecera na listagem do ranking e nao podera registrar partidas. Ideal para administradores que querem apenas observar. IMPORTANTE: Nao e possivel ocultar se houver partidas pendentes.`
-              : `Deseja mostrar "${userName}" no ranking? O jogador voltara a aparecer na listagem do ranking e podera registrar partidas novamente.`,
+              ? `Deseja ocultar "${userName}" do ranking? O jogador continuará ativo e poderá fazer login, mas não aparecerá na listagem do ranking e não poderá registrar partidas. Ideal para administradores que querem apenas observar. Importante: não é possível ocultar se houver partidas pendentes.`
+              : `Deseja mostrar "${userName}" no ranking? O jogador voltará a aparecer na listagem do ranking e poderá registrar partidas novamente.`,
           variant: "default" as const,
         };
       case "reset_stats":
         return {
-          title: "Resetar estatisticas",
-          description: `Deseja resetar todas as estatisticas de "${userName}"? Vitorias, derrotas e rating serao zerados. Esta acao e irreversivel.`,
+          title: "Resetar estatísticas",
+          description: `Deseja resetar todas as estatísticas de "${userName}"? Vitórias, derrotas e rating serão zerados. Esta ação é irreversível.`,
           variant: "danger" as const,
         };
       case "change_role":
         return {
-          title: "Alterar permissao",
-          description: `Deseja alterar a permissao de "${userName}" para ${roleLabels[extra as string]}?`,
+          title: "Alterar permissão",
+          description: `Deseja alterar a permissão de "${userName}" para ${roleLabels[extra as string]}?`,
           variant: "warning" as const,
         };
       case "reset_password":
@@ -564,6 +563,31 @@ export default function AdminJogadoresPage() {
           <Plus className="mr-2 h-4 w-4" />
           Adicionar Jogador
         </Button>
+
+        <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-sm font-semibold text-foreground">
+                Perfis e permissões do sistema
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Veja a diferença entre Jogador, Moderador e Admin, incluindo o que é
+                perfil e o que é apenas estado da conta, como Observador e Inativo.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/admin/jogadores/perfis"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
+          >
+            Comparar permissões
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
+        </section>
 
         {/* Formulario Adicionar */}
         {showAddForm && (
@@ -1122,7 +1146,7 @@ export default function AdminJogadoresPage() {
             {/* Botao Carregar mais (só quando não está buscando) */}
             {!isSearching && (
               <LoadMoreButton
-                onClick={() => loadUsers(false)}
+                onClick={() => void loadUsers(page, false)}
                 isLoading={loadingMore}
                 hasMore={hasMore}
               />

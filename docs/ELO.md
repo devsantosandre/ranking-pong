@@ -158,11 +158,13 @@ Pontos ganhos/perdidos com K = 24:
 
 ```
 1. Jogador A registra partida
+   ├── Busca K factor atual
+   ├── Salva k_factor_used na partida
    └── Status: "pendente"
 
 2. Jogador B confirma resultado
    ├── Busca ratings atuais
-   ├── Busca K factor da tabela settings
+   ├── Reutiliza k_factor_used salvo na partida
    ├── Calcula ELO: calculateElo(winner, loser, K)
    ├── Atualiza match:
    │   ├── pontos_variacao_a (delta do jogador A)
@@ -214,7 +216,7 @@ Quando um administrador cancela uma partida validada:
    └── Status: "cancelado"
 ```
 
-**Importante:** O `k_factor_used` armazenado garante que a reversão seja precisa, mesmo que o K factor tenha sido alterado posteriormente.
+**Importante:** O `k_factor_used` fica congelado no momento do registro. Isso garante que a confirmação e a reversão respeitem exatamente a regra vigente quando a partida foi criada, mesmo que o K factor mude depois.
 
 ---
 

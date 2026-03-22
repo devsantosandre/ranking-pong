@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useState, useMemo } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Clock3, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
   usePendingMatches,
@@ -11,6 +11,7 @@ import {
   useMatchCounts,
   useConfirmMatch,
   useContestMatch,
+  usePendingConfirmationStatus,
   type MatchWithUsers,
   type UserInfo,
 } from "@/lib/queries";
@@ -24,6 +25,20 @@ const statusBadge: Record<string, { label: string; className: string }> = {
   validado: { label: "Validado", className: "bg-emerald-100 text-emerald-700" },
   cancelado: { label: "Cancelado", className: "bg-red-100 text-red-600" },
 };
+
+function getRecentMatchBadge(match: MatchWithUsers, euVenci: boolean) {
+  if (match.status === "validado" && match.aprovado_por === null) {
+    return {
+      label: "Validado pelo sistema",
+      className: "bg-emerald-100 text-emerald-700",
+    };
+  }
+
+  return {
+    label: euVenci ? "Vitória" : "Derrota",
+    className: euVenci ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600",
+  };
+}
 
 const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
 
@@ -52,6 +67,57 @@ function toMatchOutcome(userOutcome: string, isUserPlayerA: boolean): string {
   return isUserPlayerA
     ? `${parsed.left}x${parsed.right}`
     : `${parsed.right}x${parsed.left}`;
+}
+
+function formatDeadlineDateTime(dateStr: string) {
+  return new Date(dateStr).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getDeadlineHighlight(deadlineAt: string | null) {
+  if (!deadlineAt) {
+    return {
+      containerClassName: "border-border/70 bg-muted/20 text-muted-foreground",
+      iconClassName: "text-muted-foreground",
+      label: null,
+    };
+  }
+
+  const remainingMs = new Date(deadlineAt).getTime() - Date.now();
+
+  if (remainingMs <= 0) {
+    return {
+      containerClassName: "border-red-200 bg-red-50 text-red-700",
+      iconClassName: "text-red-600",
+      label: "Prazo encerrado",
+    };
+  }
+
+  if (remainingMs <= 60 * 60 * 1000) {
+    return {
+      containerClassName: "border-amber-200 bg-amber-50 text-amber-800",
+      iconClassName: "text-amber-700",
+      label: "Menos de 1h restante",
+    };
+  }
+
+  if (remainingMs <= 3 * 60 * 60 * 1000) {
+    return {
+      containerClassName: "border-orange-200 bg-orange-50 text-orange-800",
+      iconClassName: "text-orange-700",
+      label: "Prazo se aproximando",
+    };
+  }
+
+  return {
+    containerClassName: "border-primary/20 bg-primary/5 text-primary",
+    iconClassName: "text-primary",
+    label: "Dentro do prazo",
+  };
 }
 
 export default function PartidasPage() {
@@ -83,6 +149,7 @@ export default function PartidasPage() {
     isFetchingNextPage,
   } = useRecentMatches(user?.id);
   const { data: matchCounts } = useMatchCounts(user?.id);
+  const { data: pendingStatus } = usePendingConfirmationStatus(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
   const previewAlertEnabled = searchParams.get("previewAlert") === "1";
@@ -99,6 +166,7 @@ export default function PartidasPage() {
 
   const totalPendentes = pendentes.length;
   const totalRecentes = matchCounts?.recentes ?? recentes.length;
+  const deadlineHours = pendingStatus?.deadlineHours ?? 6;
 
   const handleConfirm = (matchId: string) => {
     if (!user) return;
@@ -251,6 +319,15 @@ export default function PartidasPage() {
           </div>
         )}
 
+        <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3">
+          <p className="text-sm font-semibold text-foreground">Prazo para confirmar</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Quem recebeu a pendência tem até {deadlineHours}h para confirmar ou
+            contestar. Depois disso, o sistema aceita automaticamente a partida com o
+            placar atual.
+          </p>
+        </div>
+
         {/* Lista de partidas */}
         <div className="space-y-3">
           {activeTab === "pendentes" && pendentes.length === 0 && (
@@ -371,6 +448,10 @@ function PendingMatchCard({
       ? `${resultSummaryPrefix} adversário venceu`
       : `${resultSummaryPrefix} empate`;
   const mobileBadgeLabel = badge.label === "Aguardando confirmação" ? "Aguardando" : badge.label;
+  const deadlineLabel = match.confirmation_deadline_at
+    ? formatDeadlineDateTime(match.confirmation_deadline_at)
+    : null;
+  const deadlineHighlight = getDeadlineHighlight(match.confirmation_deadline_at ?? null);
 
   return (
     <article className="space-y-3 rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
@@ -433,9 +514,24 @@ function PendingMatchCard({
       </div>
 
       {euCriei && !euDevoAgir ? (
-        <p className="text-xs text-muted-foreground text-center">
-          Aguardando o adversário confirmar ou contestar.
-        </p>
+        <div className="space-y-1 text-center">
+          <p className="text-xs text-muted-foreground">
+            Aguardando o adversário confirmar ou contestar.
+          </p>
+          {deadlineLabel ? (
+            <div
+              className={`inline-flex flex-col items-center gap-1 rounded-xl border px-3 py-2 ${deadlineHighlight.containerClassName}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Clock3 className={`h-3.5 w-3.5 ${deadlineHighlight.iconClassName}`} />
+                <p className="text-xs font-semibold">Confirma automaticamente em {deadlineLabel}</p>
+              </div>
+              {deadlineHighlight.label ? (
+                <p className="text-[11px] font-medium">{deadlineHighlight.label}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : isEditing ? (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">Ajuste o placar (Você x Adversário):</p>
@@ -456,9 +552,24 @@ function PendingMatchCard({
           </div>
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground text-center">
-          Confirme o placar ou conteste caso esteja errado.
-        </p>
+        <div className="space-y-1 text-center">
+          <p className="text-xs text-muted-foreground">
+            Confirme o placar ou conteste caso esteja errado.
+          </p>
+          {deadlineLabel ? (
+            <div
+              className={`inline-flex flex-col items-center gap-1 rounded-xl border px-3 py-2 ${deadlineHighlight.containerClassName}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Clock3 className={`h-3.5 w-3.5 ${deadlineHighlight.iconClassName}`} />
+                <p className="text-xs font-semibold">Confirma automaticamente em {deadlineLabel}</p>
+              </div>
+              {deadlineHighlight.label ? (
+                <p className="text-[11px] font-medium">{deadlineHighlight.label}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       )}
 
       {euDevoAgir && (
@@ -526,6 +637,7 @@ function RecentMatchCard({
 }) {
   const euSouA = match.player_a_id === userId;
   const euVenci = match.vencedor_id === userId;
+  const badge = getRecentMatchBadge(match, euVenci);
   const meusPoints = euSouA ? match.pontos_variacao_a : match.pontos_variacao_b;
   const opponent = euSouA ? match.player_b : match.player_a;
   const opponentName = getPlayerName(opponent);
@@ -556,11 +668,9 @@ function RecentMatchCard({
           <p className="text-xs text-muted-foreground">{formatDate(match.created_at)}</p>
         </div>
         <span
-          className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ${
-            euVenci ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
-          }`}
+          className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ${badge.className}`}
         >
-          {euVenci ? "Vitória" : "Derrota"}
+          {badge.label}
         </span>
       </div>
 
@@ -595,6 +705,13 @@ function RecentMatchCard({
           </div>
         </div>
       </div>
+
+      {match.status === "validado" && match.aprovado_por === null ? (
+        <p className="text-xs font-medium text-emerald-700">
+          Esta partida foi validada automaticamente pelo sistema após o prazo de
+          resposta.
+        </p>
+      ) : null}
 
       {pointsLabel ? <p className={`text-xs font-semibold ${pointsClassName}`}>{pointsLabel}</p> : null}
     </article>

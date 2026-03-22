@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-store";
 import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
-import { queryKeys, usePendingActionCount } from "@/lib/queries";
+import { queryKeys, usePendingConfirmationStatus } from "@/lib/queries";
 import { buildBrowserTitle } from "@/lib/app-title";
 import { clearClientSessionData } from "@/lib/client-session-cleanup";
 
@@ -53,11 +53,13 @@ export function AppShell({
   subtitle,
   children,
   showBack = false,
+  layoutWidth = "compact",
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   showBack?: boolean;
+  layoutWidth?: "compact" | "wide";
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -69,10 +71,22 @@ export function AppShell({
     isRequestingPermission,
     requestPermissionAndSubscribe,
   } = usePushSubscription();
-  const { data: pendingActionsCount = 0 } = usePendingActionCount(user?.id);
+  const { data: pendingStatus } = usePendingConfirmationStatus(user?.id);
+  const pendingActionsCount = pendingStatus?.pendingActionsCount ?? 0;
+  const nextDeadlineAt = pendingStatus?.nextDeadlineAt ?? null;
   const hasPendingAlert = !loading && !!user && pendingActionsCount > 0;
   const showPushSoftAsk =
     !!user && canShowSoftAsk && !pathname.startsWith("/perfil/configuracoes");
+  const widthClasses =
+    layoutWidth === "wide"
+      ? {
+          header: "max-w-[1120px]",
+          content: "max-w-[1040px]",
+        }
+      : {
+          header: "max-w-[440px]",
+          content: "max-w-[420px]",
+        };
 
   // Construir navItems dinamicamente baseado nas permissoes
   const navItems = useMemo(() => {
@@ -110,6 +124,9 @@ export function AppShell({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.matches.pendingActions(user.id),
       });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.matches.pendingStatus(user.id),
+      });
     }
   };
 
@@ -124,7 +141,7 @@ export function AppShell({
   return (
     <main className="min-h-screen bg-[#f5f4fa] text-foreground">
       <header className="fixed inset-x-0 top-0 z-50 flex justify-center bg-primary text-primary-foreground shadow-xl ring-1 ring-primary">
-        <div className="w-full max-w-[440px]">
+        <div className={`w-full ${widthClasses.header}`}>
           <div className="flex items-center gap-3 px-4 py-4 sm:px-6">
             {showBack ? (
               <button
@@ -173,7 +190,12 @@ export function AppShell({
                 <div className="flex min-w-0 items-center gap-2">
                   <Info className="h-4 w-4 shrink-0 text-primary-foreground" />
                   <p className="truncate text-xs font-medium text-primary-foreground">
-                    Você tem {pendingActionsCount} pendência(s) para confirmar
+                    {nextDeadlineAt
+                      ? `Você tem ${pendingActionsCount} pendência(s). Se ninguém responder até ${new Date(nextDeadlineAt).toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}, o app confirma automaticamente.`
+                      : `Você tem ${pendingActionsCount} pendência(s) para confirmar.`}
                   </p>
                 </div>
                 <Link
@@ -190,7 +212,7 @@ export function AppShell({
       </header>
 
       <div
-        className={`mx-auto flex w-full max-w-[420px] flex-col gap-8 px-4 pb-32 sm:px-6 ${
+        className={`mx-auto flex w-full ${widthClasses.content} flex-col gap-8 px-4 pb-32 sm:px-6 ${
           hasPendingAlert ? "pt-48" : "pt-32"
         }`}
       >
