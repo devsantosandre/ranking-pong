@@ -1,27 +1,27 @@
 "use client";
 
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { createClient } from "@/utils/supabase/client";
 import { queryKeys } from "./query-keys";
+import {
+  getCurrentUserPendingConfirmationStatusAction,
+  type CurrentUserPendingConfirmationStatus,
+} from "@/app/actions/pending-confirmation";
 
-export function usePendingActionCount(userId?: string) {
-  const supabase = useMemo(() => createClient(), []);
+const EMPTY_PENDING_CONFIRMATION_STATUS: CurrentUserPendingConfirmationStatus = {
+  pendingActionsCount: 0,
+  nextDeadlineAt: null,
+  deadlineHours: 6,
+};
 
+export function usePendingConfirmationStatus(userId?: string) {
   return useQuery({
-    queryKey: queryKeys.matches.pendingActions(userId || "anonymous"),
+    queryKey: queryKeys.matches.pendingStatus(userId || "anonymous"),
     queryFn: async () => {
-      if (!userId) return 0;
+      if (!userId) {
+        return EMPTY_PENDING_CONFIRMATION_STATUS;
+      }
 
-      const { count, error } = await supabase
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["pendente", "edited"])
-        .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-        .neq("criado_por", userId);
-
-      if (error) throw error;
-      return count ?? 0;
+      return getCurrentUserPendingConfirmationStatusAction();
     },
     enabled: !!userId,
     staleTime: 1000 * 10,
@@ -30,4 +30,13 @@ export function usePendingActionCount(userId?: string) {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
+}
+
+export function usePendingActionCount(userId?: string) {
+  const statusQuery = usePendingConfirmationStatus(userId);
+
+  return {
+    ...statusQuery,
+    data: statusQuery.data?.pendingActionsCount ?? 0,
+  };
 }

@@ -2,7 +2,11 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useMatches, useUser, useUserRankingPosition } from "@/lib/queries";
+import {
+  useMatches,
+  useUser,
+  useUserRankingPosition,
+} from "@/lib/queries";
 import {
   BookOpen,
   Settings,
@@ -224,10 +228,12 @@ export default function PerfilPage() {
               ? "border-amber-200 bg-amber-50"
               : "border-border bg-card"
           }`}>
-            <p className={`text-xl font-bold ${streak > 0 ? "text-amber-600" : "text-foreground"}`}>
-              🔥 {streak}
-            </p>
-            <p className="text-[10px] text-muted-foreground">streak</p>
+            <>
+              <p className={`text-xl font-bold ${streak > 0 ? "text-amber-600" : "text-foreground"}`}>
+                🔥 {streak}
+              </p>
+              <p className="text-[10px] text-muted-foreground">streak</p>
+            </>
           </article>
         </div>
 

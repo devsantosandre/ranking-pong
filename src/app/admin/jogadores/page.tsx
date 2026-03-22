@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
@@ -131,43 +131,39 @@ export default function AdminJogadoresPage() {
   }>({ isOpen: false, action: null });
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const loadUsers = async (reset = true) => {
+  const loadUsers = useCallback(async (pageToLoad: number, reset: boolean) => {
     if (reset) {
       setLoading(true);
       setPage(0);
     } else {
       setLoadingMore(true);
     }
+
     try {
-      const currentPage = reset ? 0 : page;
       const filters = {
         status: statusFilter !== "todos" ? statusFilter : undefined,
         role: roleFilter !== "todos" ? roleFilter : undefined,
       };
-      const result = await adminGetAllUsers(filters, currentPage);
+      const result = await adminGetAllUsers(filters, pageToLoad);
       if (reset) {
         setUsers(result.users);
       } else {
         setUsers((prev) => [...prev, ...result.users]);
       }
       setHasMore(result.hasMore);
-      if (!reset) {
-        setPage((p) => p + 1);
-      } else {
-        setPage(1);
-      }
+      setPage(pageToLoad + 1);
     } catch {
       // Error handling
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [roleFilter, statusFilter]);
 
   // Recarregar quando filtros mudarem
   useEffect(() => {
-    loadUsers(true);
-  }, [statusFilter, roleFilter]);
+    void loadUsers(0, true);
+  }, [loadUsers]);
 
   // Busca server-side quando tem 2+ caracteres
   useEffect(() => {
@@ -309,7 +305,7 @@ export default function AdminJogadoresPage() {
       setShowAddForm(false);
       setNewUser({ name: "", email: "", password: "" });
       setAddErrors({ name: "", email: "", password: "" });
-      loadUsers();
+      await loadUsers(0, true);
     } catch (err) {
       setAddErrors({
         ...addErrors,
@@ -350,7 +346,7 @@ export default function AdminJogadoresPage() {
       setRatingErrors({ rating: "", reason: "" });
       // Invalidar queries de ranking pois rating mudou
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      loadUsers();
+      await loadUsers(0, true);
     } catch (err) {
       setRatingErrors({
         ...ratingErrors,
@@ -486,7 +482,7 @@ export default function AdminJogadoresPage() {
         }
       }
 
-      loadUsers();
+      await loadUsers(0, true);
     } catch (err) {
       // Mostrar erro ao usuário
       const errorMessage = err instanceof Error ? err.message : "Erro ao executar acao";
@@ -1122,7 +1118,7 @@ export default function AdminJogadoresPage() {
             {/* Botao Carregar mais (só quando não está buscando) */}
             {!isSearching && (
               <LoadMoreButton
-                onClick={() => loadUsers(false)}
+                onClick={() => void loadUsers(page, false)}
                 isLoading={loadingMore}
                 hasMore={hasMore}
               />

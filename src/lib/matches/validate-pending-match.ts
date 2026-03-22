@@ -1,23 +1,27 @@
 import { createAdminClient } from "@/utils/supabase/admin";
-import { calculateElo, applyMinRating } from "@/lib/elo";
 import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements";
-import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 
-type ValidationActorType = "player" | "admin";
+type ValidationActorType = "player" | "admin" | "system";
 
-type ValidationMatchRow = {
-  id: string;
+type ValidationRpcRow = {
+  match_id: string;
+  old_status: "pendente" | "edited";
   player_a_id: string;
   player_b_id: string;
-  vencedor_id: string | null;
-  resultado_a: number;
-  resultado_b: number;
-  criado_por: string | null;
-  k_factor_used: number | null;
-  status: "pendente" | "edited" | "validado" | "cancelado";
+  winner_id: string;
+  loser_id: string;
+  player_a_name: string;
+  player_b_name: string;
+  score_label: string;
+  player_a_delta: number;
+  player_b_delta: number;
+  winner_rating_before: number;
+  loser_rating_before: number;
+  winner_rating_after: number;
+  loser_rating_after: number;
 };
 
-type ValidationUserRow = {
+type ValidationCurrentUserRow = {
   id: string;
   full_name: string | null;
   name: string | null;
@@ -28,14 +32,9 @@ type ValidationUserRow = {
   jogos_disputados: number | null;
 };
 
-type ValidationSettingsRow = {
-  key: string;
-  value: string | null;
-};
-
 export type ValidatePendingMatchParams = {
   matchId: string;
-  actorUserId: string;
+  actorUserId?: string | null;
   actorName?: string | null;
   actorType: ValidationActorType;
 };
@@ -62,57 +61,112 @@ export type ValidatePendingMatchResult =
   | ValidatePendingMatchSuccess
   | ValidatePendingMatchFailure;
 
-function getUserDisplayName(user: {
-  full_name?: string | null;
-  name?: string | null;
-  email?: string | null;
-}) {
-  return user.full_name || user.name || user.email?.split("@")[0] || "Jogador";
+function parseValidatePendingRpcRow(data: unknown): ValidationRpcRow | null {
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (!row || typeof row !== "object") return null;
+
+  const candidate = row as Partial<ValidationRpcRow>;
+  if (
+    typeof candidate.match_id !== "string" ||
+    (candidate.old_status !== "pendente" && candidate.old_status !== "edited") ||
+    typeof candidate.player_a_id !== "string" ||
+    typeof candidate.player_b_id !== "string" ||
+    typeof candidate.winner_id !== "string" ||
+    typeof candidate.loser_id !== "string" ||
+    typeof candidate.player_a_name !== "string" ||
+    typeof candidate.player_b_name !== "string" ||
+    typeof candidate.score_label !== "string" ||
+    typeof candidate.player_a_delta !== "number" ||
+    typeof candidate.player_b_delta !== "number" ||
+    typeof candidate.winner_rating_before !== "number" ||
+    typeof candidate.loser_rating_before !== "number" ||
+    typeof candidate.winner_rating_after !== "number" ||
+    typeof candidate.loser_rating_after !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    match_id: candidate.match_id,
+    old_status: candidate.old_status,
+    player_a_id: candidate.player_a_id,
+    player_b_id: candidate.player_b_id,
+    winner_id: candidate.winner_id,
+    loser_id: candidate.loser_id,
+    player_a_name: candidate.player_a_name,
+    player_b_name: candidate.player_b_name,
+    score_label: candidate.score_label,
+    player_a_delta: candidate.player_a_delta,
+    player_b_delta: candidate.player_b_delta,
+    winner_rating_before: candidate.winner_rating_before,
+    loser_rating_before: candidate.loser_rating_before,
+    winner_rating_after: candidate.winner_rating_after,
+    loser_rating_after: candidate.loser_rating_after,
+  };
 }
 
-function getPendingResponsibleUserId(match: {
-  player_a_id: string;
-  player_b_id: string;
-  criado_por: string | null;
-}) {
-  if (match.criado_por === match.player_a_id) {
-    return match.player_b_id;
+function mapValidatePendingRpcErrorMessage(message: string | undefined): {
+  error: string;
+  reason: string;
+} {
+  const normalized = (message || "").toLowerCase();
+
+  if (normalized.includes("already_validated")) {
+    return { error: "Esta partida já foi confirmada", reason: "already_validated" };
   }
 
-  if (match.criado_por === match.player_b_id) {
-    return match.player_a_id;
+  if (normalized.includes("already_canceled")) {
+    return { error: "Esta partida foi cancelada", reason: "already_canceled" };
   }
 
-  return null;
-}
-
-async function emitPendingNotifications(
-  userIds: string[],
-  payload: PendingNotificationPayloadV1
-) {
-  const supabase = createAdminClient();
-  const uniqueUserIds = Array.from(new Set(userIds));
-  if (uniqueUserIds.length === 0) return;
-
-  const { error } = await supabase.from("notifications").insert(
-    uniqueUserIds.map((userId) => ({
-      user_id: userId,
-      tipo: "confirmacao",
-      payload,
-      lida: false,
-    }))
-  );
-
-  if (error) {
-    console.error("pending_notifications_insert_failed", {
-      recipients: uniqueUserIds,
-      matchId: payload.match_id,
-      event: payload.event,
-      actorId: payload.actor_id,
-      reason: error.message,
-      code: error.code,
-    });
+  if (normalized.includes("match_already_processed")) {
+    return {
+      error: "Esta partida já foi processada por outro usuário",
+      reason: "match_already_processed",
+    };
   }
+
+  if (normalized.includes("match_not_found")) {
+    return { error: "Partida não encontrada", reason: "match_not_found" };
+  }
+
+  if (normalized.includes("missing_winner")) {
+    return {
+      error: "Partida pendente sem vencedor definido",
+      reason: "missing_winner",
+    };
+  }
+
+  if (normalized.includes("invalid_winner")) {
+    return { error: "Vencedor da partida é inválido", reason: "invalid_winner" };
+  }
+
+  if (normalized.includes("actor_not_waiting_user")) {
+    return {
+      error: "Esta partida não está aguardando sua confirmação",
+      reason: "actor_not_waiting_user",
+    };
+  }
+
+  if (normalized.includes("invalid_stored_k_factor")) {
+    return {
+      error: "K factor salvo na partida é inválido",
+      reason: "invalid_stored_k_factor",
+    };
+  }
+
+  if (normalized.includes("invalid_k_factor")) {
+    return {
+      error: "Configuração de K factor inválida",
+      reason: "invalid_k_factor",
+    };
+  }
+
+  return {
+    error: "Erro ao validar a partida pendente",
+    reason: "validate_pending_match_rpc_failed",
+  };
 }
 
 export async function validatePendingMatchByActor(
@@ -126,211 +180,52 @@ export async function validatePendingMatchByActor(
     reason,
   });
 
-  const { data: match, error: matchFetchError } = await supabase
-    .from("matches")
-    .select(
-      "id, player_a_id, player_b_id, vencedor_id, resultado_a, resultado_b, criado_por, k_factor_used, status"
-    )
-    .eq("id", params.matchId)
-    .in("status", ["pendente", "edited"])
-    .single<ValidationMatchRow>();
-
-  if (matchFetchError || !match) {
-    const { data: existingMatch } = await supabase
-      .from("matches")
-      .select("status")
-      .eq("id", params.matchId)
-      .single<{ status: ValidationMatchRow["status"] }>();
-
-    if (existingMatch?.status === "validado") {
-      return fail("Esta partida já foi confirmada", "already_validated");
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "validate_pending_match_v2",
+    {
+      p_match_id: params.matchId,
+      p_actor_user_id: params.actorUserId ?? null,
+      p_actor_name: params.actorName ?? null,
+      p_actor_type: params.actorType,
     }
+  );
 
-    if (existingMatch?.status === "cancelado") {
-      return fail("Esta partida foi cancelada", "already_canceled");
-    }
-
-    return fail("Partida não encontrada", "match_not_found");
+  if (rpcError) {
+    const mappedError = mapValidatePendingRpcErrorMessage(rpcError.message);
+    return fail(mappedError.error, mappedError.reason);
   }
 
-  const oldStatus = match.status as "pendente" | "edited";
-
-  if (!match.vencedor_id) {
-    return fail("Partida pendente sem vencedor definido", "missing_winner");
+  const validation = parseValidatePendingRpcRow(rpcData);
+  if (!validation) {
+    return fail("Erro ao validar a partida pendente", "validate_pending_match_rpc_invalid");
   }
 
-  if (
-    match.vencedor_id !== match.player_a_id &&
-    match.vencedor_id !== match.player_b_id
-  ) {
-    return fail("Vencedor da partida é inválido", "invalid_winner");
-  }
-
-  if (params.actorType === "player") {
-    const waitingUserId = getPendingResponsibleUserId(match);
-
-    if (!waitingUserId || params.actorUserId !== waitingUserId) {
-      return fail(
-        "Esta partida não está aguardando sua confirmação",
-        "actor_not_waiting_user"
-      );
-    }
-  }
-
-  const [
-    { data: usersData, error: usersError },
-    { data: settingsData },
-  ] = await Promise.all([
-    supabase
-      .from("users")
-      .select("id, full_name, name, email, rating_atual, vitorias, derrotas, jogos_disputados")
-      .in("id", [match.player_a_id, match.player_b_id]),
-    supabase.from("settings").select("key, value").in("key", ["k_factor"]),
-  ]);
+  const { data: usersData, error: usersError } = await supabase
+    .from("users")
+    .select("id, full_name, name, email, rating_atual, vitorias, derrotas, jogos_disputados")
+    .in("id", [validation.player_a_id, validation.player_b_id]);
 
   if (usersError || !usersData || usersData.length !== 2) {
-    return fail("Erro ao buscar dados dos jogadores", "users_query_failed");
+    return fail("Erro ao buscar dados atualizados dos jogadores", "users_query_failed");
   }
 
   const playerAData = usersData.find(
-    (user): user is ValidationUserRow => user.id === match.player_a_id
+    (user): user is ValidationCurrentUserRow => user.id === validation.player_a_id
   );
   const playerBData = usersData.find(
-    (user): user is ValidationUserRow => user.id === match.player_b_id
+    (user): user is ValidationCurrentUserRow => user.id === validation.player_b_id
   );
 
   if (!playerAData || !playerBData) {
-    return fail("Dados dos jogadores não encontrados", "users_missing");
+    return fail("Dados atualizados dos jogadores não encontrados", "users_missing");
   }
 
-  const storedKFactor = match.k_factor_used;
-
-  if (typeof storedKFactor === "number") {
-    if (isNaN(storedKFactor) || storedKFactor < 1 || storedKFactor > 100) {
-      return fail("K factor salvo na partida é inválido", "invalid_stored_k_factor");
-    }
-  }
-
-  const kFactorStr = (settingsData as ValidationSettingsRow[] | null)?.find(
-    (setting) => setting.key === "k_factor"
-  )?.value;
-  const currentKFactor = kFactorStr ? parseInt(kFactorStr, 10) : 24;
-
-  if (
-    storedKFactor === null &&
-    (isNaN(currentKFactor) || currentKFactor < 1 || currentKFactor > 100)
-  ) {
-    return fail("Configuração de K factor inválida", "invalid_k_factor");
-  }
-
-  const kFactor = storedKFactor ?? currentKFactor;
-
-  const winnerId = match.vencedor_id;
-  const loserId =
-    winnerId === match.player_a_id ? match.player_b_id : match.player_a_id;
-  const winnerData = winnerId === match.player_a_id ? playerAData : playerBData;
-  const loserData = loserId === match.player_a_id ? playerAData : playerBData;
-
-  const winnerRating = winnerData.rating_atual ?? 250;
-  const loserRating = loserData.rating_atual ?? 250;
-  const { winnerDelta, loserDelta } = calculateElo(winnerRating, loserRating, kFactor);
-
-  const playerADelta = winnerId === match.player_a_id ? winnerDelta : loserDelta;
-  const playerBDelta = winnerId === match.player_b_id ? winnerDelta : loserDelta;
-  const playerANewRating = applyMinRating(
-    (playerAData.rating_atual ?? 250) + playerADelta
-  );
-  const playerBNewRating = applyMinRating(
-    (playerBData.rating_atual ?? 250) + playerBDelta
-  );
-
-  const { data: validatedMatch, error: validateError } = await supabase
-    .from("matches")
-    .update({
-      status: "validado",
-      aprovado_por: params.actorUserId,
-      pontos_variacao_a: playerADelta,
-      pontos_variacao_b: playerBDelta,
-      rating_final_a: playerANewRating,
-      rating_final_b: playerBNewRating,
-      k_factor_used: kFactor,
-    })
-    .eq("id", params.matchId)
-    .in("status", ["pendente", "edited"])
-    .select("id")
-    .single<{ id: string }>();
-
-  if (validateError || !validatedMatch) {
-    return fail(
-      "Esta partida já foi processada por outro usuário",
-      "match_already_processed"
-    );
-  }
-
-  const [winnerUpdateResult, loserUpdateResult] = await Promise.all([
-    supabase
-      .from("users")
-      .update({
-        rating_atual: applyMinRating((winnerData.rating_atual ?? 250) + winnerDelta),
-        vitorias: (winnerData.vitorias ?? 0) + 1,
-        jogos_disputados: (winnerData.jogos_disputados ?? 0) + 1,
-      })
-      .eq("id", winnerId),
-    supabase
-      .from("users")
-      .update({
-        rating_atual: applyMinRating((loserData.rating_atual ?? 250) + loserDelta),
-        derrotas: (loserData.derrotas ?? 0) + 1,
-        jogos_disputados: (loserData.jogos_disputados ?? 0) + 1,
-      })
-      .eq("id", loserId),
-  ]);
-
-  if (winnerUpdateResult.error || loserUpdateResult.error) {
-    await Promise.allSettled([
-      supabase
-        .from("users")
-        .update({
-          rating_atual: winnerData.rating_atual,
-          vitorias: winnerData.vitorias,
-          jogos_disputados: winnerData.jogos_disputados,
-        })
-        .eq("id", winnerId),
-      supabase
-        .from("users")
-        .update({
-          rating_atual: loserData.rating_atual,
-          derrotas: loserData.derrotas,
-          jogos_disputados: loserData.jogos_disputados,
-        })
-        .eq("id", loserId),
-      supabase
-        .from("matches")
-        .update({ status: oldStatus })
-        .eq("id", params.matchId),
-    ]);
-
-    return fail("Erro ao atualizar estatísticas dos jogadores", "player_update_failed");
-  }
-
-  const transactionPromise = supabase.from("rating_transactions").insert([
-    {
-      match_id: params.matchId,
-      user_id: winnerId,
-      motivo: "vitoria",
-      valor: winnerDelta,
-      rating_antes: winnerRating,
-      rating_depois: applyMinRating(winnerRating + winnerDelta),
-    },
-    {
-      match_id: params.matchId,
-      user_id: loserId,
-      motivo: "derrota",
-      valor: loserDelta,
-      rating_antes: loserRating,
-      rating_depois: applyMinRating(loserRating + loserDelta),
-    },
-  ]);
+  const winnerId = validation.winner_id;
+  const loserId = validation.loser_id;
+  const winnerData = winnerId === validation.player_a_id ? playerAData : playerBData;
+  const loserData = loserId === validation.player_a_id ? playerAData : playerBData;
+  const playerADelta = validation.player_a_delta;
+  const playerBDelta = validation.player_b_delta;
 
   const { data: recentWinnerMatches } = await supabase
     .from("matches")
@@ -354,57 +249,33 @@ export async function validatePendingMatchByActor(
   const winnerContext = {
     userId: winnerId,
     matchId: params.matchId,
-    vitorias: (winnerData.vitorias ?? 0) + 1,
+    vitorias: winnerData.vitorias ?? 0,
     derrotas: winnerData.derrotas ?? 0,
-    jogos: (winnerData.jogos_disputados ?? 0) + 1,
-    rating: applyMinRating(winnerRating + winnerDelta),
+    jogos: winnerData.jogos_disputados ?? 0,
+    rating: winnerData.rating_atual ?? validation.winner_rating_after,
     streak: winnerStreak,
     isWinner: true,
-    opponentRating: loserRating,
-    resultado: `${match.resultado_a}x${match.resultado_b}`,
+    opponentRating: validation.loser_rating_before,
+    resultado: validation.score_label,
   };
 
   const loserContext = {
     userId: loserId,
     matchId: params.matchId,
     vitorias: loserData.vitorias ?? 0,
-    derrotas: (loserData.derrotas ?? 0) + 1,
-    jogos: (loserData.jogos_disputados ?? 0) + 1,
-    rating: applyMinRating(loserRating + loserDelta),
+    derrotas: loserData.derrotas ?? 0,
+    jogos: loserData.jogos_disputados ?? 0,
+    rating: loserData.rating_atual ?? validation.loser_rating_after,
     streak: 0,
     isWinner: false,
-    opponentRating: winnerRating,
-    resultado: `${match.resultado_a}x${match.resultado_b}`,
+    opponentRating: validation.winner_rating_before,
+    resultado: validation.score_label,
   };
 
   const [winnerAchievementsResult, loserAchievementsResult] = await Promise.allSettled([
     checkAndUnlockAchievements(winnerContext),
     checkAndUnlockAchievements(loserContext),
-    transactionPromise,
   ]);
-
-  const actorDisplayName =
-    params.actorName ??
-    getUserDisplayName(
-      params.actorUserId === playerAData.id ? playerAData : playerBData
-    );
-
-  const resolvedPayload: PendingNotificationPayloadV1 = {
-    event: "pending_resolved",
-    match_id: params.matchId,
-    status: "validado",
-    actor_id: params.actorUserId,
-    actor_name: actorDisplayName,
-    created_by: match.criado_por || params.actorUserId,
-  };
-
-  await emitPendingNotifications(
-    [match.player_a_id, match.player_b_id],
-    resolvedPayload
-  );
-
-  const playerAName = getUserDisplayName(playerAData);
-  const playerBName = getUserDisplayName(playerBData);
 
   return {
     success: true,
@@ -418,12 +289,12 @@ export async function validatePendingMatchByActor(
           ? loserAchievementsResult.value
           : [],
     },
-    oldStatus,
-    targetName: `${playerAName} vs ${playerBName} (${match.resultado_a}x${match.resultado_b})`,
+    oldStatus: validation.old_status,
+    targetName: `${validation.player_a_name} vs ${validation.player_b_name} (${validation.score_label})`,
     playerADelta,
     playerBDelta,
-    scoreLabel: `${match.resultado_a}x${match.resultado_b}`,
-    playerAName,
-    playerBName,
+    scoreLabel: validation.score_label,
+    playerAName: validation.player_a_name,
+    playerBName: validation.player_b_name,
   };
 }

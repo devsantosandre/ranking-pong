@@ -5,6 +5,10 @@ import type { Achievement } from "@/lib/achievements";
 import { sendPushToUsers } from "@/lib/push";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 import { validatePendingMatchByActor } from "@/lib/matches/validate-pending-match";
+import {
+  enforcePendingConfirmationSla,
+  transferMatchConfirmationResponsibility,
+} from "@/lib/matches/confirmation-sla";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
@@ -192,6 +196,9 @@ export async function confirmMatchAction(
   }
 
   const userId = authenticatedUserId;
+  await enforcePendingConfirmationSla({
+    responsibleUserId: userId,
+  });
   const actorName = await getActorName(supabase, userId);
   const result = await validatePendingMatchByActor({
     matchId,
@@ -240,11 +247,16 @@ export async function contestMatchAction(
   }
 
   const userId = authenticatedUserId;
+  await enforcePendingConfirmationSla({
+    responsibleUserId: userId,
+  });
 
   // Buscar a partida para determinar o vencedor e verificar status
   const { data: match, error: matchError } = await supabase
     .from("matches")
-    .select("player_a_id, player_b_id, status")
+    .select(
+      "player_a_id, player_b_id, status, resultado_a, resultado_b, vencedor_id, criado_por"
+    )
     .eq("id", matchId)
     .single();
   telemetry.step("fetch_match");
@@ -267,9 +279,23 @@ export async function contestMatchAction(
     );
   }
 
+  const waitingUserId =
+    match.criado_por === match.player_a_id
+      ? match.player_b_id
+      : match.criado_por === match.player_b_id
+        ? match.player_a_id
+        : null;
+
+  if (!waitingUserId || waitingUserId !== userId) {
+    return fail(
+      "Esta partida não está aguardando sua contestação",
+      "actor_not_waiting_user"
+    );
+  }
+
   const vencedorId = score.a > score.b ? match.player_a_id : match.player_b_id;
 
-  const { error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from("matches")
     .update({
       resultado_a: score.a,
@@ -279,14 +305,49 @@ export async function contestMatchAction(
       criado_por: userId,
     })
     .eq("id", matchId)
-    .in("status", ["pendente", "edited"]); // Só atualiza se status for válido
+    .neq("criado_por", userId)
+    .in("status", ["pendente", "edited"])
+    .select("id"); // Só atualiza se status for válido
   telemetry.step("update_match");
 
   if (error) {
     return fail("Erro ao contestar partida", "update_match_failed");
   }
 
+  if (!updatedRows || updatedRows.length === 0) {
+    return fail(
+      "Esta partida já foi processada por outro usuário",
+      "match_already_processed"
+    );
+  }
+
   const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
+
+  try {
+    await transferMatchConfirmationResponsibility({
+      matchId,
+      responsibleUserId: recipientId,
+    });
+  } catch (transferError) {
+    await supabase
+      .from("matches")
+      .update({
+        resultado_a: match.resultado_a,
+        resultado_b: match.resultado_b,
+        vencedor_id: match.vencedor_id,
+        status: match.status,
+        criado_por: match.criado_por,
+      })
+      .eq("id", matchId);
+
+    return fail(
+      transferError instanceof Error
+        ? transferError.message
+        : "Erro ao atualizar a responsabilidade da pendência",
+      "pending_confirmation_transfer_failed"
+    );
+  }
+
   const actorName = await getActorName(supabase, userId);
   const transferPayload: PendingNotificationPayloadV1 = {
     event: "pending_transferred",
@@ -353,6 +414,10 @@ export async function registerMatchAction(input: {
   if (input.playerId !== authenticatedUserId) {
     return fail("Sessão inválida para registrar a partida", "actor_mismatch");
   }
+
+  await enforcePendingConfirmationSla({
+    responsibleUserId: input.playerId,
+  });
 
   const { data: rpcData, error: rpcError } = await supabase.rpc(
     "register_match_with_notification_v1",

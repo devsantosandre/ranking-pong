@@ -6,7 +6,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { useUsers, useRegisterMatch, useSettings } from "@/lib/queries";
+import {
+  useUsers,
+  useRegisterMatch,
+  useSettings,
+} from "@/lib/queries";
 import { calculateElo } from "@/lib/elo";
 
 type SetScore = { numero: number; winner: "" | "a" | "b" };
@@ -71,7 +75,10 @@ export default function RegistrarJogoPage() {
   const selectedOpponent = users.find((u) => u.id === opponentId);
   const opponentName = selectedOpponent?.full_name || selectedOpponent?.name || selectedOpponent?.email || "Adversário";
 
-  const canSubmit = selectedOutcome !== "" && opponentId !== "" && !registerMutation.isPending;
+  const canSubmit =
+    selectedOutcome !== "" &&
+    opponentId !== "" &&
+    !registerMutation.isPending;
 
   const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
   const { resumoSets, winsA, winsB } = useMemo(() => {

@@ -24,6 +24,8 @@ export const queryKeys = {
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
       [...queryKeys.matches.all, "pending-actions", userId] as const,
+    pendingStatus: (userId: string) =>
+      [...queryKeys.matches.all, "pending-status", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
     h2h: (userId?: string, opponentId?: string) =>
       [...queryKeys.matches.all, "h2h", userId, opponentId] as const,

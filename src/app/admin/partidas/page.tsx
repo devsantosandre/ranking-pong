@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,20 @@ const statusColors: Record<string, string> = {
   edited: "bg-blue-100 text-blue-700",
 };
 
+function getAdminMatchStatusBadge(match: AdminMatch) {
+  if (match.status === "validado" && match.aprovado_por === null) {
+    return {
+      label: "validado pelo sistema",
+      className: "bg-emerald-100 text-emerald-700",
+    };
+  }
+
+  return {
+    label: match.status,
+    className: statusColors[match.status] || "bg-gray-100 text-gray-700",
+  };
+}
+
 export default function AdminPartidasPage() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("todas");
@@ -50,18 +64,18 @@ export default function AdminPartidasPage() {
     isValidated: boolean;
   }>({ isOpen: false, matchId: "", matchName: "", isValidated: false });
 
-  const loadMatches = async (reset = true) => {
+  const loadMatches = useCallback(async (pageToLoad: number, reset: boolean) => {
     if (reset) {
       setLoading(true);
       setPage(0);
     } else {
       setLoadingMore(true);
     }
+
     try {
-      const currentPage = reset ? 0 : page;
       const result = await adminGetAllMatches(
         statusFilter !== "todas" ? { status: statusFilter } : undefined,
-        currentPage
+        pageToLoad
       );
       if (reset) {
         setMatches(result.matches);
@@ -69,22 +83,18 @@ export default function AdminPartidasPage() {
         setMatches((prev) => [...prev, ...result.matches]);
       }
       setHasMore(result.hasMore);
-      if (!reset) {
-        setPage((p) => p + 1);
-      } else {
-        setPage(1);
-      }
+      setPage(pageToLoad + 1);
     } catch {
       setError("Erro ao carregar partidas");
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
-    loadMatches(true);
-  }, [statusFilter]);
+    void loadMatches(0, true);
+  }, [loadMatches]);
 
   const handleReasonChange = (value: string) => {
     setCancelReason(value);
@@ -131,7 +141,7 @@ export default function AdminPartidasPage() {
         queryClient.invalidateQueries({ queryKey: ["users"] });
         queryClient.invalidateQueries({ queryKey: ["matches"] });
       }
-      loadMatches();
+      await loadMatches(0, true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cancelar");
     } finally {
@@ -191,6 +201,7 @@ export default function AdminPartidasPage() {
         ) : (
           <div className="space-y-3">
             {matches.map((match) => {
+              const statusBadge = getAdminMatchStatusBadge(match);
               const isPlayerAWinner =
                 match.vencedor_id === match.player_a_id
                   ? true
@@ -227,11 +238,9 @@ export default function AdminPartidasPage() {
                     </p>
                     <div className="text-right">
                       <span
-                        className={`inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${
-                          statusColors[match.status] || "bg-gray-100 text-gray-700"
-                        }`}
+                        className={`inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${statusBadge.className}`}
                       >
-                        {match.status}
+                        {statusBadge.label}
                       </span>
                       <p className="mt-1 text-[10px] text-muted-foreground">
                         {formatDate(match.created_at)}
@@ -339,7 +348,7 @@ export default function AdminPartidasPage() {
 
             {/* Botao Carregar mais */}
             <LoadMoreButton
-              onClick={() => loadMatches(false)}
+              onClick={() => void loadMatches(page, false)}
               isLoading={loadingMore}
               hasMore={hasMore}
             />

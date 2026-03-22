@@ -21,7 +21,7 @@ const adminSections = [
     href: "/admin/pendencias",
     label: "Pendencias",
     icon: ShieldAlert,
-    description: "Jogos aguardando resposta ou revisao",
+    description: "Jogos abertos antes da confirmação automática",
     color: "text-amber-700 bg-amber-100",
   },
   {

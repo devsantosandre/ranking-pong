@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-store";
 import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
-import { queryKeys, usePendingActionCount } from "@/lib/queries";
+import { queryKeys, usePendingConfirmationStatus } from "@/lib/queries";
 import { buildBrowserTitle } from "@/lib/app-title";
 import { clearClientSessionData } from "@/lib/client-session-cleanup";
 
@@ -69,7 +69,9 @@ export function AppShell({
     isRequestingPermission,
     requestPermissionAndSubscribe,
   } = usePushSubscription();
-  const { data: pendingActionsCount = 0 } = usePendingActionCount(user?.id);
+  const { data: pendingStatus } = usePendingConfirmationStatus(user?.id);
+  const pendingActionsCount = pendingStatus?.pendingActionsCount ?? 0;
+  const nextDeadlineAt = pendingStatus?.nextDeadlineAt ?? null;
   const hasPendingAlert = !loading && !!user && pendingActionsCount > 0;
   const showPushSoftAsk =
     !!user && canShowSoftAsk && !pathname.startsWith("/perfil/configuracoes");
@@ -109,6 +111,9 @@ export function AppShell({
     if (user?.id) {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.matches.pendingActions(user.id),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.matches.pendingStatus(user.id),
       });
     }
   };
@@ -173,7 +178,12 @@ export function AppShell({
                 <div className="flex min-w-0 items-center gap-2">
                   <Info className="h-4 w-4 shrink-0 text-primary-foreground" />
                   <p className="truncate text-xs font-medium text-primary-foreground">
-                    Você tem {pendingActionsCount} pendência(s) para confirmar
+                    {nextDeadlineAt
+                      ? `Você tem ${pendingActionsCount} pendência(s). Se ninguém responder até ${new Date(nextDeadlineAt).toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}, o app confirma automaticamente.`
+                      : `Você tem ${pendingActionsCount} pendência(s) para confirmar.`}
                   </p>
                 </div>
                 <Link

@@ -9,6 +9,11 @@ import {
 import { revalidatePath } from "next/cache";
 import { validatePendingMatchByActor } from "@/lib/matches/validate-pending-match";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
+import {
+  enforcePendingConfirmationSla,
+  getPendingConfirmationDeadlineHours,
+  shiftOpenPendingConfirmationDeadlines,
+} from "@/lib/matches/confirmation-sla";
 
 // ============================================================
 // TIPOS
@@ -55,7 +60,7 @@ export type AdminSetting = {
 
 export type AdminLog = {
   id: string;
-  admin_id: string;
+  admin_id: string | null;
   admin_role: string;
   action: string;
   action_description: string;
@@ -164,7 +169,7 @@ export type AdminAnalyticsPendingMatch = {
   createdAt: string;
   matchDate: string;
   ageHours: number;
-  isStale: boolean;
+  deadlineAt: string;
   timeline: {
     id: string;
     type: "registered" | "contested";
@@ -174,8 +179,8 @@ export type AdminAnalyticsPendingMatch = {
 };
 
 export type AdminPendingMatchesResponse = {
+  deadlineHours: number;
   openCount: number;
-  staleCount: number;
   pendingCount: number;
   editedCount: number;
   items: AdminAnalyticsPendingMatch[];
@@ -223,7 +228,6 @@ export type AdminAnalyticsResponse = {
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
 type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
-const PENDING_ATTENTION_HOURS = 6;
 type AdminMatchActionSource = "partidas" | "pendencias";
 const ADMIN_MATCH_ACTION_SOURCE_LABEL: Record<AdminMatchActionSource, string> = {
   partidas: "Partidas",
@@ -232,6 +236,20 @@ const ADMIN_MATCH_ACTION_SOURCE_LABEL: Record<AdminMatchActionSource, string> = 
 const ADMIN_MATCH_ACTION_SOURCE_TEXT: Record<AdminMatchActionSource, string> = {
   partidas: "pela tela de Partidas",
   pendencias: "pela tela de Pendências",
+};
+type CancelMatchRpcRow = {
+  match_id: string;
+  old_status: "pendente" | "edited" | "validado";
+  player_a_id: string;
+  player_b_id: string;
+  created_by: string | null;
+  player_a_name: string;
+  player_b_name: string;
+  score_a: number;
+  score_b: number;
+  player_a_delta: number | null;
+  player_b_delta: number | null;
+  achievements_revoked: number;
 };
 const WEEKDAY_METADATA = [
   { day: 1, key: "mon", label: "Segunda-feira", shortLabel: "Seg" },
@@ -255,6 +273,21 @@ const ADMIN_ACTION_METADATA: Record<
     key: "match_validated_by_admin",
     label: "Partidas validadas pelo admin",
     description: "Partidas pendentes aceitas diretamente pelo admin.",
+  },
+  match_auto_validated: {
+    key: "match_auto_validated",
+    label: "Partidas confirmadas automaticamente",
+    description: "Partidas validadas pelo sistema ao fim do prazo configurado.",
+  },
+  match_confirmation_overdue: {
+    key: "match_confirmation_overdue",
+    label: "Histórico do modelo anterior",
+    description: "Registros herdados do fluxo antigo de pendências, mantidos só para histórico.",
+  },
+  match_confirmation_extension_granted: {
+    key: "match_confirmation_extension_granted",
+    label: "Prorrogações antigas",
+    description: "Prorrogações registradas no modelo anterior de pendências, mantidas só para histórico.",
   },
   user_created: {
     key: "user_created",
@@ -313,6 +346,72 @@ const ADMIN_ACTION_METADATA: Record<
   },
 };
 
+function parseCancelMatchRpcRow(data: unknown): CancelMatchRpcRow | null {
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (!row || typeof row !== "object") return null;
+
+  const candidate = row as Partial<CancelMatchRpcRow>;
+  if (
+    typeof candidate.match_id !== "string" ||
+    (candidate.old_status !== "pendente" &&
+      candidate.old_status !== "edited" &&
+      candidate.old_status !== "validado") ||
+    typeof candidate.player_a_id !== "string" ||
+    typeof candidate.player_b_id !== "string" ||
+    typeof candidate.player_a_name !== "string" ||
+    typeof candidate.player_b_name !== "string" ||
+    typeof candidate.score_a !== "number" ||
+    typeof candidate.score_b !== "number" ||
+    typeof candidate.achievements_revoked !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    match_id: candidate.match_id,
+    old_status: candidate.old_status,
+    player_a_id: candidate.player_a_id,
+    player_b_id: candidate.player_b_id,
+    created_by: typeof candidate.created_by === "string" ? candidate.created_by : null,
+    player_a_name: candidate.player_a_name,
+    player_b_name: candidate.player_b_name,
+    score_a: candidate.score_a,
+    score_b: candidate.score_b,
+    player_a_delta:
+      typeof candidate.player_a_delta === "number" ? candidate.player_a_delta : null,
+    player_b_delta:
+      typeof candidate.player_b_delta === "number" ? candidate.player_b_delta : null,
+    achievements_revoked: candidate.achievements_revoked,
+  };
+}
+
+function mapCancelMatchRpcErrorMessage(message: string | undefined): string {
+  const normalized = (message || "").toLowerCase();
+
+  if (normalized.includes("already_canceled")) {
+    return "Partida já está cancelada";
+  }
+
+  if (normalized.includes("match_not_found")) {
+    return "Partida não encontrada";
+  }
+
+  if (normalized.includes("missing_rating_delta")) {
+    return "Partida validada sem variação de pontos para reverter";
+  }
+
+  if (normalized.includes("cannot_cancel_historical_validated_match")) {
+    return "Não é possível cancelar esta partida porque já existem partidas validadas mais recentes envolvendo esses jogadores";
+  }
+
+  if (normalized.includes("match_already_processed")) {
+    return "Esta partida já foi processada por outro usuário";
+  }
+
+  return "Erro ao cancelar partida";
+}
+
 type AnalyticsMatchRow = {
   id: string;
   player_a_id: string;
@@ -336,6 +435,7 @@ type AnalyticsUserRow = {
 type AnalyticsLogRow = {
   id: string;
   action: string | null;
+  admin_role: string | null;
   created_at: string | null;
 };
 
@@ -365,6 +465,12 @@ type AnalyticsPendingMatchRow = {
   player_a: AnalyticsUserRelation;
   player_b: AnalyticsUserRelation;
   creator: AnalyticsUserRelation;
+};
+
+type AnalyticsPendingConfirmationStateRow = {
+  match_id: string;
+  responsible_user_id: string;
+  current_deadline_at: string;
 };
 
 type AnalyticsNotificationRow = {
@@ -540,6 +646,12 @@ function getHoursSince(dateInput: string): number {
   );
 }
 
+function getDeadlineFromPendingSince(dateInput: string, deadlineHours: number): string {
+  return new Date(
+    new Date(dateInput).getTime() + deadlineHours * 60 * 60 * 1000
+  ).toISOString();
+}
+
 function buildAnalyticsTopPlayers(
   matches: AnalyticsMatchRow[],
   userNames: Map<string, string>
@@ -630,7 +742,9 @@ function mapPendingMatchRows(
         occurredAt: string;
       }[];
     }
-  >
+  >,
+  stateByMatchId: Map<string, AnalyticsPendingConfirmationStateRow>,
+  deadlineHours: number
 ): AdminAnalyticsPendingMatch[] {
   return rows
     .map((match) => {
@@ -642,14 +756,15 @@ function mapPendingMatchRows(
       const scoreA = match.resultado_a ?? 0;
       const scoreB = match.resultado_b ?? 0;
       const timelineEntry = timelineByMatchId.get(match.id);
-      const waitingForUserId = getPendingResponsibleUserId(match);
+      const stateEntry = stateByMatchId.get(match.id);
+      const waitingForUserId =
+        stateEntry?.responsible_user_id ?? getPendingResponsibleUserId(match);
       const waitingForUserName =
         waitingForUserId === match.player_a_id
           ? playerAName
           : waitingForUserId === match.player_b_id
             ? playerBName
             : "Responsavel indefinido";
-      const ageHours = getHoursSince(match.created_at);
       const fallbackActorName = getUserDisplayName(creator);
       const timeline =
         timelineEntry?.timeline.length
@@ -663,6 +778,10 @@ function mapPendingMatchRows(
               },
             ];
       const pendingSinceAt = timelineEntry?.pendingSinceAt ?? match.created_at;
+      const deadlineAt =
+        stateEntry?.current_deadline_at ??
+        getDeadlineFromPendingSince(pendingSinceAt, deadlineHours);
+      const ageHours = getHoursSince(pendingSinceAt);
 
       return {
         id: match.id,
@@ -681,17 +800,14 @@ function mapPendingMatchRows(
         createdAt: match.created_at,
         matchDate: match.data_partida,
         ageHours,
-        isStale: ageHours >= PENDING_ATTENTION_HOURS,
+        deadlineAt,
         timeline,
       };
     })
-    .sort((left, right) => {
-      if (left.isStale !== right.isStale) {
-        return Number(right.isStale) - Number(left.isStale);
-      }
-
-      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-    });
+    .sort(
+      (left, right) =>
+        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+    );
 }
 
 function parsePendingNotificationPayload(
@@ -923,42 +1039,6 @@ function getLongestGapWithoutRegistrations(
   return roundToOneDecimal(longestGap);
 }
 
-async function revertDailyLimitForCancelledMatch(
-  supabase: ServerSupabaseClient,
-  params: { playerAId: string; playerBId: string; createdAt: string }
-) {
-  const matchDate = getDateInTimezone(params.createdAt, BUSINESS_TIMEZONE);
-
-  const { data: limitRows, error: fetchError } = await supabase
-    .from("daily_limits")
-    .select("id, jogos_registrados")
-    .or(
-      `and(user_id.eq.${params.playerAId},opponent_id.eq.${params.playerBId}),and(user_id.eq.${params.playerBId},opponent_id.eq.${params.playerAId})`
-    )
-    .eq("data", matchDate);
-
-  if (fetchError) {
-    throw new Error("Erro ao buscar limite diario para reversao");
-  }
-
-  if (!limitRows?.length) {
-    return;
-  }
-
-  for (const row of limitRows) {
-    const nextCount = Math.max(0, (row.jogos_registrados || 0) - 1);
-
-    const { error: updateError } = await supabase
-      .from("daily_limits")
-      .update({ jogos_registrados: nextCount })
-      .eq("id", row.id);
-
-    if (updateError) {
-      throw new Error("Erro ao reverter limite diario");
-    }
-  }
-}
-
 // ============================================================
 // PARTIDAS (moderator + admin)
 // ============================================================
@@ -1013,216 +1093,43 @@ export async function adminCancelMatch(
   }
 
   const supabase = createAdminClient();
-
-  // Buscar partida atual
-  const { data: match, error: matchError } = await supabase
-    .from("matches")
-    .select(
-      `
-      *,
-      player_a:users!player_a_id(id, name, full_name, rating_atual, vitorias, derrotas, jogos_disputados),
-      player_b:users!player_b_id(id, name, full_name, rating_atual, vitorias, derrotas, jogos_disputados)
-    `
-    )
-    .eq("id", matchId)
-    .single();
-
-  if (matchError || !match) {
-    throw new Error("Partida nao encontrada");
-  }
-
-  if (match.status === "cancelado") {
-    throw new Error("Partida ja esta cancelada");
-  }
-
-  const oldStatus = match.status;
-  const targetName = `${match.player_a.full_name || match.player_a.name} vs ${match.player_b.full_name || match.player_b.name} (${match.resultado_a}x${match.resultado_b})`;
+  await enforcePendingConfirmationSla({ supabase });
   const adminActor = await getCurrentUser();
 
-  // Se a partida estava validada, reverter pontos
-  if (match.status === "validado") {
-    if (!match.vencedor_id) {
-      throw new Error("Partida validada sem vencedor definido");
-    }
-
-    const winnerId = match.vencedor_id;
-    const loserId =
-      winnerId === match.player_a_id ? match.player_b_id : match.player_a_id;
-
-    if (winnerId !== match.player_a_id && winnerId !== match.player_b_id) {
-      throw new Error("Vencedor da partida é inválido");
-    }
-
-    const winner =
-      winnerId === match.player_a_id ? match.player_a : match.player_b;
-    const loser =
-      loserId === match.player_a_id ? match.player_a : match.player_b;
-
-    let deltaA =
-      typeof match.pontos_variacao_a === "number" ? match.pontos_variacao_a : null;
-    let deltaB =
-      typeof match.pontos_variacao_b === "number" ? match.pontos_variacao_b : null;
-
-    // Fallback para dados legados/inconsistentes: usa transações originais da partida.
-    if (deltaA === null || deltaB === null) {
-      const { data: transactionRows, error: transactionError } = await supabase
-        .from("rating_transactions")
-        .select("user_id, valor, motivo, created_at")
-        .eq("match_id", matchId)
-        .in("motivo", ["vitoria", "derrota"])
-        .order("created_at", { ascending: false });
-
-      if (transactionError) {
-        throw new Error("Erro ao buscar historico de pontos da partida");
-      }
-
-      const deltaByUser = new Map<string, number>();
-      for (const row of transactionRows || []) {
-        if (typeof row.valor !== "number") continue;
-        if (deltaByUser.has(row.user_id)) continue;
-        deltaByUser.set(row.user_id, row.valor);
-      }
-
-      if (deltaA === null) {
-        deltaA = deltaByUser.get(match.player_a_id) ?? null;
-      }
-      if (deltaB === null) {
-        deltaB = deltaByUser.get(match.player_b_id) ?? null;
-      }
-    }
-
-    if (deltaA === null || deltaB === null) {
-      throw new Error("Partida validada sem variacao de pontos para reverter");
-    }
-
-    const winnerDelta = winnerId === match.player_a_id ? deltaA : deltaB;
-    const loserDelta = loserId === match.player_a_id ? deltaA : deltaB;
-
-    const nextWinnerRating = winner.rating_atual - winnerDelta;
-    const nextLoserRating = loser.rating_atual - loserDelta;
-
-    // Reverter pontos do vencedor
-    const { error: winnerError } = await supabase
-      .from("users")
-      .update({
-        rating_atual: nextWinnerRating,
-        vitorias: Math.max(0, (winner.vitorias ?? 0) - 1),
-        jogos_disputados: Math.max(0, (winner.jogos_disputados ?? 0) - 1),
-      })
-      .eq("id", winnerId);
-
-    if (winnerError) {
-      throw new Error("Erro ao reverter pontos do vencedor");
-    }
-
-    // Reverter pontos do perdedor
-    const { error: loserError } = await supabase
-      .from("users")
-      .update({
-        rating_atual: nextLoserRating,
-        derrotas: Math.max(0, (loser.derrotas ?? 0) - 1),
-        jogos_disputados: Math.max(0, (loser.jogos_disputados ?? 0) - 1),
-      })
-      .eq("id", loserId);
-
-    if (loserError) {
-      throw new Error("Erro ao reverter pontos do perdedor");
-    }
-
-    // Registrar transacoes de reversao
-    await supabase.from("rating_transactions").insert([
-      {
-        match_id: matchId,
-        user_id: winnerId,
-        motivo: "reversao_admin",
-        valor: -winnerDelta,
-        rating_antes: winner.rating_atual,
-        rating_depois: nextWinnerRating,
-      },
-      {
-        match_id: matchId,
-        user_id: loserId,
-        motivo: "reversao_admin",
-        valor: -loserDelta,
-        rating_antes: loser.rating_atual,
-        rating_depois: nextLoserRating,
-      },
-    ]);
-
-    // Recalcular streak de ambos os jogadores após cancelamento
-    // (a partida cancelada não deve mais contar)
-    async function recalculateStreak(playerId: string): Promise<number> {
-      const { data: recentMatches } = await supabase
-        .from("matches")
-        .select("vencedor_id")
-        .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
-        .eq("status", "validado")
-        .neq("id", matchId) // Exclui a partida que está sendo cancelada
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      let streak = 0;
-      if (recentMatches) {
-        for (const m of recentMatches) {
-          if (m.vencedor_id === playerId) streak++;
-          else break;
-        }
-      }
-      return streak;
-    }
-
-    // Atualizar streak do vencedor
-    const newWinnerStreak = await recalculateStreak(winnerId);
-    await supabase
-      .from("users")
-      .update({ streak: newWinnerStreak })
-      .eq("id", winnerId);
-
-    // Atualizar streak do perdedor
-    const newLoserStreak = await recalculateStreak(loserId);
-    await supabase
-      .from("users")
-      .update({ streak: newLoserStreak })
-      .eq("id", loserId);
-  }
-
-  // Revogar conquistas que foram desbloqueadas por esta partida
-  // O jogador poderá reconquistá-las na próxima partida se ainda tiver os requisitos
-  const { data: revokedAchievements } = await supabase
-    .from("user_achievements")
-    .delete()
-    .eq("match_id", matchId)
-    .select("achievement_id, user_id");
-
-  // Reverter contador do limite diário (a partida cancelada não deve contar)
-  await revertDailyLimitForCancelledMatch(supabase, {
-    playerAId: match.player_a_id,
-    playerBId: match.player_b_id,
-    createdAt: match.created_at,
+  const { data: rpcData, error: rpcError } = await supabase.rpc("cancel_match_v2", {
+    p_match_id: matchId,
   });
 
-  // Atualizar status da partida
-  const { error: cancelError } = await supabase
-    .from("matches")
-    .update({ status: "cancelado" })
-    .eq("id", matchId);
+  if (rpcError) {
+    throw new Error(mapCancelMatchRpcErrorMessage(rpcError.message));
+  }
 
-  if (cancelError) {
+  const cancelledMatch = parseCancelMatchRpcRow(rpcData);
+
+  if (!cancelledMatch) {
     throw new Error("Erro ao cancelar partida");
   }
 
+  const oldStatus = cancelledMatch.old_status;
+  const targetName = `${cancelledMatch.player_a_name} vs ${cancelledMatch.player_b_name} (${cancelledMatch.score_a}x${cancelledMatch.score_b})`;
+
   if (oldStatus === "pendente" || oldStatus === "edited") {
-    const actorId = adminActor?.id || match.criado_por || match.player_a_id;
+    const actorId =
+      adminActor?.id ||
+      cancelledMatch.created_by ||
+      cancelledMatch.player_a_id;
     const resolvedPayload: PendingNotificationPayloadV1 = {
       event: "pending_resolved",
       match_id: matchId,
       status: "cancelado",
       actor_id: actorId,
       actor_name: adminActor?.full_name || adminActor?.name || null,
-      created_by: match.criado_por || actorId,
+      created_by: cancelledMatch.created_by || actorId,
     };
 
-    const recipients = Array.from(new Set([match.player_a_id, match.player_b_id]));
+    const recipients = Array.from(
+      new Set([cancelledMatch.player_a_id, cancelledMatch.player_b_id])
+    );
     await Promise.all(
       recipients.map((recipientId) =>
         emitPendingNotification(supabase, recipientId, resolvedPayload)
@@ -1231,7 +1138,7 @@ export async function adminCancelMatch(
   }
 
   // Registrar log
-  const achievementsRevoked = revokedAchievements?.length || 0;
+  const achievementsRevoked = cancelledMatch.achievements_revoked || 0;
   const sourceLabel = ADMIN_MATCH_ACTION_SOURCE_LABEL[source];
   const sourceText = ADMIN_MATCH_ACTION_SOURCE_TEXT[source];
   await createAdminLog({
@@ -1243,8 +1150,24 @@ export async function adminCancelMatch(
     target_type: "match",
     target_id: matchId,
     target_name: targetName,
-    old_value: { status: oldStatus, origem: sourceLabel },
-    new_value: { status: "cancelado", origem: sourceLabel },
+    old_value: {
+      status: oldStatus,
+      origem: sourceLabel,
+      player_a: cancelledMatch.player_a_name,
+      player_b: cancelledMatch.player_b_name,
+      resultado_a: cancelledMatch.score_a,
+      resultado_b: cancelledMatch.score_b,
+    },
+    new_value: {
+      status: "cancelado",
+      origem: sourceLabel,
+      player_a: cancelledMatch.player_a_name,
+      player_b: cancelledMatch.player_b_name,
+      resultado_a: cancelledMatch.score_a,
+      resultado_b: cancelledMatch.score_b,
+      pontos_revertidos_a: cancelledMatch.player_a_delta,
+      pontos_revertidos_b: cancelledMatch.player_b_delta,
+    },
     reason: reason.trim(),
   });
 
@@ -1265,6 +1188,8 @@ export async function adminValidatePendingMatch(
 ) {
   await requireModerator();
 
+  const supabase = createAdminClient();
+  await enforcePendingConfirmationSla({ supabase });
   const adminActor = await getCurrentUser();
 
   if (!adminActor) {
@@ -1981,6 +1906,7 @@ export async function adminUpdateSetting(key: string, value: string) {
   await requireAdminOnly();
   const supabase = createAdminClient();
   const admin = await getCurrentUser();
+  const numericValue = Number.parseInt(value, 10);
 
   // Buscar configuracao atual
   const { data: oldSetting, error: settingError } = await supabase
@@ -1991,6 +1917,25 @@ export async function adminUpdateSetting(key: string, value: string) {
 
   if (settingError || !oldSetting) {
     throw new Error("Configuracao nao encontrada");
+  }
+
+  if (!Number.isFinite(numericValue)) {
+    throw new Error("Valor da configuracao precisa ser numerico");
+  }
+
+  if (key === "k_factor" && (numericValue < 1 || numericValue > 100)) {
+    throw new Error("Fator K deve ficar entre 1 e 100");
+  }
+
+  if (key === "limite_jogos_diarios" && numericValue < 1) {
+    throw new Error("Limite diario deve ser pelo menos 1");
+  }
+
+  if (
+    key === "pending_confirmation_deadline_hours" &&
+    (numericValue < 1 || numericValue > 168)
+  ) {
+    throw new Error("Prazo da confirmação automática deve ficar entre 1h e 168h");
   }
 
   // Atualizar configuracao
@@ -2005,6 +1950,19 @@ export async function adminUpdateSetting(key: string, value: string) {
 
   if (updateError) {
     throw new Error("Erro ao atualizar configuração");
+  }
+
+  if (key === "pending_confirmation_deadline_hours") {
+    const previousDeadlineHours = Number.parseInt(oldSetting.value ?? "", 10);
+
+    if (Number.isFinite(previousDeadlineHours)) {
+      await shiftOpenPendingConfirmationDeadlines({
+        previousDeadlineHours,
+        nextDeadlineHours: numericValue,
+        supabase,
+      });
+      await enforcePendingConfirmationSla({ supabase });
+    }
   }
 
   // Registrar log
@@ -2111,7 +2069,7 @@ export async function adminGetAnalytics(
       .gte("data_partida", trendStart)
       .lte("data_partida", selectedRange.endDate),
     supabase.from("users").select("id, name, full_name, email, created_at, is_active"),
-    supabase.from("admin_logs").select("id, action, created_at"),
+    supabase.from("admin_logs").select("id, action, admin_role, created_at"),
     supabase
       .from("matches")
       .select("id", { count: "exact", head: true })
@@ -2447,7 +2405,9 @@ export async function adminGetAnalytics(
     (user) => getMonthKeyFromTimestamp(user.created_at) === previousMonth
   ).length;
   const monthAdminLogs = logRows.filter(
-    (row) => getMonthKeyFromTimestamp(row.created_at) === selectedMonth
+    (row) =>
+      getMonthKeyFromTimestamp(row.created_at) === selectedMonth &&
+      row.admin_role !== "system"
   );
   const adminActions = monthAdminLogs.length;
   const adminActionAccumulator = new Map<string, AdminAnalyticsActionBreakdown>();
@@ -2560,6 +2520,8 @@ export async function adminGetPendingMatches(): Promise<AdminPendingMatchesRespo
   await requireModerator();
 
   const supabase = createAdminClient();
+  const deadlineHours = await getPendingConfirmationDeadlineHours(supabase);
+  await enforcePendingConfirmationSla({ supabase });
   const { data, error } = await supabase
     .from("matches")
     .select(
@@ -2588,8 +2550,8 @@ export async function adminGetPendingMatches(): Promise<AdminPendingMatchesRespo
   const pendingRows = (data ?? []) as AnalyticsPendingMatchRow[];
   if (pendingRows.length === 0) {
     return {
+      deadlineHours,
       openCount: 0,
-      staleCount: 0,
       pendingCount: 0,
       editedCount: 0,
       items: [],
@@ -2597,22 +2559,31 @@ export async function adminGetPendingMatches(): Promise<AdminPendingMatchesRespo
   }
 
   const oldestCreatedAt = pendingRows[0]?.created_at;
-  const { data: notificationRows } = await supabase
+  const { data: notificationRows, error: notificationsError } = await supabase
     .from("notifications")
     .select("created_at, payload")
     .eq("tipo", "confirmacao")
     .gte("created_at", oldestCreatedAt)
     .order("created_at", { ascending: true });
 
+  if (notificationsError) {
+    throw new Error("Erro ao carregar o histórico das pendências");
+  }
+
   const timelineByMatchId = buildPendingTimelineByMatchId(
     pendingRows,
     (notificationRows ?? []) as AnalyticsNotificationRow[]
   );
-  const items = mapPendingMatchRows(pendingRows, timelineByMatchId);
+  const items = mapPendingMatchRows(
+    pendingRows,
+    timelineByMatchId,
+    new Map<string, AnalyticsPendingConfirmationStateRow>(),
+    deadlineHours
+  );
 
   return {
+    deadlineHours,
     openCount: items.length,
-    staleCount: items.filter((item) => item.isStale).length,
     pendingCount: items.filter((item) => item.status === "pendente").length,
     editedCount: items.filter((item) => item.status === "edited").length,
     items,

@@ -40,6 +40,9 @@ export function useRealtimePendingSync(userId?: string) {
             queryKey: queryKeys.matches.pendingActions(userId),
           });
           void queryClient.invalidateQueries({
+            queryKey: queryKeys.matches.pendingStatus(userId),
+          });
+          void queryClient.invalidateQueries({
             queryKey: queryKeys.notifications.user(userId),
           });
         }

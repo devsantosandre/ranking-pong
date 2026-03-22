@@ -21,15 +21,15 @@ import {
   type AdminPendingMatchesResponse,
 } from "@/app/actions/admin";
 
-type PendingFilter = "all" | "stale" | "pendente" | "edited";
-const PENDING_ATTENTION_HOURS = 6;
+type PendingFilter = "all" | "pendente" | "edited";
 
-const filterOptions: Array<{ key: PendingFilter; label: string }> = [
-  { key: "all", label: "Todas" },
-  { key: "stale", label: `Mais de ${PENDING_ATTENTION_HOURS}h` },
-  { key: "pendente", label: "Pendentes" },
-  { key: "edited", label: "Contestadas" },
-];
+function buildFilterOptions(): Array<{ key: PendingFilter; label: string }> {
+  return [
+    { key: "all", label: "Todas" },
+    { key: "pendente", label: "Pendentes" },
+    { key: "edited", label: "Contestadas" },
+  ];
+}
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value);
@@ -194,7 +194,7 @@ function PendingActionModal({
           ) : (
             <p>
               Esta ação valida a partida pelo admin, aplica os pontos do placar atual e
-              encerra a pendência.
+              encerra a pendência antes da confirmação automática.
             </p>
           )}
         </div>
@@ -268,11 +268,7 @@ function PendingMatchRow({
       : "Placar informado";
 
   return (
-    <article
-      className={`rounded-2xl border p-4 shadow-sm ${
-        match.isStale ? "border-amber-200 bg-amber-50/60" : "border-border bg-card"
-      }`}
-    >
+    <article className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold leading-tight text-foreground">
@@ -282,11 +278,6 @@ function PendingMatchRow({
             <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusTone}`}>
               {statusLabel}
             </span>
-            {match.isStale ? (
-              <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
-                Mais de {PENDING_ATTENTION_HOURS}h
-              </span>
-            ) : null}
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -343,8 +334,14 @@ function PendingMatchRow({
 
       <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground">
         <div className="rounded-lg bg-background/80 px-3 py-2">
-          Aguardando:{" "}
+          Responsável agora:{" "}
           <span className="font-semibold text-foreground">{match.waitingForUserName}</span>
+        </div>
+        <div className="rounded-lg bg-background/80 px-3 py-2">
+          Confirma automaticamente em{" "}
+          <span className="font-semibold text-foreground">
+            {formatDateTime(match.deadlineAt)}
+          </span>
         </div>
         {hasPendingStateChange ? (
           <div className="rounded-lg bg-background/80 px-3 py-2">
@@ -428,6 +425,8 @@ export default function AdminPendenciasPage() {
   const [fieldError, setFieldError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const deadlineHours = data?.deadlineHours ?? 6;
+  const filterOptions = useMemo(() => buildFilterOptions(), []);
 
   const loadPendingMatches = useCallback(async (preserveData: boolean) => {
     if (preserveData) {
@@ -523,8 +522,6 @@ export default function AdminPendenciasPage() {
     const items = data?.items ?? [];
 
     switch (activeFilter) {
-      case "stale":
-        return items.filter((item) => item.isStale);
       case "pendente":
         return items.filter((item) => item.status === "pendente");
       case "edited":
@@ -537,7 +534,7 @@ export default function AdminPendenciasPage() {
   return (
     <AppShell
       title="Pendências"
-      subtitle="Confirmações e contestações em acompanhamento"
+      subtitle="Confirmações e contestações antes da validação automática"
       showBack
     >
       <div className="space-y-4">
@@ -563,7 +560,7 @@ export default function AdminPendenciasPage() {
               </p>
               <p className="text-xs text-muted-foreground">
                 Aqui o admin enxerga rapidamente quais jogos ainda esperam resposta, de
-                quem é a pendência agora e pode resolver os casos direto por esta tela.
+                quem é a pendência agora e pode resolver os casos antes da confirmação automática.
               </p>
             </div>
           </div>
@@ -614,10 +611,10 @@ export default function AdminPendenciasPage() {
                 tone="border-sky-200 bg-sky-50"
               />
               <SummaryCard
-                title={`Mais de ${PENDING_ATTENTION_HOURS}h`}
-                value={formatNumber(data.staleCount)}
-                description="Pendências que pedem mais atenção do admin"
-                tone="border-amber-200 bg-amber-50"
+                title="Confirmação automática"
+                value={`${deadlineHours}h`}
+                description="Prazo atual antes da validação automática"
+                tone="border-cyan-200 bg-cyan-50"
               />
               <SummaryCard
                 title="Pendentes"
@@ -641,7 +638,7 @@ export default function AdminPendenciasPage() {
                 <div className="min-w-0">
                   <h2 className="text-sm font-semibold text-foreground">Filtros rápidos</h2>
                   <p className="text-xs text-muted-foreground">
-                    Aguardando mostra quem precisa confirmar ou responder ao placar neste momento.
+                    O prazo configurado hoje é de {deadlineHours}h para confirmar ou contestar antes da validação automática pelo sistema.
                   </p>
                 </div>
               </div>
@@ -672,7 +669,7 @@ export default function AdminPendenciasPage() {
                 <div className="min-w-0">
                   <h2 className="text-sm font-semibold text-foreground">Jogos aguardando resposta</h2>
                   <p className="text-xs text-muted-foreground">
-                    Ordenação prioriza pendências antigas e depois os registros mais velhos.
+                    A lista mostra só os jogos ainda abertos, do mais antigo para o mais recente.
                   </p>
                 </div>
               </div>
@@ -702,13 +699,12 @@ export default function AdminPendenciasPage() {
               <Clock3 className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-foreground">Como acompanhar</h2>
-              <p className="text-xs text-muted-foreground">
-                Use este painel para saber quem precisa responder e agir nos casos mais
-                urgentes sem sair da lista.
-              </p>
-            </div>
-          </div>
+                  <h2 className="text-sm font-semibold text-foreground">Como acompanhar</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Use este painel para acompanhar os jogos em aberto e agir antes que o sistema confirme automaticamente.
+                  </p>
+                </div>
+              </div>
           <div className="mt-4 space-y-3 text-sm text-foreground">
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
               Pendente significa que o adversário ainda não confirmou o placar enviado.
@@ -718,8 +714,8 @@ export default function AdminPendenciasPage() {
               responder.
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-              Pendências com mais de {PENDING_ATTENTION_HOURS}h merecem acompanhamento
-              porque costumam travar o fechamento correto do ranking.
+              Depois de {deadlineHours}h sem resposta, o sistema confirma automaticamente o placar atual.
+              O admin pode aceitar ou cancelar manualmente antes disso.
             </div>
           </div>
         </section>

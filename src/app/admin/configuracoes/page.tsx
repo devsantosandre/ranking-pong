@@ -18,6 +18,7 @@ import {
 const settingDisplayOrder = [
   "k_factor",
   "limite_jogos_diarios",
+  "pending_confirmation_deadline_hours",
   "rating_inicial",
   "achievements_rating_min_players",
   "achievements_rating_min_validated_matches",
@@ -33,6 +34,11 @@ const settingLabels: Record<SupportedSettingKey, { label: string; description: s
   limite_jogos_diarios: {
     label: "Limite de Jogos Diarios",
     description: "Maximo de partidas por dia contra o mesmo adversario",
+  },
+  pending_confirmation_deadline_hours: {
+    label: "Horas para Confirmação Automática",
+    description:
+      "Depois desse prazo sem resposta, o sistema confirma automaticamente a partida com o placar atual.",
   },
   rating_inicial: {
     label: "Rating Inicial",
@@ -136,13 +142,22 @@ export default function AdminConfiguracoesPage() {
     loadSettings();
   }, []);
 
-  const validateField = (value: string): string | null => {
+  const validateField = (value: string, key?: string | null): string | null => {
     if (!value.trim()) {
       return "Valor nao pode ser vazio";
     }
     const num = parseInt(value, 10);
     if (isNaN(num)) {
       return "Valor deve ser um numero";
+    }
+    if (key === "k_factor" && (num < 1 || num > 100)) {
+      return "Fator K deve ficar entre 1 e 100";
+    }
+    if (key === "limite_jogos_diarios" && num < 1) {
+      return "Limite diario deve ser pelo menos 1";
+    }
+    if (key === "pending_confirmation_deadline_hours" && (num < 1 || num > 168)) {
+      return "Prazo da confirmação automática deve ficar entre 1h e 168h";
     }
     if (num < 0) {
       return "Valor deve ser maior ou igual a zero";
@@ -167,12 +182,12 @@ export default function AdminConfiguracoesPage() {
 
   const handleValueChange = (value: string) => {
     setEditValue(value);
-    const error = validateField(value);
+    const error = validateField(value, editingKey);
     setFieldError(error || "");
   };
 
   const handleSaveClick = (key: string) => {
-    const error = validateField(editValue);
+    const error = validateField(editValue, key);
     if (error) {
       setFieldError(error);
       return;
@@ -282,6 +297,11 @@ export default function AdminConfiguracoesPage() {
                               className={fieldError ? "border-red-500" : ""}
                               autoFocus
                             />
+                            {setting.key === "pending_confirmation_deadline_hours" ? (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Informe o prazo em horas.
+                              </p>
+                            ) : null}
                             {/* Erro de validacao abaixo do campo */}
                             {fieldError && (
                               <p className="mt-1 text-xs text-red-500">
@@ -313,7 +333,9 @@ export default function AdminConfiguracoesPage() {
                     ) : (
                       <div className="flex items-center justify-between">
                         <p className="text-2xl font-bold text-primary">
-                          {setting.value}
+                          {setting.key === "pending_confirmation_deadline_hours"
+                            ? `${setting.value}h`
+                            : setting.value}
                         </p>
                         <Button
                           size="sm"
@@ -352,7 +374,11 @@ export default function AdminConfiguracoesPage() {
         }
         onConfirm={handleConfirmSave}
         title="Confirmar alteracao"
-        description={`Deseja alterar "${getSettingLabel(confirmModal.key)}" de ${confirmModal.oldValue} para ${confirmModal.newValue}? Esta alteracao afetara todas as partidas futuras.`}
+        description={`Deseja alterar "${getSettingLabel(confirmModal.key)}" de ${confirmModal.oldValue} para ${confirmModal.newValue}? ${
+          confirmModal.key === "pending_confirmation_deadline_hours"
+            ? "Esta alteração afeta as pendências abertas e os próximos registros."
+            : "Esta alteração afetará todas as partidas futuras."
+        }`}
         confirmText="Salvar alteracao"
         cancelText="Cancelar"
         variant="warning"

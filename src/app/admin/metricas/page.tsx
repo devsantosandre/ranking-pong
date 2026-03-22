@@ -848,13 +848,13 @@ export default function AdminMetricasPage() {
                   </div>
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Ações admin no mês
+                      Ações do admin no mês
                     </p>
                     <p className="mt-2 text-lg font-semibold text-foreground">
                       {formatNumber(analytics.summary.adminActions)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Intervenções registradas no período
+                      Atuações manuais registradas pelo admin no período
                     </p>
                     <button
                       type="button"
@@ -961,7 +961,7 @@ export default function AdminMetricasPage() {
           <InfoModal
             open={adminActionsModalOpen}
             onClose={() => setAdminActionsModalOpen(false)}
-            title="Ações admin no mês"
+            title="Ações do admin no mês"
             description={`Total de ${formatNumber(analytics.summary.adminActions)} ação(ões) administrativas em ${capitalizeLabel(
               analytics.selectedMonthLabel
             )}.`}

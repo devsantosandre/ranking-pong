@@ -233,7 +233,11 @@ export default function RegrasPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
-              <span>Partidas precisam ser confirmadas pelo adversário</span>
+              <span>
+                Partidas precisam ser confirmadas ou contestadas pelo adversário
+                dentro do prazo configurado. Se não houver resposta, o sistema
+                valida automaticamente o placar atual.
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary mt-0.5">•</span>
