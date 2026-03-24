@@ -55,6 +55,7 @@ export default function AdminPartidasPage() {
   const [fieldError, setFieldError] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
 
   // Modal de confirmacao
   const [confirmModal, setConfirmModal] = useState<{
@@ -126,6 +127,7 @@ export default function AdminPartidasPage() {
       matchName: `${playerA} vs ${playerB} (${match.resultado_a}x${match.resultado_b})`,
       isValidated: match.status === "validado",
     });
+    setConfirmError("");
   };
 
   const handleConfirmCancel = async () => {
@@ -142,11 +144,15 @@ export default function AdminPartidasPage() {
         queryClient.invalidateQueries({ queryKey: ["matches"] });
       }
       await loadMatches(0, true);
+      setConfirmError("");
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao cancelar");
+      const message = err instanceof Error ? err.message : "Erro ao cancelar";
+      setError(message);
+      setConfirmError(message);
+      return false;
     } finally {
       setSaving(false);
-      setConfirmModal({ isOpen: false, matchId: "", matchName: "", isValidated: false });
     }
   };
 
@@ -359,9 +365,10 @@ export default function AdminPartidasPage() {
       {/* Modal de confirmacao */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
-        onClose={() =>
-          setConfirmModal({ isOpen: false, matchId: "", matchName: "", isValidated: false })
-        }
+        onClose={() => {
+          setConfirmModal({ isOpen: false, matchId: "", matchName: "", isValidated: false });
+          setConfirmError("");
+        }}
         onConfirm={handleConfirmCancel}
         title="Cancelar partida"
         description={
@@ -373,6 +380,7 @@ export default function AdminPartidasPage() {
         cancelText="Voltar"
         variant="danger"
         loading={saving}
+        errorMessage={confirmError}
       />
     </AppShell>
   );

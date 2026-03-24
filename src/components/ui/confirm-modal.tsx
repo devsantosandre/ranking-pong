@@ -1,19 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, X } from "lucide-react";
 
 type ConfirmModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => boolean | void | Promise<boolean | void>;
   title: string;
   description: string;
   confirmText?: string;
   cancelText?: string;
   variant?: "danger" | "warning" | "default";
   loading?: boolean;
+  errorMessage?: string;
 };
 
 export function ConfirmModal({
@@ -26,19 +27,49 @@ export function ConfirmModal({
   cancelText = "Cancelar",
   variant = "default",
   loading = false,
+  errorMessage,
 }: ConfirmModalProps) {
   const [isClosing, setIsClosing] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      const frameId = requestAnimationFrame(() => {
+        setIsClosing(false);
+      });
+
+      return () => {
+        cancelAnimationFrame(frameId);
+      };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleClose = () => {
+    if (loading) return;
+
     setIsClosing(true);
-    setTimeout(() => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+    }
+    closeTimeoutRef.current = setTimeout(() => {
       onClose();
+      closeTimeoutRef.current = null;
     }, 150);
   };
 
   const handleConfirm = async () => {
-    await onConfirm();
-    handleClose();
+    const result = await onConfirm();
+    if (result !== false) {
+      handleClose();
+    }
   };
 
   if (!isOpen) return null;
@@ -100,6 +131,12 @@ export function ConfirmModal({
         <p className="mb-6 text-center text-sm text-muted-foreground">
           {description}
         </p>
+
+        {errorMessage ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
 
         {/* Actions */}
         <div className="flex gap-3">
