@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, X } from "lucide-react";
 
@@ -15,6 +16,7 @@ type ConfirmModalProps = {
   variant?: "danger" | "warning" | "default";
   loading?: boolean;
   errorMessage?: string;
+  children?: ReactNode;
 };
 
 export function ConfirmModal({
@@ -28,6 +30,7 @@ export function ConfirmModal({
   variant = "default",
   loading = false,
   errorMessage,
+  children,
 }: ConfirmModalProps) {
   const [isClosing, setIsClosing] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -137,6 +140,8 @@ export function ConfirmModal({
             {errorMessage}
           </div>
         ) : null}
+
+        {children}
 
         {/* Actions */}
         <div className="flex gap-3">

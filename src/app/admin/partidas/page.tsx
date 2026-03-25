@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { useAuth } from "@/lib/auth-store";
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, AlertTriangle } from "lucide-react";
+import { X, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
@@ -11,7 +13,10 @@ import { MatchListSkeleton } from "@/components/skeletons";
 import {
   adminGetAllMatches,
   adminCancelMatch,
+  adminGetExceptionalMatchCorrectionPreview,
+  adminCorrectMatchWithoutRecalculation,
   type AdminMatch,
+  type AdminExceptionalCorrectionPreview,
 } from "@/app/actions/admin";
 
 const statusFilters = [
@@ -28,7 +33,17 @@ const statusColors: Record<string, string> = {
   edited: "bg-blue-100 text-blue-700",
 };
 
+const HISTORICAL_CANCEL_BLOCK_MESSAGE =
+  "Não é possível cancelar esta partida porque já existem partidas validadas mais recentes envolvendo esses jogadores";
+
 function getAdminMatchStatusBadge(match: AdminMatch) {
+  if (match.correction_kind === "without_recalculation") {
+    return {
+      label: "corrigida sem recálculo",
+      className: "bg-amber-100 text-amber-800",
+    };
+  }
+
   if (match.status === "validado" && match.aprovado_por === null) {
     return {
       label: "validado pelo sistema",
@@ -43,6 +58,7 @@ function getAdminMatchStatusBadge(match: AdminMatch) {
 }
 
 export default function AdminPartidasPage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("todas");
   const [matches, setMatches] = useState<AdminMatch[]>([]);
@@ -56,6 +72,15 @@ export default function AdminPartidasPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmError, setConfirmError] = useState("");
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+  const [correctionTargetId, setCorrectionTargetId] = useState("");
+  const [correctionPreview, setCorrectionPreview] = useState<AdminExceptionalCorrectionPreview | null>(null);
+  const [correctionPreviewLoading, setCorrectionPreviewLoading] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionFieldError, setCorrectionFieldError] = useState("");
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionSaving, setCorrectionSaving] = useState(false);
+  const [correctionAckRisk, setCorrectionAckRisk] = useState(false);
 
   // Modal de confirmacao
   const [confirmModal, setConfirmModal] = useState<{
@@ -108,6 +133,31 @@ export default function AdminPartidasPage() {
     }
   };
 
+  const canUseExceptionalCorrection = user?.role === "admin";
+
+  const resetExceptionalCorrectionModal = () => {
+    setCorrectionModalOpen(false);
+    setCorrectionTargetId("");
+    setCorrectionPreview(null);
+    setCorrectionPreviewLoading(false);
+    setCorrectionReason("");
+    setCorrectionFieldError("");
+    setCorrectionError("");
+    setCorrectionSaving(false);
+    setCorrectionAckRisk(false);
+  };
+
+  const handleCorrectionReasonChange = (value: string) => {
+    setCorrectionReason(value);
+    if (!value.trim()) {
+      setCorrectionFieldError("Motivo da correção é obrigatório");
+    } else if (value.trim().length < 5) {
+      setCorrectionFieldError("Explique o motivo com pelo menos 5 caracteres");
+    } else {
+      setCorrectionFieldError("");
+    }
+  };
+
   const handleCancelClick = (match: AdminMatch) => {
     if (!cancelReason.trim()) {
       setFieldError("Motivo do cancelamento e obrigatorio");
@@ -130,10 +180,41 @@ export default function AdminPartidasPage() {
     setConfirmError("");
   };
 
+  const handleOpenExceptionalCorrection = async (match: AdminMatch) => {
+    if (!canUseExceptionalCorrection) return;
+
+    setConfirmModal({ isOpen: false, matchId: "", matchName: "", isValidated: false });
+    setConfirmError("");
+    setCorrectionModalOpen(true);
+    setCorrectionTargetId(match.id);
+    setCorrectionPreview(null);
+    setCorrectionPreviewLoading(true);
+    setCorrectionReason(cancelingId === match.id ? cancelReason : "");
+    setCorrectionFieldError("");
+    setCorrectionError("");
+    setCorrectionAckRisk(false);
+
+    const result = await adminGetExceptionalMatchCorrectionPreview(match.id);
+
+    if (!result.success) {
+      setCorrectionError(result.error);
+      setCorrectionPreviewLoading(false);
+      return;
+    }
+
+    setCorrectionPreview(result.preview);
+    setCorrectionPreviewLoading(false);
+  };
+
   const handleConfirmCancel = async () => {
     setSaving(true);
     try {
-      await adminCancelMatch(confirmModal.matchId, cancelReason);
+      const result = await adminCancelMatch(confirmModal.matchId, cancelReason);
+      if (!result.success) {
+        setError(result.error);
+        setConfirmError(result.error);
+        return false;
+      }
       setCancelingId(null);
       setCancelReason("");
       setFieldError("");
@@ -154,6 +235,53 @@ export default function AdminPartidasPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleConfirmExceptionalCorrection = async () => {
+    if (!correctionTargetId) return;
+
+    if (!correctionReason.trim()) {
+      setCorrectionFieldError("Motivo da correção é obrigatório");
+      return;
+    }
+
+    if (correctionReason.trim().length < 5) {
+      setCorrectionFieldError("Explique o motivo com pelo menos 5 caracteres");
+      return;
+    }
+
+    if (!correctionAckRisk) {
+      setCorrectionError(
+        "Leia os avisos e confirme ciência antes de aplicar a correção excepcional."
+      );
+      return;
+    }
+
+    setCorrectionSaving(true);
+    setCorrectionError("");
+
+    const result = await adminCorrectMatchWithoutRecalculation(
+      correctionTargetId,
+      correctionReason.trim()
+    );
+
+    if (!result.success) {
+      setCorrectionError(result.error);
+      setCorrectionSaving(false);
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["users"] });
+    queryClient.invalidateQueries({ queryKey: ["matches"] });
+    await loadMatches(0, true);
+    setCancelingId(null);
+    setCancelReason("");
+    setFieldError("");
+    setError("");
+    setConfirmError("");
+    resetExceptionalCorrectionModal();
+    setConfirmModal({ isOpen: false, matchId: "", matchName: "", isValidated: false });
+    setCorrectionSaving(false);
   };
 
   const formatDate = (dateStr: string) => {
@@ -231,6 +359,8 @@ export default function AdminPartidasPage() {
                 typeof loserPointsRaw === "number" ? Math.abs(loserPointsRaw) : null;
               const winnerName = winner?.full_name || winner?.name || "Vencedor";
               const loserName = loser?.full_name || loser?.name || "Perdedor";
+              const safeCancelAvailable =
+                match.status !== "validado" || match.can_cancel_safely !== false;
 
               return (
                 <article
@@ -287,8 +417,47 @@ export default function AdminPartidasPage() {
                       </div>
                     )}
 
+                  {match.status === "validado" &&
+                  match.aprovado_por === null &&
+                  !match.correction_kind ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      Se esse placar estiver incorreto e novos jogos acontecerem antes da
+                      correção, o ranking pode sofrer impacto em cadeia.
+                    </div>
+                  ) : null}
+
+                  {match.correction_kind === "without_recalculation" ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      Correção excepcional aplicada. Esta partida foi retirada do ranking,
+                      com compensação apenas entre os dois jogadores, sem recalcular jogos
+                      posteriores.
+                    </div>
+                  ) : null}
+
+                  {match.status === "validado" && !safeCancelAvailable ? (
+                    <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+                      <p className="font-semibold">
+                        Cancelamento com reversão indisponível
+                      </p>
+                      <p>
+                        {match.cancel_unavailable_reason ||
+                          "Já existem partidas validadas mais recentes envolvendo esses jogadores."}
+                      </p>
+                      <p>
+                        Por isso o sistema não mostra mais o botão de cancelar e
+                        reverter pontos neste caso.
+                      </p>
+                      <Link
+                        href="/admin/partidas/correcao-sem-recalculo"
+                        className="inline-flex font-semibold text-amber-800 underline-offset-4 hover:underline"
+                      >
+                        Saiba mais
+                      </Link>
+                    </div>
+                  ) : null}
+
                   {/* Acao de cancelar */}
-                  {match.status !== "cancelado" && (
+                  {match.status !== "cancelado" && safeCancelAvailable && (
                     <>
                       {cancelingId === match.id ? (
                         <div className="space-y-2">
@@ -334,20 +503,35 @@ export default function AdminPartidasPage() {
                           </div>
                         </div>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
-                          onClick={() => setCancelingId(match.id)}
-                        >
-                          <X className="mr-1 h-4 w-4" />
-                          {match.status === "validado"
-                            ? "Cancelar e Reverter Pontos"
-                            : "Cancelar Partida"}
-                        </Button>
+                        <div className="space-y-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => setCancelingId(match.id)}
+                          >
+                            <X className="mr-1 h-4 w-4" />
+                            {match.status === "validado"
+                              ? "Cancelar e Reverter Pontos"
+                              : "Cancelar Partida"}
+                          </Button>
+                        </div>
                       )}
                     </>
                   )}
+
+                  {match.status === "validado" &&
+                  !safeCancelAvailable &&
+                  canUseExceptionalCorrection ? (
+                    <Button
+                      size="sm"
+                      type="button"
+                      className="w-full bg-amber-600 text-white hover:bg-amber-700"
+                      onClick={() => void handleOpenExceptionalCorrection(match)}
+                    >
+                      Corrigir sem recálculo
+                    </Button>
+                  ) : null}
                 </article>
               );
             })}
@@ -381,7 +565,193 @@ export default function AdminPartidasPage() {
         variant="danger"
         loading={saving}
         errorMessage={confirmError}
-      />
+      >
+        {canUseExceptionalCorrection &&
+        confirmError === HISTORICAL_CANCEL_BLOCK_MESSAGE &&
+        confirmModal.isValidated ? (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-900">
+            <p className="font-semibold">Correção excepcional disponível</p>
+            <p className="mt-1">
+              Use somente quando a partida ficou antiga, o cancelamento seguro não é
+              mais possível e o ranking já foi prejudicado por um placar incorreto.
+            </p>
+            <button
+              type="button"
+              className="mt-3 text-sm font-semibold text-amber-800 underline-offset-4 hover:underline"
+              onClick={() => {
+                const targetMatch = matches.find((match) => match.id === confirmModal.matchId);
+                if (!targetMatch) return;
+                void handleOpenExceptionalCorrection(targetMatch);
+              }}
+            >
+              Abrir correção sem recálculo
+            </button>
+          </div>
+        ) : null}
+      </ConfirmModal>
+
+      {correctionModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] sm:items-center sm:p-4">
+          <div className="relative flex max-h-[calc(100vh-7rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl sm:max-h-[calc(100vh-2rem)]">
+            <button
+              type="button"
+              onClick={resetExceptionalCorrectionModal}
+              className="absolute right-4 top-4 z-10 rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              aria-label="Fechar modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="overflow-y-auto px-4 pb-4 pt-5 sm:px-5 sm:pb-5">
+              <div className="flex items-start gap-3 pr-12">
+                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-foreground">
+                    Corrigir sem recálculo
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Use só quando o cancelamento seguro já não é mais possível e o
+                    placar errado já prejudicou o ranking.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-semibold">Resumo rápido</p>
+                <p className="mt-1 leading-relaxed">
+                  Esta correção compensa só os dois jogadores desta partida. Jogos
+                  posteriores não serão recalculados, então podem restar efeitos
+                  indiretos no ranking.
+                </p>
+                <Link
+                  href="/admin/partidas/correcao-sem-recalculo"
+                  className="mt-3 inline-flex text-sm font-semibold text-amber-800 underline-offset-4 hover:underline"
+                >
+                  Saiba mais
+                </Link>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-border/70 bg-muted/15 p-4">
+                {correctionPreviewLoading ? (
+                  <p className="text-sm text-muted-foreground">Analisando impacto da correção...</p>
+                ) : correctionPreview ? (
+                  <div className="space-y-2 text-sm text-foreground">
+                    <p className="font-semibold">
+                      {correctionPreview.playerAName} vs {correctionPreview.playerBName} ({correctionPreview.scoreLabel})
+                    </p>
+                    <p className="text-muted-foreground">
+                      Pontos desta partida foram aplicados em{" "}
+                      {formatDate(correctionPreview.appliedAt)}.
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-3">
+                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                          Impacto direto
+                        </p>
+                        <p className="mt-1 font-semibold">
+                          {correctionPreview.directMatchCount} partida(s)
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                          Em cadeia
+                        </p>
+                        <p className="mt-1 font-semibold">
+                          {correctionPreview.cascadeMatchCount} partida(s)
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                          Jogadores afetados
+                        </p>
+                        <p className="mt-1 font-semibold">
+                          {correctionPreview.cascadePlayerCount} jogador(es)
+                        </p>
+                      </div>
+                    </div>
+                    {correctionPreview.isAutoValidated ? (
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                        Esta partida foi confirmada automaticamente pelo sistema. Se o
+                        placar estava errado, o prejuízo pode ter se espalhado para o
+                        ranking e a sequência de vitórias.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    A análise aparece aqui assim que ficar disponível.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Motivo da correção
+                </label>
+                <textarea
+                  value={correctionReason}
+                  onChange={(event) => handleCorrectionReasonChange(event.target.value)}
+                  rows={3}
+                  placeholder="Explique o erro, por que a correção excepcional está sendo usada e qual foi o prejuízo no ranking"
+                  className={`w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none ${
+                    correctionFieldError
+                      ? "border-red-500 focus:border-red-500"
+                      : "border-border focus:border-primary"
+                  }`}
+                />
+                {correctionFieldError ? (
+                  <p className="text-xs text-red-600">{correctionFieldError}</p>
+                ) : null}
+              </div>
+
+              <div className="mt-4 space-y-3 rounded-2xl border border-border/70 bg-card/80 p-4">
+                <label className="flex items-start gap-3 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={correctionAckRisk}
+                    onChange={(event) => setCorrectionAckRisk(event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-border"
+                  />
+                  <span>
+                    Entendi que esta correção é excepcional, não recalcula jogos
+                    posteriores e pode manter efeitos indiretos no ranking.
+                  </span>
+                </label>
+              </div>
+
+              {correctionError ? (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {correctionError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="border-t border-border bg-card px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={resetExceptionalCorrectionModal}
+                  disabled={correctionSaving}
+                >
+                  Voltar
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-1 bg-amber-600 text-white hover:bg-amber-700"
+                  onClick={() => void handleConfirmExceptionalCorrection()}
+                  disabled={correctionSaving || correctionPreviewLoading || !correctionPreview}
+                >
+                  {correctionSaving ? "Aguarde..." : "Aplicar correção excepcional"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

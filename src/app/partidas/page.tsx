@@ -326,6 +326,11 @@ export default function PartidasPage() {
             contestar. Depois disso, o sistema aceita automaticamente a partida com o
             placar atual.
           </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Se o placar estiver incorreto e o prazo expirar, a correção posterior pode
+            prejudicar o ranking, a sequência de vitórias e exigir intervenção do
+            admin.
+          </p>
         </div>
 
         {/* Lista de partidas */}

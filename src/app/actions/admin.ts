@@ -32,6 +32,16 @@ export type AdminMatch = {
   pontos_variacao_a: number | null;
   pontos_variacao_b: number | null;
   created_at: string;
+  correction_kind: string | null;
+  correction_reason: string | null;
+  correction_applied_at: string | null;
+  correction_applied_by: string | null;
+  correction_compensation_a: number | null;
+  correction_compensation_b: number | null;
+  correction_impacted_match_count: number | null;
+  correction_impacted_player_count: number | null;
+  can_cancel_safely?: boolean;
+  cancel_unavailable_reason?: string | null;
   player_a: { id: string; name: string; full_name: string };
   player_b: { id: string; name: string; full_name: string };
 };
@@ -84,6 +94,31 @@ export type AdminUpdateUserNameResult = {
   success: boolean;
   updatedName: string;
 };
+
+export type AdminCancelMatchResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export type AdminExceptionalCorrectionPreview = {
+  matchId: string;
+  playerAName: string;
+  playerBName: string;
+  scoreLabel: string;
+  appliedAt: string;
+  isAutoValidated: boolean;
+  safeCancelStillAvailable: boolean;
+  directMatchCount: number;
+  cascadeMatchCount: number;
+  cascadePlayerCount: number;
+};
+
+export type AdminExceptionalCorrectionPreviewResult =
+  | { success: true; preview: AdminExceptionalCorrectionPreview }
+  | { success: false; error: string };
+
+export type AdminExceptionalCorrectionResult =
+  | { success: true }
+  | { success: false; error: string };
 
 export type AdminAnalyticsSummary = {
   registrations: number;
@@ -251,6 +286,28 @@ type CancelMatchRpcRow = {
   player_b_delta: number | null;
   achievements_revoked: number;
 };
+type ExceptionalCorrectionRpcRow = {
+  match_id: string;
+  old_status: "validado";
+  correction_kind: "without_recalculation";
+  player_a_id: string;
+  player_b_id: string;
+  player_a_name: string;
+  player_b_name: string;
+  score_a: number;
+  score_b: number;
+  compensation_a: number;
+  compensation_b: number;
+  achievements_revoked: number;
+};
+type MatchAppliedAtSource = {
+  id: string;
+  created_at: string;
+};
+type RatingTransactionAppliedAtRow = {
+  match_id: string | null;
+  created_at: string;
+};
 const WEEKDAY_METADATA = [
   { day: 1, key: "mon", label: "Segunda-feira", shortLabel: "Seg" },
   { day: 2, key: "tue", label: "Terça-feira", shortLabel: "Ter" },
@@ -278,6 +335,12 @@ const ADMIN_ACTION_METADATA: Record<
     key: "match_auto_validated",
     label: "Partidas confirmadas automaticamente",
     description: "Partidas validadas pelo sistema ao fim do prazo configurado.",
+  },
+  match_corrected_without_recalculation: {
+    key: "match_corrected_without_recalculation",
+    label: "Correções sem recálculo",
+    description:
+      "Correções excepcionais que compensam só os dois jogadores e removem a partida do ranking sem recalcular a cadeia posterior.",
   },
   match_confirmation_overdue: {
     key: "match_confirmation_overdue",
@@ -410,6 +473,309 @@ function mapCancelMatchRpcErrorMessage(message: string | undefined): string {
   }
 
   return "Erro ao cancelar partida";
+}
+
+function mapExceptionalCorrectionRpcErrorMessage(message: string | undefined): string {
+  const normalized = (message || "").toLowerCase();
+
+  if (normalized.includes("match_not_found")) {
+    return "Partida não encontrada";
+  }
+
+  if (normalized.includes("match_not_validated")) {
+    return "Só é possível corrigir partidas já validadas";
+  }
+
+  if (normalized.includes("match_already_corrected")) {
+    return "Esta partida já recebeu uma correção sem recálculo";
+  }
+
+  if (normalized.includes("missing_rating_delta")) {
+    return "A partida não tem variação de pontos suficiente para compensação";
+  }
+
+  if (normalized.includes("correction_reason_too_short")) {
+    return "Explique o motivo com pelo menos 5 caracteres";
+  }
+
+  if (normalized.includes("match_already_processed")) {
+    return "Esta partida já foi processada por outro usuário";
+  }
+
+  if (normalized.includes("safe_cancel_still_available")) {
+    return "O cancelamento com reversão ainda é possível para esta partida. Use o cancelamento normal.";
+  }
+
+  return "Erro ao aplicar correção sem recálculo";
+}
+
+function mapExceptionalCorrectionPreviewErrorMessage(message: string | undefined): string {
+  const normalized = (message || "").toLowerCase();
+
+  if (normalized.includes("matches.correction_kind does not exist")) {
+    return "A correção sem recálculo ainda não está disponível neste ambiente. A migration do banco precisa ser aplicada.";
+  }
+
+  if (normalized.includes("apply_exceptional_match_correction_v1")) {
+    return "A correção sem recálculo ainda não está disponível neste ambiente. A migration do banco precisa ser aplicada.";
+  }
+
+  if (normalized.includes("match_not_found")) {
+    return "Partida não encontrada";
+  }
+
+  return "Erro ao analisar a correção";
+}
+
+function parseExceptionalCorrectionRpcRow(
+  payload: unknown
+): ExceptionalCorrectionRpcRow | null {
+  const candidate = Array.isArray(payload) ? payload[0] : payload;
+
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    typeof (candidate as Record<string, unknown>).match_id !== "string" ||
+    typeof (candidate as Record<string, unknown>).old_status !== "string" ||
+    typeof (candidate as Record<string, unknown>).correction_kind !== "string" ||
+    typeof (candidate as Record<string, unknown>).player_a_id !== "string" ||
+    typeof (candidate as Record<string, unknown>).player_b_id !== "string" ||
+    typeof (candidate as Record<string, unknown>).player_a_name !== "string" ||
+    typeof (candidate as Record<string, unknown>).player_b_name !== "string" ||
+    typeof (candidate as Record<string, unknown>).score_a !== "number" ||
+    typeof (candidate as Record<string, unknown>).score_b !== "number" ||
+    typeof (candidate as Record<string, unknown>).compensation_a !== "number" ||
+    typeof (candidate as Record<string, unknown>).compensation_b !== "number" ||
+    typeof (candidate as Record<string, unknown>).achievements_revoked !== "number"
+  ) {
+    return null;
+  }
+
+  return candidate as ExceptionalCorrectionRpcRow;
+}
+
+function compareMatchPositionAt(
+  left: { position_at: string; id: string },
+  right: { position_at: string; id: string }
+) {
+  const positionDelta =
+    new Date(left.position_at).getTime() - new Date(right.position_at).getTime();
+
+  if (positionDelta !== 0) {
+    return positionDelta;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+type ExceptionalCorrectionPreviewMatchRow = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  resultado_a: number;
+  resultado_b: number;
+  created_at: string;
+  status: string;
+  aprovado_por: string | null;
+  correction_kind: string | null;
+  player_a:
+    | { id: string; name: string | null; full_name: string | null }
+    | Array<{ id: string; name: string | null; full_name: string | null }>
+    | null;
+  player_b:
+    | { id: string; name: string | null; full_name: string | null }
+    | Array<{ id: string; name: string | null; full_name: string | null }>
+    | null;
+};
+
+function getDisplayPlayerName(
+  user:
+    | { full_name: string | null; name: string | null }
+    | Array<{ full_name: string | null; name: string | null }>
+    | null,
+  fallback: string
+) {
+  const normalized = Array.isArray(user) ? (user[0] ?? null) : user;
+  return normalized?.full_name || normalized?.name || fallback;
+}
+
+async function getMatchPointsAppliedAt(
+  supabase: ServerSupabaseClient,
+  matchId: string,
+  fallbackCreatedAt: string
+) {
+  const { data, error } = await supabase
+    .from("rating_transactions")
+    .select("created_at")
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (error) {
+    throw new Error("Erro ao localizar quando os pontos foram aplicados");
+  }
+
+  return data?.[0]?.created_at || fallbackCreatedAt;
+}
+
+async function getMatchAppliedAtMap(
+  supabase: ServerSupabaseClient,
+  matches: MatchAppliedAtSource[]
+) {
+  const uniqueMatches = Array.from(
+    new Map(matches.map((match) => [match.id, match])).values()
+  );
+
+  if (uniqueMatches.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const fallbackMap = new Map(uniqueMatches.map((match) => [match.id, match.created_at]));
+  const { data, error } = await supabase
+    .from("rating_transactions")
+    .select("match_id, created_at")
+    .in(
+      "match_id",
+      uniqueMatches.map((match) => match.id)
+    )
+    .in("motivo", ["vitoria", "derrota"])
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error("Erro ao localizar quando os pontos das partidas foram aplicados");
+  }
+
+  const appliedAtMap = new Map<string, string>();
+
+  for (const row of ((data ?? []) as RatingTransactionAppliedAtRow[])) {
+    if (!row.match_id || appliedAtMap.has(row.match_id)) continue;
+    appliedAtMap.set(row.match_id, row.created_at);
+  }
+
+  for (const match of uniqueMatches) {
+    if (!appliedAtMap.has(match.id)) {
+      appliedAtMap.set(match.id, fallbackMap.get(match.id) || match.created_at);
+    }
+  }
+
+  return appliedAtMap;
+}
+
+async function buildExceptionalCorrectionPreview(
+  supabase: ServerSupabaseClient,
+  matchId: string
+): Promise<AdminExceptionalCorrectionPreview> {
+  const { data, error } = await supabase
+    .from("matches")
+    .select(
+      `
+      id,
+      player_a_id,
+      player_b_id,
+      resultado_a,
+      resultado_b,
+      created_at,
+      status,
+      aprovado_por,
+      correction_kind,
+      player_a:users!player_a_id(id, name, full_name),
+      player_b:users!player_b_id(id, name, full_name)
+    `
+    )
+    .eq("id", matchId)
+    .single();
+
+  if (error) {
+    throw new Error(mapExceptionalCorrectionPreviewErrorMessage(error.message));
+  }
+
+  if (!data) {
+    throw new Error("Partida não encontrada");
+  }
+
+  const match = data as ExceptionalCorrectionPreviewMatchRow;
+  const playerAName = getDisplayPlayerName(match.player_a, "Jogador A");
+  const playerBName = getDisplayPlayerName(match.player_b, "Jogador B");
+  const appliedAt = await getMatchPointsAppliedAt(supabase, match.id, match.created_at);
+
+  const { data: allValidatedMatches, error: allValidatedMatchesError } = await supabase
+    .from("matches")
+    .select("id, player_a_id, player_b_id, created_at")
+    .eq("status", "validado")
+    .order("created_at", { ascending: true });
+
+  if (allValidatedMatchesError) {
+    throw new Error("Erro ao medir o impacto da correção");
+  }
+
+  const validatedMatches =
+    (allValidatedMatches as Array<{
+      id: string;
+      player_a_id: string;
+      player_b_id: string;
+      created_at: string;
+    }> | null) ?? [];
+  const appliedAtMap = await getMatchAppliedAtMap(supabase, validatedMatches);
+  const laterMatches = validatedMatches.filter(
+    (item) =>
+      item.id !== match.id &&
+      compareMatchPositionAt(
+        {
+          position_at: appliedAtMap.get(item.id) || item.created_at,
+          id: item.id,
+        },
+        {
+          position_at: appliedAt,
+          id: match.id,
+        }
+      ) > 0
+  );
+
+  const directMatchCount = laterMatches.filter(
+    (item) =>
+      item.player_a_id === match.player_a_id ||
+      item.player_b_id === match.player_a_id ||
+      item.player_a_id === match.player_b_id ||
+      item.player_b_id === match.player_b_id
+  ).length;
+
+  const impactedPlayers = new Set<string>([match.player_a_id, match.player_b_id]);
+  const impactedMatchIds = new Set<string>();
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const item of laterMatches) {
+      if (impactedMatchIds.has(item.id)) continue;
+
+      if (
+        impactedPlayers.has(item.player_a_id) ||
+        impactedPlayers.has(item.player_b_id)
+      ) {
+        impactedMatchIds.add(item.id);
+        const previousSize = impactedPlayers.size;
+        impactedPlayers.add(item.player_a_id);
+        impactedPlayers.add(item.player_b_id);
+        if (impactedPlayers.size !== previousSize) {
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return {
+    matchId: match.id,
+    playerAName,
+    playerBName,
+    scoreLabel: `${match.resultado_a}x${match.resultado_b}`,
+    appliedAt,
+    isAutoValidated: match.aprovado_por === null,
+    safeCancelStillAvailable: directMatchCount === 0,
+    directMatchCount,
+    cascadeMatchCount: impactedMatchIds.size,
+    cascadePlayerCount: impactedPlayers.size,
+  };
 }
 
 type AnalyticsMatchRow = {
@@ -1075,8 +1441,92 @@ export async function adminGetAllMatches(
   const { data, error } = await query;
 
   if (error) throw new Error(error.message);
+
+  const matches: AdminMatch[] = ((data ?? []) as AdminMatch[]).map((match) => ({
+    ...match,
+    can_cancel_safely: true,
+    cancel_unavailable_reason: null,
+  }));
+
+  const validatedMatches = matches.filter(
+    (match) => match.status === "validado" && match.correction_kind == null
+  );
+
+  if (validatedMatches.length > 0) {
+    const validatedAppliedAtMap = await getMatchAppliedAtMap(supabase, validatedMatches);
+    const trackedPlayerIds = Array.from(
+      new Set(
+        validatedMatches.flatMap((match) => [match.player_a_id, match.player_b_id])
+      )
+    );
+
+    const involvedPlayersFilter = trackedPlayerIds
+      .flatMap((playerId) => [`player_a_id.eq.${playerId}`, `player_b_id.eq.${playerId}`])
+      .join(",");
+
+    const { data: relatedValidatedMatches, error: relatedValidatedMatchesError } =
+      await supabase
+        .from("matches")
+        .select("id, player_a_id, player_b_id, created_at")
+        .eq("status", "validado")
+        .or(involvedPlayersFilter);
+
+    if (relatedValidatedMatchesError) {
+      throw new Error(relatedValidatedMatchesError.message);
+    }
+
+    const candidateValidatedMatches =
+      (relatedValidatedMatches as Array<{
+        id: string;
+        player_a_id: string;
+        player_b_id: string;
+        created_at: string;
+      }> | null) ?? [];
+    const candidateAppliedAtMap = await getMatchAppliedAtMap(
+      supabase,
+      candidateValidatedMatches
+    );
+
+    for (const match of matches) {
+      if (match.status !== "validado" || match.correction_kind != null) continue;
+
+      const currentAppliedAt = validatedAppliedAtMap.get(match.id) || match.created_at;
+      const hasLaterValidatedMatch = candidateValidatedMatches.some((candidate) => {
+        if (candidate.id === match.id) return false;
+
+        const involvesTrackedPlayers =
+          candidate.player_a_id === match.player_a_id ||
+          candidate.player_b_id === match.player_a_id ||
+          candidate.player_a_id === match.player_b_id ||
+          candidate.player_b_id === match.player_b_id;
+
+        if (!involvesTrackedPlayers) return false;
+
+        return (
+          compareMatchPositionAt(
+            {
+              position_at:
+                candidateAppliedAtMap.get(candidate.id) || candidate.created_at,
+              id: candidate.id,
+            },
+            {
+              position_at: currentAppliedAt,
+              id: match.id,
+            }
+          ) > 0
+        );
+      });
+
+      if (hasLaterValidatedMatch) {
+        match.can_cancel_safely = false;
+        match.cancel_unavailable_reason =
+          "O cancelamento com reversão foi ocultado porque já existem partidas validadas mais recentes envolvendo esses jogadores. Reverter agora deixaria o ranking inconsistente.";
+      }
+    }
+  }
+
   return {
-    matches: data as AdminMatch[],
+    matches,
     hasMore: data && data.length === PAGE_SIZE,
   };
 }
@@ -1085,29 +1535,44 @@ export async function adminCancelMatch(
   matchId: string,
   reason: string,
   source: AdminMatchActionSource = "partidas"
-) {
-  await requireModerator();
+): Promise<AdminCancelMatchResult> {
+  try {
+    await requireModerator();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Acesso negado: requer permissao de moderator ou admin";
+    return { success: false, error: message };
+  }
 
   if (!reason || reason.trim().length < 3) {
-    throw new Error("Motivo obrigatorio (minimo 3 caracteres)");
+    return { success: false, error: "Motivo obrigatorio (minimo 3 caracteres)" };
   }
 
   const supabase = createAdminClient();
-  await enforcePendingConfirmationSla({ supabase });
-  const adminActor = await getCurrentUser();
+  let adminActor: Awaited<ReturnType<typeof getCurrentUser>> = null;
+
+  try {
+    await enforcePendingConfirmationSla({ supabase });
+    adminActor = await getCurrentUser();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao cancelar partida";
+    return { success: false, error: message };
+  }
 
   const { data: rpcData, error: rpcError } = await supabase.rpc("cancel_match_v2", {
     p_match_id: matchId,
   });
 
   if (rpcError) {
-    throw new Error(mapCancelMatchRpcErrorMessage(rpcError.message));
+    return { success: false, error: mapCancelMatchRpcErrorMessage(rpcError.message) };
   }
 
   const cancelledMatch = parseCancelMatchRpcRow(rpcData);
 
   if (!cancelledMatch) {
-    throw new Error("Erro ao cancelar partida");
+    return { success: false, error: "Erro ao cancelar partida" };
   }
 
   const oldStatus = cancelledMatch.old_status;
@@ -1130,54 +1595,220 @@ export async function adminCancelMatch(
     const recipients = Array.from(
       new Set([cancelledMatch.player_a_id, cancelledMatch.player_b_id])
     );
-    await Promise.all(
-      recipients.map((recipientId) =>
-        emitPendingNotification(supabase, recipientId, resolvedPayload)
-      )
-    );
+    try {
+      await Promise.all(
+        recipients.map((recipientId) =>
+          emitPendingNotification(supabase, recipientId, resolvedPayload)
+        )
+      );
+    } catch {
+      // Nao interrompe o cancelamento se a notificacao falhar.
+    }
   }
 
   // Registrar log
   const achievementsRevoked = cancelledMatch.achievements_revoked || 0;
   const sourceLabel = ADMIN_MATCH_ACTION_SOURCE_LABEL[source];
   const sourceText = ADMIN_MATCH_ACTION_SOURCE_TEXT[source];
-  await createAdminLog({
-    action: "match_cancelled",
-    action_description:
-      oldStatus === "validado"
-        ? `Partida cancelada ${sourceText}, com pontos revertidos${achievementsRevoked > 0 ? ` e ${achievementsRevoked} conquista(s) revogada(s)` : ""}`
-        : `Partida cancelada ${sourceText}`,
-    target_type: "match",
-    target_id: matchId,
-    target_name: targetName,
-    old_value: {
-      status: oldStatus,
-      origem: sourceLabel,
-      player_a: cancelledMatch.player_a_name,
-      player_b: cancelledMatch.player_b_name,
-      resultado_a: cancelledMatch.score_a,
-      resultado_b: cancelledMatch.score_b,
-    },
-    new_value: {
-      status: "cancelado",
-      origem: sourceLabel,
-      player_a: cancelledMatch.player_a_name,
-      player_b: cancelledMatch.player_b_name,
-      resultado_a: cancelledMatch.score_a,
-      resultado_b: cancelledMatch.score_b,
-      pontos_revertidos_a: cancelledMatch.player_a_delta,
-      pontos_revertidos_b: cancelledMatch.player_b_delta,
-    },
-    reason: reason.trim(),
-  });
+  try {
+    await createAdminLog({
+      action: "match_cancelled",
+      action_description:
+        oldStatus === "validado"
+          ? `Partida cancelada ${sourceText}, com pontos revertidos${achievementsRevoked > 0 ? ` e ${achievementsRevoked} conquista(s) revogada(s)` : ""}`
+          : `Partida cancelada ${sourceText}`,
+      target_type: "match",
+      target_id: matchId,
+      target_name: targetName,
+      old_value: {
+        status: oldStatus,
+        origem: sourceLabel,
+        player_a: cancelledMatch.player_a_name,
+        player_b: cancelledMatch.player_b_name,
+        resultado_a: cancelledMatch.score_a,
+        resultado_b: cancelledMatch.score_b,
+      },
+      new_value: {
+        status: "cancelado",
+        origem: sourceLabel,
+        player_a: cancelledMatch.player_a_name,
+        player_b: cancelledMatch.player_b_name,
+        resultado_a: cancelledMatch.score_a,
+        resultado_b: cancelledMatch.score_b,
+        pontos_revertidos_a: cancelledMatch.player_a_delta,
+        pontos_revertidos_b: cancelledMatch.player_b_delta,
+      },
+      reason: reason.trim(),
+    });
+  } catch {
+    // O cancelamento ja foi aplicado; falha no log nao deve quebrar a acao.
+  }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/logs");
-  revalidatePath("/admin/metricas");
-  revalidatePath("/admin/pendencias");
-  revalidatePath("/admin/partidas");
-  revalidatePath("/partidas");
-  revalidatePath("/ranking");
+  try {
+    revalidatePath("/admin");
+    revalidatePath("/admin/logs");
+    revalidatePath("/admin/metricas");
+    revalidatePath("/admin/pendencias");
+    revalidatePath("/admin/partidas");
+    revalidatePath("/partidas");
+    revalidatePath("/ranking");
+  } catch {
+    // O cancelamento ja foi aplicado; falha de revalidacao nao muda o resultado.
+  }
+
+  return { success: true };
+}
+
+export async function adminGetExceptionalMatchCorrectionPreview(
+  matchId: string
+): Promise<AdminExceptionalCorrectionPreviewResult> {
+  try {
+    await requireAdminOnly();
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Acesso negado: requer permissao de admin",
+    };
+  }
+
+  try {
+    const supabase = createAdminClient();
+    const preview = await buildExceptionalCorrectionPreview(supabase, matchId);
+    if (preview.safeCancelStillAvailable) {
+      return {
+        success: false,
+        error: "O cancelamento com reversão ainda é possível para esta partida. Use o cancelamento normal.",
+      };
+    }
+    return { success: true, preview };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Erro ao analisar a correção",
+    };
+  }
+}
+
+export async function adminCorrectMatchWithoutRecalculation(
+  matchId: string,
+  reason: string
+): Promise<AdminExceptionalCorrectionResult> {
+  try {
+    await requireAdminOnly();
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Acesso negado: requer permissao de admin",
+    };
+  }
+
+  if (!reason || reason.trim().length < 5) {
+    return {
+      success: false,
+      error: "Explique o motivo com pelo menos 5 caracteres",
+    };
+  }
+
+  const supabase = createAdminClient();
+  const adminActor = await getCurrentUser();
+
+  if (!adminActor) {
+    return { success: false, error: "Usuário não autenticado" };
+  }
+
+  let preview: AdminExceptionalCorrectionPreview;
+  try {
+    preview = await buildExceptionalCorrectionPreview(supabase, matchId);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Erro ao analisar a correção",
+    };
+  }
+
+  if (preview.safeCancelStillAvailable) {
+    return {
+      success: false,
+      error: "O cancelamento com reversão ainda é possível para esta partida. Use o cancelamento normal.",
+    };
+  }
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "apply_exceptional_match_correction_v1",
+    {
+      p_match_id: matchId,
+      p_admin_id: adminActor.id,
+      p_reason: reason.trim(),
+      p_impacted_match_count: preview.cascadeMatchCount,
+      p_impacted_player_count: preview.cascadePlayerCount,
+    }
+  );
+
+  if (rpcError) {
+    return {
+      success: false,
+      error: mapExceptionalCorrectionRpcErrorMessage(rpcError.message),
+    };
+  }
+
+  const correctedMatch = parseExceptionalCorrectionRpcRow(rpcData);
+
+  if (!correctedMatch) {
+    return { success: false, error: "Erro ao aplicar correção sem recálculo" };
+  }
+
+  try {
+    await createAdminLog({
+      action: "match_corrected_without_recalculation",
+      action_description:
+        "Partida corrigida sem recálculo, com compensação restrita aos dois jogadores",
+      target_type: "match",
+      target_id: matchId,
+      target_name: `${correctedMatch.player_a_name} vs ${correctedMatch.player_b_name} (${correctedMatch.score_a}x${correctedMatch.score_b})`,
+      old_value: {
+        status: correctedMatch.old_status,
+        player_a: correctedMatch.player_a_name,
+        player_b: correctedMatch.player_b_name,
+        resultado_a: correctedMatch.score_a,
+        resultado_b: correctedMatch.score_b,
+        pontos_aplicados_a: -correctedMatch.compensation_a,
+        pontos_aplicados_b: -correctedMatch.compensation_b,
+        validada_pelo_sistema: preview.isAutoValidated,
+      },
+      new_value: {
+        status: "cancelado",
+        correction_kind: correctedMatch.correction_kind,
+        player_a: correctedMatch.player_a_name,
+        player_b: correctedMatch.player_b_name,
+        resultado_a: correctedMatch.score_a,
+        resultado_b: correctedMatch.score_b,
+        compensacao_a: correctedMatch.compensation_a,
+        compensacao_b: correctedMatch.compensation_b,
+        impacto_direto_partidas: preview.directMatchCount,
+        impacto_em_cadeia_partidas: preview.cascadeMatchCount,
+        impacto_em_cadeia_jogadores: preview.cascadePlayerCount,
+        prazo_aplicado_em: preview.appliedAt,
+      },
+      reason: reason.trim(),
+    });
+  } catch {
+    // A correção ja foi aplicada; falha no log nao deve quebrar a acao.
+  }
+
+  try {
+    revalidatePath("/admin");
+    revalidatePath("/admin/logs");
+    revalidatePath("/admin/metricas");
+    revalidatePath("/admin/partidas");
+    revalidatePath("/partidas");
+    revalidatePath("/ranking");
+    revalidatePath("/");
+    revalidatePath("/perfil");
+  } catch {
+    // A correção ja foi aplicada; falha de revalidacao nao muda o resultado.
+  }
 
   return { success: true };
 }

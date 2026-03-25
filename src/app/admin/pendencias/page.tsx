@@ -507,7 +507,16 @@ export default function AdminPendenciasPage() {
       if (actionState.mode === "accept") {
         await adminValidatePendingMatch(actionState.match.id, "pendencias");
       } else {
-        await adminCancelMatch(actionState.match.id, actionReason.trim(), "pendencias");
+        const result = await adminCancelMatch(
+          actionState.match.id,
+          actionReason.trim(),
+          "pendencias"
+        );
+        if (!result.success) {
+          setActionError(result.error);
+          setActionLoading(false);
+          return;
+        }
       }
 
       await loadPendingMatches(true);

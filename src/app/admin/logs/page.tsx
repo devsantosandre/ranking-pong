@@ -35,6 +35,10 @@ const actionLabels: Record<string, { label: string; color: string }> = {
     label: "Confirmação automática",
     color: "bg-cyan-100 text-cyan-700",
   },
+  match_corrected_without_recalculation: {
+    label: "Correção sem recálculo",
+    color: "bg-amber-100 text-amber-800",
+  },
   match_confirmation_overdue: {
     label: "Histórico do modelo anterior",
     color: "bg-amber-100 text-amber-700",
@@ -158,6 +162,50 @@ function formatValue(value: unknown, action: string): React.ReactNode {
     }
     if (obj.status !== undefined) {
       parts.push(`Status: ${String(obj.status)}`);
+    }
+
+    if (parts.length > 0) {
+      return (
+        <div className="space-y-0.5 break-words [overflow-wrap:anywhere]">
+          {parts.map((part, index) => (
+            <div key={index}>{part}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  if (
+    action === "match_corrected_without_recalculation" &&
+    typeof value === "object"
+  ) {
+    const obj = value as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (obj.player_a && obj.player_b) {
+      parts.push(`${obj.player_a} vs ${obj.player_b}`);
+    }
+    if (obj.resultado_a !== undefined && obj.resultado_b !== undefined) {
+      parts.push(`Placar removido do ranking: ${obj.resultado_a} x ${obj.resultado_b}`);
+    }
+    if (obj.compensacao_a !== undefined && obj.compensacao_b !== undefined) {
+      const deltaA = Number(obj.compensacao_a) || 0;
+      const deltaB = Number(obj.compensacao_b) || 0;
+      parts.push(
+        `Compensação aplicada: ${deltaA >= 0 ? "+" : ""}${deltaA} / ${deltaB >= 0 ? "+" : ""}${deltaB}`
+      );
+    }
+    if (obj.impacto_direto_partidas !== undefined) {
+      parts.push(`Impacto direto estimado: ${String(obj.impacto_direto_partidas)} partida(s)`);
+    }
+    if (obj.impacto_em_cadeia_partidas !== undefined) {
+      parts.push(`Impacto em cadeia: ${String(obj.impacto_em_cadeia_partidas)} partida(s)`);
+    }
+    if (obj.impacto_em_cadeia_jogadores !== undefined) {
+      parts.push(`Jogadores potencialmente afetados: ${String(obj.impacto_em_cadeia_jogadores)}`);
+    }
+    if (obj.prazo_aplicado_em !== undefined) {
+      parts.push(`Pontos originais aplicados em: ${String(obj.prazo_aplicado_em)}`);
     }
 
     if (parts.length > 0) {
