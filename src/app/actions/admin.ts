@@ -261,6 +261,7 @@ export type AdminAnalyticsResponse = {
 // ============================================================
 
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
+const MATCH_APPLIED_AT_BATCH_SIZE = 100;
 type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
 type AdminMatchActionSource = "partidas" | "pendencias";
@@ -631,25 +632,32 @@ async function getMatchAppliedAtMap(
   }
 
   const fallbackMap = new Map(uniqueMatches.map((match) => [match.id, match.created_at]));
-  const { data, error } = await supabase
-    .from("rating_transactions")
-    .select("match_id, created_at")
-    .in(
-      "match_id",
-      uniqueMatches.map((match) => match.id)
-    )
-    .in("motivo", ["vitoria", "derrota"])
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    throw new Error("Erro ao localizar quando os pontos das partidas foram aplicados");
-  }
-
   const appliedAtMap = new Map<string, string>();
 
-  for (const row of ((data ?? []) as RatingTransactionAppliedAtRow[])) {
-    if (!row.match_id || appliedAtMap.has(row.match_id)) continue;
-    appliedAtMap.set(row.match_id, row.created_at);
+  for (
+    let start = 0;
+    start < uniqueMatches.length;
+    start += MATCH_APPLIED_AT_BATCH_SIZE
+  ) {
+    const batch = uniqueMatches.slice(start, start + MATCH_APPLIED_AT_BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("rating_transactions")
+      .select("match_id, created_at")
+      .in(
+        "match_id",
+        batch.map((match) => match.id)
+      )
+      .in("motivo", ["vitoria", "derrota"])
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new Error("Erro ao localizar quando os pontos das partidas foram aplicados");
+    }
+
+    for (const row of ((data ?? []) as RatingTransactionAppliedAtRow[])) {
+      if (!row.match_id || appliedAtMap.has(row.match_id)) continue;
+      appliedAtMap.set(row.match_id, row.created_at);
+    }
   }
 
   for (const match of uniqueMatches) {

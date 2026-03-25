@@ -591,7 +591,7 @@ export default function AdminPartidasPage() {
       </ConfirmModal>
 
       {correctionModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] sm:items-center sm:p-4">
           <div className="relative flex max-h-[calc(100vh-7rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl sm:max-h-[calc(100vh-2rem)]">
             <button
               type="button"

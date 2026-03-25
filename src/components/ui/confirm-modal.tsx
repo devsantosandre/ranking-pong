@@ -96,7 +96,7 @@ export function ConfirmModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${
+      className={`fixed inset-0 z-[80] flex items-center justify-center transition-opacity duration-150 ${
         isClosing ? "opacity-0" : "opacity-100"
       }`}
     >
