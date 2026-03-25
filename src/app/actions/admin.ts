@@ -507,6 +507,10 @@ function mapExceptionalCorrectionRpcErrorMessage(message: string | undefined): s
     return "O cancelamento com reversão ainda é possível para esta partida. Use o cancelamento normal.";
   }
 
+  if (normalized.includes('column reference "correction_kind" is ambiguous')) {
+    return "A correção sem recálculo deste ambiente precisa da migration mais recente.";
+  }
+
   return "Erro ao aplicar correção sem recálculo";
 }
 
@@ -1730,6 +1734,11 @@ export async function adminCorrectMatchWithoutRecalculation(
   try {
     preview = await buildExceptionalCorrectionPreview(supabase, matchId);
   } catch (error) {
+    console.error("admin_exceptional_match_correction_preview_failed", {
+      matchId,
+      adminId: adminActor.id,
+      message: error instanceof Error ? error.message : "Erro ao analisar a correção",
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Erro ao analisar a correção",
@@ -1737,11 +1746,26 @@ export async function adminCorrectMatchWithoutRecalculation(
   }
 
   if (preview.safeCancelStillAvailable) {
+    console.error("admin_exceptional_match_correction_blocked", {
+      matchId,
+      adminId: adminActor.id,
+      reasonLength: reason.trim().length,
+      preview,
+      mappedMessage:
+        "O cancelamento com reversão ainda é possível para esta partida. Use o cancelamento normal.",
+    });
     return {
       success: false,
       error: "O cancelamento com reversão ainda é possível para esta partida. Use o cancelamento normal.",
     };
   }
+
+  console.info("admin_exceptional_match_correction_attempt", {
+    matchId,
+    adminId: adminActor.id,
+    reasonLength: reason.trim().length,
+    preview,
+  });
 
   const { data: rpcData, error: rpcError } = await supabase.rpc(
     "apply_exceptional_match_correction_v1",
@@ -1755,6 +1779,15 @@ export async function adminCorrectMatchWithoutRecalculation(
   );
 
   if (rpcError) {
+    console.error("admin_exceptional_match_correction_rpc_failed", {
+      matchId,
+      adminId: adminActor.id,
+      code: rpcError.code ?? null,
+      message: rpcError.message,
+      details: "details" in rpcError ? rpcError.details : null,
+      hint: "hint" in rpcError ? rpcError.hint : null,
+      mappedMessage: mapExceptionalCorrectionRpcErrorMessage(rpcError.message),
+    });
     return {
       success: false,
       error: mapExceptionalCorrectionRpcErrorMessage(rpcError.message),
@@ -1764,6 +1797,11 @@ export async function adminCorrectMatchWithoutRecalculation(
   const correctedMatch = parseExceptionalCorrectionRpcRow(rpcData);
 
   if (!correctedMatch) {
+    console.error("admin_exceptional_match_correction_invalid_payload", {
+      matchId,
+      adminId: adminActor.id,
+      rpcData,
+    });
     return { success: false, error: "Erro ao aplicar correção sem recálculo" };
   }
 
@@ -1801,8 +1839,12 @@ export async function adminCorrectMatchWithoutRecalculation(
       },
       reason: reason.trim(),
     });
-  } catch {
-    // A correção ja foi aplicada; falha no log nao deve quebrar a acao.
+  } catch (error) {
+    console.error("admin_exceptional_match_correction_log_failed", {
+      matchId,
+      adminId: adminActor.id,
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 
   try {
@@ -1814,9 +1856,20 @@ export async function adminCorrectMatchWithoutRecalculation(
     revalidatePath("/ranking");
     revalidatePath("/");
     revalidatePath("/perfil");
-  } catch {
-    // A correção ja foi aplicada; falha de revalidacao nao muda o resultado.
+  } catch (error) {
+    console.error("admin_exceptional_match_correction_revalidate_failed", {
+      matchId,
+      adminId: adminActor.id,
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
   }
+
+  console.info("admin_exceptional_match_correction_success", {
+    matchId,
+    adminId: adminActor.id,
+    correctedMatch,
+    preview,
+  });
 
   return { success: true };
 }

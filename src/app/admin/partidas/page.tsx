@@ -197,6 +197,10 @@ export default function AdminPartidasPage() {
     const result = await adminGetExceptionalMatchCorrectionPreview(match.id);
 
     if (!result.success) {
+      console.error("admin_partidas_exceptional_correction_preview_failed", {
+        matchId: match.id,
+        message: result.error,
+      });
       setCorrectionError(result.error);
       setCorrectionPreviewLoading(false);
       return;
@@ -266,6 +270,11 @@ export default function AdminPartidasPage() {
     );
 
     if (!result.success) {
+      console.error("admin_partidas_exceptional_correction_failed", {
+        matchId: correctionTargetId,
+        reasonLength: correctionReason.trim().length,
+        message: result.error,
+      });
       setCorrectionError(result.error);
       setCorrectionSaving(false);
       return;
