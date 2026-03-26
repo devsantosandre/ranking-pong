@@ -62,6 +62,16 @@ const settingNames: Record<string, string> = {
   pontos_derrota: "Pontos derrota",
 };
 
+const APP_TIMEZONE = "America/Sao_Paulo";
+const absoluteDateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: APP_TIMEZONE,
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function getAutoValidationDeadlineHours(log: AdminLog): number | null {
   if (log.action !== "match_auto_validated") return null;
 
@@ -82,6 +92,20 @@ function getAutoValidationDeadlineHours(log: AdminLog): number | null {
 
   const parsedFromDescription = Number(match[1]);
   return Number.isFinite(parsedFromDescription) ? parsedFromDescription : null;
+}
+
+function formatAbsoluteDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateStr;
+  }
+
+  const parts = absoluteDateTimeFormatter.formatToParts(date);
+  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${getPart("day")}/${getPart("month")}/${getPart("year")} às ${getPart("hour")}:${getPart("minute")}`;
 }
 
 // Formatar valor para exibicao
@@ -205,7 +229,9 @@ function formatValue(value: unknown, action: string): React.ReactNode {
       parts.push(`Jogadores potencialmente afetados: ${String(obj.impacto_em_cadeia_jogadores)}`);
     }
     if (obj.prazo_aplicado_em !== undefined) {
-      parts.push(`Pontos originais aplicados em: ${String(obj.prazo_aplicado_em)}`);
+      parts.push(
+        `Pontos originais aplicados em: ${formatAbsoluteDateTime(String(obj.prazo_aplicado_em))}`
+      );
     }
 
     if (parts.length > 0) {
@@ -497,7 +523,7 @@ export default function AdminLogsPage() {
                       )}
 
                       <div className="text-[10px] text-muted-foreground">
-                        {new Date(log.created_at).toLocaleString("pt-BR")}
+                        {formatAbsoluteDateTime(log.created_at)}
                       </div>
                     </div>
                   )}
