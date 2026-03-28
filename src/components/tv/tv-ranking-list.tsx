@@ -258,24 +258,24 @@ function GridView({
             key={player.id}
             className={`
               tv-ranking-item
-              flex items-center justify-between rounded-lg border px-2 py-1 shadow-sm
+              flex items-center justify-between rounded-md border px-1.5 py-0.5 shadow-sm
               ${playerStyle.border} ${playerStyle.bg}
               ${animationClass}
               transition-all duration-300
             `}
           >
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               {/* Badge com posição */}
               <div
                 className={`
-                  relative flex h-6 w-6 items-center justify-center rounded-full
+                  relative flex h-5 w-5 items-center justify-center rounded-full
                   ${playerStyle.badge}
                   ${isTop3 ? "shadow-sm shadow-orange-500/40" : ""}
                 `}
               >
                 <span
                   className={`
-                    relative text-[10px] font-bold
+                    relative text-[9px] font-bold
                     ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow" : "text-muted-foreground"}
                   `}
                 >
@@ -285,14 +285,14 @@ function GridView({
 
               {/* Info do jogador */}
               <div className="min-w-0">
-                <div className="flex items-center gap-1">
-                  <p className={`text-[11px] font-semibold truncate ${playerStyle.text}`}>
+                <div className="flex items-center gap-0.5">
+                  <p className={`text-[10px] font-semibold leading-tight truncate ${playerStyle.text}`}>
                     {player.displayName}
                   </p>
-                  {isTop3 && <span className="text-[10px]">🔥</span>}
-                  {change && <ChangeIndicator change={change} />}
+                  {isTop3 && <span className="text-[9px]">🔥</span>}
+                  {change && <ChangeIndicator change={change} size="sm" />}
                 </div>
-                <p className="text-[9px] text-muted-foreground leading-tight">
+                <p className="text-[8px] text-muted-foreground leading-tight">
                   <span className="text-green-600 font-semibold">{player.vitorias || 0}V</span>
                   {" / "}
                   <span className="text-red-500 font-semibold">{player.derrotas || 0}D</span>
@@ -302,7 +302,7 @@ function GridView({
 
             {/* Pontuação */}
             <div className="text-right flex-shrink-0">
-              <p className={`text-xs font-bold ${playerStyle.text}`}>
+              <p className={`text-[11px] font-bold leading-tight ${playerStyle.text}`}>
                 {player.rating_atual ?? 250}
               </p>
               <p className="text-[8px] text-muted-foreground leading-tight">pts</p>

@@ -16,7 +16,9 @@ function TvRankingContent() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const limit = parseInt(searchParams.get("limit") || "50", 10);
+  const limitParam = searchParams.get("limit");
+  const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : Number.NaN;
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
   const viewMode = (searchParams.get("view") || "grid") as "grid" | "table";
   const demoMode = searchParams.get("demo") === "true";
 

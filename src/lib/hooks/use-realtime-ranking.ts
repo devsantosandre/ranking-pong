@@ -25,25 +25,38 @@ export type RankingPlayerWithPosition = RankingPlayer & {
  * Qualquer mudança na tabela users força refetch imediato.
  * Também usa polling como fallback para manter o /tv sincronizado.
  */
-export function useRealtimeRanking(limit: number = 20) {
+export function useRealtimeRanking(limit?: number) {
   const supabase = useMemo(() => createClient(), []);
   const queryClient = useQueryClient();
+  const normalizedLimit =
+    typeof limit === "number" && Number.isFinite(limit) && limit > 0
+      ? Math.floor(limit)
+      : null;
   const tvRankingQueryKey = useMemo(
-    () => [...queryKeys.users.ranking(), "tv", limit] as const,
-    [limit]
+    () => [...queryKeys.users.ranking(), "tv", normalizedLimit ?? "all"] as const,
+    [normalizedLimit]
   );
 
   // Query para buscar o ranking
   const query = useQuery({
     queryKey: tvRankingQueryKey,
     queryFn: async (): Promise<RankingPlayerWithPosition[]> => {
-      const { data, error } = await supabase
+      let rankingQuery = supabase
         .from("users")
         .select("id, name, full_name, email, rating_atual, vitorias, derrotas")
         .eq("is_active", true)
         .eq("hide_from_ranking", false)
         .gt("jogos_disputados", 0)
-        .limit(limit);
+        .order("rating_atual", { ascending: false, nullsFirst: false })
+        .order("vitorias", { ascending: false, nullsFirst: false })
+        .order("derrotas", { ascending: true, nullsFirst: false })
+        .order("id", { ascending: true });
+
+      if (normalizedLimit) {
+        rankingQuery = rankingQuery.limit(normalizedLimit);
+      }
+
+      const { data, error } = await rankingQuery;
 
       if (error) throw error;
 
