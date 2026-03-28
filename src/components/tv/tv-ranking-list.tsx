@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, type CSSProperties } from "react";
 import {
   getPlayerStyle,
   getDivisionNumber,
@@ -147,6 +147,7 @@ interface TvRankingListProps {
   players: RankingPlayerWithPosition[];
   viewMode: "grid" | "table";
   soundEnabled?: boolean;
+  densityScale?: number;
   focusPlayerIds?: string[];
 }
 
@@ -154,6 +155,7 @@ export function TvRankingList({
   players,
   viewMode,
   soundEnabled = true,
+  densityScale = 1,
   focusPlayerIds,
 }: TvRankingListProps) {
   const previousSnapshotRef = useRef<Map<string, PlayerSnapshot> | null>(null);
@@ -161,6 +163,9 @@ export function TvRankingList({
     () => new Map()
   );
   const focusPlayerSetRef = useRef<Set<string>>(new Set(focusPlayerIds || []));
+  const densityStyle = {
+    "--tv-density-scale": densityScale,
+  } as CSSProperties;
   const applyPositionChanges = useCallback(
     (changes: Map<string, PositionChange>) => {
       setPositionChanges(changes);
@@ -218,12 +223,16 @@ export function TvRankingList({
 
   if (viewMode === "table") {
     return (
-      <TableView players={players} positionChanges={positionChanges} />
+      <div className="tv-ranking-root" style={densityStyle}>
+        <TableView players={players} positionChanges={positionChanges} />
+      </div>
     );
   }
 
   return (
-    <GridView players={players} positionChanges={positionChanges} />
+    <div className="tv-ranking-root" style={densityStyle}>
+      <GridView players={players} positionChanges={positionChanges} />
+    </div>
   );
 }
 
@@ -258,24 +267,26 @@ function GridView({
             key={player.id}
             className={`
               tv-ranking-item
-              flex items-center justify-between rounded-md border px-1.5 py-0.5 shadow-sm
+              tv-ranking-card
+              flex items-center justify-between border shadow-sm
               ${playerStyle.border} ${playerStyle.bg}
               ${animationClass}
               transition-all duration-300
             `}
           >
-            <div className="flex items-center gap-1">
+            <div className="tv-ranking-card-main flex items-center">
               {/* Badge com posição */}
               <div
                 className={`
-                  relative flex h-5 w-5 items-center justify-center rounded-full
+                  tv-ranking-position-badge
+                  relative flex items-center justify-center rounded-full
                   ${playerStyle.badge}
                   ${isTop3 ? "shadow-sm shadow-orange-500/40" : ""}
                 `}
               >
                 <span
                   className={`
-                    relative text-[9px] font-bold
+                    tv-ranking-position-label relative font-bold
                     ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow" : "text-muted-foreground"}
                   `}
                 >
@@ -285,14 +296,14 @@ function GridView({
 
               {/* Info do jogador */}
               <div className="min-w-0">
-                <div className="flex items-center gap-0.5">
-                  <p className={`text-[10px] font-semibold leading-tight truncate ${playerStyle.text}`}>
+                <div className="tv-ranking-name-row flex items-center">
+                  <p className={`tv-ranking-name truncate font-semibold ${playerStyle.text}`}>
                     {player.displayName}
                   </p>
-                  {isTop3 && <span className="text-[9px]">🔥</span>}
+                  {isTop3 && <span className="tv-ranking-top-icon">🔥</span>}
                   {change && <ChangeIndicator change={change} size="sm" />}
                 </div>
-                <p className="text-[8px] text-muted-foreground leading-tight">
+                <p className="tv-ranking-stats text-muted-foreground">
                   <span className="text-green-600 font-semibold">{player.vitorias || 0}V</span>
                   {" / "}
                   <span className="text-red-500 font-semibold">{player.derrotas || 0}D</span>
@@ -302,10 +313,10 @@ function GridView({
 
             {/* Pontuação */}
             <div className="text-right flex-shrink-0">
-              <p className={`text-[11px] font-bold leading-tight ${playerStyle.text}`}>
+              <p className={`tv-ranking-points font-bold ${playerStyle.text}`}>
                 {player.rating_atual ?? 250}
               </p>
-              <p className="text-[8px] text-muted-foreground leading-tight">pts</p>
+              <p className="tv-ranking-points-label text-muted-foreground">pts</p>
             </div>
           </article>
         );
@@ -327,11 +338,11 @@ function TableView({
       <table className="w-full tv-table">
         <thead>
           <tr className="border-b border-border/50 bg-muted/30">
-            <th className="tv-table-th text-center w-10">#</th>
+            <th className="tv-table-th tv-table-col-position text-center">#</th>
             <th className="tv-table-th text-left">Jogador</th>
-            <th className="tv-table-th text-center w-16">V</th>
-            <th className="tv-table-th text-center w-16">D</th>
-            <th className="tv-table-th text-right w-20">Pts</th>
+            <th className="tv-table-th tv-table-col-score text-center">V</th>
+            <th className="tv-table-th tv-table-col-score text-center">D</th>
+            <th className="tv-table-th tv-table-col-points text-right">Pts</th>
           </tr>
         </thead>
         <tbody>
@@ -382,26 +393,26 @@ function TableView({
                   </span>
                 </td>
                 <td className="tv-table-td">
-                  <div className="flex items-center gap-1 min-w-0">
-                    <span className={`font-medium truncate ${playerStyle.text}`}>
+                  <div className="tv-table-name-row flex min-w-0 items-center">
+                    <span className={`tv-table-name truncate font-medium ${playerStyle.text}`}>
                       {player.displayName}
                     </span>
-                    {isTop3 && <span className="text-orange-500 flex-shrink-0">🔥</span>}
+                    {isTop3 && <span className="tv-table-top-icon text-orange-500 flex-shrink-0">🔥</span>}
                     {change && <ChangeIndicator change={change} size="sm" />}
                   </div>
                 </td>
                 <td className="tv-table-td text-center">
-                  <span className="text-green-600 font-semibold">
+                  <span className="tv-table-value font-semibold text-green-600">
                     {player.vitorias || 0}
                   </span>
                 </td>
                 <td className="tv-table-td text-center">
-                  <span className="text-red-500 font-semibold">
+                  <span className="tv-table-value font-semibold text-red-500">
                     {player.derrotas || 0}
                   </span>
                 </td>
                 <td className="tv-table-td text-right">
-                  <span className={`font-bold ${playerStyle.text}`}>
+                  <span className={`tv-table-value font-bold ${playerStyle.text}`}>
                     {player.rating_atual ?? 250}
                   </span>
                 </td>
@@ -418,14 +429,12 @@ function TableView({
 function ChangeIndicator({ change, size = "md" }: { change: PositionChange; size?: "sm" | "md" }) {
   if (!change) return null;
 
-  const sizeClasses = size === "sm"
-    ? "text-[9px] px-1 py-0.5"
-    : "text-[10px] px-1.5 py-0.5";
+  const sizeClasses = size === "sm" ? "tv-change-badge-sm" : "tv-change-badge-md";
 
   return (
     <span
       className={`
-        ${sizeClasses} flex-shrink-0 font-bold rounded inline-flex items-center justify-center min-w-[18px]
+        tv-change-badge ${sizeClasses} flex-shrink-0 font-bold rounded inline-flex items-center justify-center
         ${change === "up" ? "bg-green-500/20 text-green-600" : ""}
         ${change === "down" ? "bg-red-500/20 text-red-600" : ""}
         ${change === "new" ? "bg-blue-500/20 text-blue-600" : ""}

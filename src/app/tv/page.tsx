@@ -8,8 +8,16 @@ import { NetworkStatusLayer } from "@/components/network-status-layer";
 import { useRealtimeRanking, type RankingPlayerWithPosition } from "@/lib/hooks/use-realtime-ranking";
 import { useLatestValidatedMatch } from "@/lib/hooks/use-latest-validated-match";
 import { TvRankingList } from "@/components/tv/tv-ranking-list";
-import { LayoutGrid, List, Volume2, VolumeX } from "lucide-react";
+import { LayoutGrid, List, Minus, Plus, Volume2, VolumeX } from "lucide-react";
 import { buildBrowserTitle } from "@/lib/app-title";
+
+const TV_SCALE_MIN_STEP = -5;
+const TV_SCALE_MAX_STEP = 3;
+const TV_SCALE_STEP_SIZE = 0.1;
+
+function clampScaleStep(value: number) {
+  return Math.min(TV_SCALE_MAX_STEP, Math.max(TV_SCALE_MIN_STEP, value));
+}
 
 function TvRankingContent() {
   const searchParams = useSearchParams();
@@ -21,6 +29,11 @@ function TvRankingContent() {
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
   const viewMode = (searchParams.get("view") || "grid") as "grid" | "table";
   const demoMode = searchParams.get("demo") === "true";
+  const scaleParam = searchParams.get("scale");
+  const parsedScaleStep = scaleParam ? Number.parseInt(scaleParam, 10) : 0;
+  const scaleStep = Number.isFinite(parsedScaleStep) ? clampScaleStep(parsedScaleStep) : 0;
+  const tvScale = 1 + scaleStep * TV_SCALE_STEP_SIZE;
+  const tvScalePercent = Math.round(tvScale * 100);
 
   const { data: players, isLoading, error, dataUpdatedAt } = useRealtimeRanking(limit);
   const { data: latestMatch } = useLatestValidatedMatch();
@@ -92,6 +105,19 @@ function TvRankingContent() {
     router.replace(`${pathname}?${params.toString()}`);
   }, [searchParams, viewMode, router, pathname]);
 
+  const updateScaleStep = useCallback((nextStep: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const normalizedStep = clampScaleStep(nextStep);
+
+    if (normalizedStep === 0) {
+      params.delete("scale");
+    } else {
+      params.set("scale", String(normalizedStep));
+    }
+
+    router.replace(`${pathname}?${params.toString()}`);
+  }, [searchParams, router, pathname]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -155,6 +181,30 @@ function TvRankingContent() {
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="flex items-center overflow-hidden rounded-lg border border-border/50 bg-card/50">
+              <button
+                onClick={() => updateScaleStep(scaleStep - 1)}
+                disabled={scaleStep <= TV_SCALE_MIN_STEP}
+                className="flex h-8 w-8 items-center justify-center border-r border-border/50 text-muted-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Diminuir tamanho"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <div className="min-w-12 px-2 text-center">
+                <span className="text-[10px] font-semibold text-muted-foreground sm:text-xs">
+                  {tvScalePercent}%
+                </span>
+              </div>
+              <button
+                onClick={() => updateScaleStep(scaleStep + 1)}
+                disabled={scaleStep >= TV_SCALE_MAX_STEP}
+                className="flex h-8 w-8 items-center justify-center border-l border-border/50 text-muted-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Aumentar tamanho"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+
             {/* Toggle Sound */}
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
@@ -201,6 +251,7 @@ function TvRankingContent() {
             players={displayPlayers}
             viewMode={viewMode}
             soundEnabled={soundEnabled}
+            densityScale={tvScale}
             focusPlayerIds={
               !demoMode
                 ? latestMatch
