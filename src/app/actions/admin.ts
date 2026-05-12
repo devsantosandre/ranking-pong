@@ -262,6 +262,7 @@ export type AdminAnalyticsResponse = {
 
 const MAX_PAGE = 1000; // Limite máximo de páginas para evitar abuso
 const MATCH_APPLIED_AT_BATCH_SIZE = 100;
+const VALIDATED_MATCHES_FETCH_BATCH_SIZE = 1000;
 type ServerSupabaseClient = ReturnType<typeof createAdminClient>;
 const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
 type AdminMatchActionSource = "partidas" | "pendencias";
@@ -593,6 +594,13 @@ type ExceptionalCorrectionPreviewMatchRow = {
     | null;
 };
 
+type ValidatedMatchPositionSource = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  created_at: string;
+};
+
 function getDisplayPlayerName(
   user:
     | { full_name: string | null; name: string | null }
@@ -613,6 +621,7 @@ async function getMatchPointsAppliedAt(
     .from("rating_transactions")
     .select("created_at")
     .eq("match_id", matchId)
+    .in("motivo", ["vitoria", "derrota"])
     .order("created_at", { ascending: true })
     .limit(1);
 
@@ -673,6 +682,37 @@ async function getMatchAppliedAtMap(
   return appliedAtMap;
 }
 
+async function getAllValidatedMatchPositionSources(supabase: ServerSupabaseClient) {
+  const matches: ValidatedMatchPositionSource[] = [];
+
+  for (
+    let from = 0;
+    ;
+    from += VALIDATED_MATCHES_FETCH_BATCH_SIZE
+  ) {
+    const to = from + VALIDATED_MATCHES_FETCH_BATCH_SIZE - 1;
+    const { data, error } = await supabase
+      .from("matches")
+      .select("id, player_a_id, player_b_id, created_at")
+      .eq("status", "validado")
+      .order("created_at", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw new Error("Erro ao medir o impacto da correção");
+    }
+
+    const page = (data ?? []) as ValidatedMatchPositionSource[];
+    matches.push(...page);
+
+    if (page.length < VALIDATED_MATCHES_FETCH_BATCH_SIZE) {
+      break;
+    }
+  }
+
+  return matches;
+}
+
 async function buildExceptionalCorrectionPreview(
   supabase: ServerSupabaseClient,
   matchId: string
@@ -710,23 +750,7 @@ async function buildExceptionalCorrectionPreview(
   const playerBName = getDisplayPlayerName(match.player_b, "Jogador B");
   const appliedAt = await getMatchPointsAppliedAt(supabase, match.id, match.created_at);
 
-  const { data: allValidatedMatches, error: allValidatedMatchesError } = await supabase
-    .from("matches")
-    .select("id, player_a_id, player_b_id, created_at")
-    .eq("status", "validado")
-    .order("created_at", { ascending: true });
-
-  if (allValidatedMatchesError) {
-    throw new Error("Erro ao medir o impacto da correção");
-  }
-
-  const validatedMatches =
-    (allValidatedMatches as Array<{
-      id: string;
-      player_a_id: string;
-      player_b_id: string;
-      created_at: string;
-    }> | null) ?? [];
+  const validatedMatches = await getAllValidatedMatchPositionSources(supabase);
   const appliedAtMap = await getMatchAppliedAtMap(supabase, validatedMatches);
   const laterMatches = validatedMatches.filter(
     (item) =>
