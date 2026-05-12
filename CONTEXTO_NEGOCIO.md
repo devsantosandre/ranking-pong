@@ -1,1256 +1,847 @@
-# SMASH PONG - Aplicação de Ranking para Tênis de Mesa
-## Documentação Completa para Análise de Modelo de Negócio
+# Smash Pong App
+## Contexto de Negócio e Produto
+
+> Documento atualizado com base no código da aplicação, rotas, server actions, hooks, migrations e documentação interna versionada até **23/03/2026**.
+>
+> Este arquivo prioriza o que está **implementado hoje**. Onde houver leitura estratégica ou hipótese comercial, isso é sinalizado como interpretação de negócio, não como fato técnico.
 
 ---
 
-## ÍNDICE
+## 1. Resumo Executivo
 
-1. [Resumo Executivo](#1-resumo-executivo)
-2. [Contexto do Cliente](#2-contexto-do-cliente)
-3. [Funcionalidades Principais](#3-funcionalidades-principais)
-4. [Papéis e Permissões](#4-papéis-e-permissões)
-5. [Stack Técnico](#5-stack-técnico)
-6. [Regras de Negócio e Gamificação](#6-regras-de-negócio-e-gamificação)
-7. [Painel Administrativo](#7-painel-administrativo)
-8. [Experiência do Usuário](#8-experiência-do-usuário)
-9. [Dados e Segurança](#9-dados-e-segurança)
-10. [Proposta de Valor](#10-proposta-de-valor)
-11. [Análise de Monetização](#11-análise-de-monetização)
-12. [Cenários de Venda](#12-cenários-de-venda)
-13. [Escalabilidade e Crescimento](#13-escalabilidade-e-crescimento)
+**Smash Pong App** é uma aplicação web **mobile-first**, instalável como **PWA**, voltada para a gestão de **ranking interno de tênis de mesa** em escolas, clubes, academias e comunidades com rotina recorrente de jogos.
 
----
+O produto foi evoluído de um “ranking simples com registro de partidas” para uma plataforma operacional mais completa, com:
 
-## 1. RESUMO EXECUTIVO
+- ranking em tempo real
+- fluxo robusto de confirmação e contestação de partidas
+- confirmação automática por prazo
+- feed social de resultados com reações
+- sistema de conquistas
+- painel administrativo com métricas, auditoria e governança
+- modo TV para exibição pública do ranking
+- notificações push para pendências
 
-**Smash Pong** é uma Progressive Web App (PWA) mobile-first projetada para escolas e clubes de tênis de mesa gerenciarem um sistema de ranking interno. A aplicação oferece uma experiência gamificada e envolvente para jogadores acompanharem partidas, visualizarem rankings e monitorarem seu progresso em um ambiente competitivo porém amigável.
+Em termos de negócio, o app hoje resolve simultaneamente três frentes:
 
-**Nome da Marca:** Smash Pong
-**Propósito Principal:** Gestão de ranking interno para escolas de tênis de mesa
-**Plataforma:** Web-based PWA (instalável em dispositivos móveis)
-**Usuários-Alvo:** Estudantes de tênis de mesa e administradores da escola
+1. **Engajamento dos jogadores**
+2. **Transparência e confiança no ranking**
+3. **Redução de trabalho operacional da equipe**
 
 ---
 
-## 2. CONTEXTO DO CLIENTE
+## 2. Problema Que o Produto Resolve
 
-### 2.1 Perfil da Escola
+O produto atende um cenário típico de ranking interno em operações esportivas:
 
-**Tipo:** Escola de Tênis de Mesa (sistema de ranking interno)
-**Porte:** Aproximadamente 230 alunos (escola de GRANDE porte)
-**Mensalidade média:** R$ 100 a R$ 300 por aluno/mês
-**Localização:** Brasil
+- os alunos jogam com frequência irregular
+- o ranking perde força quando depende de planilha ou gestão manual
+- o professor ou gestor vira gargalo para validar resultados
+- há pouca visibilidade sobre evolução individual e rivalidades
+- faltam estímulos sociais para o aluno voltar a jogar
 
-**Receita Mensal Estimada da Escola:**
-- 230 alunos × R$ 200/mês (média) = **R$ 46.000/mês**
-- Receita anual: **R$ 552.000/ano**
+O Smash Pong App ataca essas dores com uma combinação de:
 
-**Importância deste Porte:**
-Com 230 alunos, esta escola representa um caso de validação EXCEPCIONAL do produto:
-- ✅ Base de usuários significativa para testar escalabilidade
-- ✅ Volume de partidas alto para validar gamificação
-- ✅ Complexidade de gestão que justifica automação
-- ✅ ROI massivo devido ao tamanho da operação
-
-### 2.2 Problema Antes do App
-
-**Principal dor identificada:** **Baixa frequência dos alunos**
-
-Outros problemas típicos deste segmento:
-- Controle manual de rankings via planilhas ou papel
-- Trabalho administrativo repetitivo e propenso a erros
-- Falta de motivação dos alunos para praticar regularmente
-- Ausência de gamificação para engajar estudantes
-- Dificuldade em visualizar progresso individual
-- Disputas sobre pontuações e resultados de partidas
-
-### 2.3 Como o App Resolve
-
-O **Smash Pong** ataca diretamente o problema de baixa frequência através de:
-
-✅ **Gamificação:** Sistema de pontos, rankings visíveis e medalhas motivam alunos a jogarem mais
-✅ **Reconhecimento:** Feed de notícias destaca vitórias e cria competição saudável
-✅ **Transparência:** Todos veem seu progresso em tempo real, incentivando melhoria
-✅ **Recompensa mesmo na derrota:** Ganhar pontos até perdendo reduz medo e estimula participação
-✅ **Automatização:** Elimina trabalho manual da escola, permitindo foco no ensino
-✅ **Acessibilidade:** App instalável no celular, sempre disponível para registrar partidas
-
-**Resultado esperado:** Aumento na frequência, engajamento e retenção de alunos.
+- **ritual de jogo simples**: registrar placar em poucos toques
+- **governança**: só partidas validadas entram no ranking
+- **pressão positiva**: ranking visível, top 3, divisões e histórico
+- **dinâmica social**: feed automático de resultados e reações
+- **gamificação**: conquistas por volume, vitórias, sequência, rating, atividade e veterania
+- **operação assistida**: admin acompanha pendências, cancela partidas, ajusta usuários e mede engajamento
 
 ---
 
-## 3. FUNCIONALIDADES PRINCIPAIS
+## 3. Público-Alvo e Cenário de Uso
 
-### 3.1 Registro e Gestão de Partidas
+### 3.1 Público principal
 
-**Entrada Rápida de Partidas:**
-- Wizard em 2 etapas para registrar jogos
-  - Etapa 1: Selecionar oponente da lista de jogadores ativos
-  - Etapa 2: Escolher resultado (3x0, 3x1, 3x2, 0x3, 1x3, 2x3)
-- Formato melhor de 5 sets (primeiro a ganhar 3 sets vence)
+- escolas de tênis de mesa
+- clubes recreativos
+- academias com ranking interno
+- comunidades fechadas de jogadores
+- grupos de treino com acompanhamento recorrente
 
-**Sistema de Confirmação Pendente:**
-- Criador da partida aguarda confirmação do oponente
-- Oponente pode CONFIRMAR ou CONTESTAR o placar
-- Se contestado, placar atualizado volta para o criador verificar
-- Somente partidas validadas afetam rankings e aparecem no feed
+### 3.2 Perfil de usuário final
 
-**Limites Diários:**
-- Máximo de 2 partidas por dia contra o mesmo oponente (configurável pelo admin)
-- Previne farming de pontos
-- Incentiva jogar contra adversários diversos
+- **Jogador**: quer jogar, subir no ranking, acompanhar rivais e colecionar conquistas
+- **Moderador**: opera o dia a dia, cria jogadores, reseta senha, acompanha pendências e cancela partidas
+- **Admin**: governa regras, acessos, pontuação, visibilidade e parâmetros do sistema
 
-### 3.2 Sistema de Ranking em Tempo Real
+### 3.3 Modelo operacional atual
 
-**Rankings Ao Vivo:**
-- Jogadores ranqueados por pontos de rating atuais
-- Atualização instantânea após validação de partidas
+O sistema hoje opera como **ambiente fechado**:
 
-**Hierarquia Visual:**
-- Top 3 jogadores recebem medalhas especiais (ouro, prata, bronze)
-- Destaque visual para primeiras posições
+- não existe fluxo público de cadastro
+- o acesso começa com conta criada internamente por moderador ou admin
+- autenticação é por **email e senha**
+- quase todas as páginas do app exigem sessão autenticada
 
-**Informações Exibidas por Jogador:**
-- Posição atual no ranking
-- Total de pontos (rating)
-- Registro de vitórias/derrotas
-- Variação recente de pontos
-
-**Funcionalidades:**
-- Busca rápida por nome de jogador
-- Apenas jogadores ativos aparecem (sem ocultos/inativos)
-
-### 3.3 Histórico e Status de Partidas
-
-**Duas Abas:**
-1. **Partidas Pendentes:** Mostra jogos aguardando confirmação/validação
-2. **Partidas Recentes:** Exibe partidas completadas e validadas
-
-**Botões de Ação Inteligentes:**
-- Criador vê "Aguardando confirmação" (sem ação necessária)
-- Oponente vê botões "Confirmar" ou "Contestar"
-- Após contestação, criador pode reconfirmar ou ajustar novamente
-
-**Detalhes da Partida:**
-- Exibição do placar
-- Data/hora
-- Variação de pontos para cada jogador
-- Status (pendente, editado, validado, cancelado)
-
-### 3.4 Feed de Notícias
-
-**Posts Automáticos de Resultados:**
-- Cada partida validada gera um item de notícia automaticamente
-
-**Informações Exibidas:**
-- Vencedor vs Perdedor (codificados por cor: verde para vencedor, vermelho para perdedor)
-- Placar final
-- Pontos ganhos por cada jogador
-- Tempo decorrido desde a partida (timestamps relativos)
-
-**Engajamento:**
-- Mostra atividade competitiva
-- Mantém jogadores informados
-- Cria senso de comunidade
-
-### 3.5 Estatísticas e Perfil do Jogador
-
-**Dashboard Pessoal:**
-- Rating atual e posição no ranking
-- Registro de vitórias/derrotas e taxa de vitória percentual
-- Sequência atual de vitórias (com indicador emoji de fogo 🔥)
-- Gráfico de histórico de rating dos últimos 7 dias
-
-**Histórico Recente:**
-- Últimas 5 partidas validadas com resultados
-
-**Recursos de Segurança:**
-- Funcionalidade de trocar senha
-- Toggles para mostrar/ocultar senha
-- Opção de logout
-
-### 3.6 Dashboard Inicial (Home)
-
-**Card de Estatísticas Rápidas:**
-- Mostra pontos atuais e posição no ranking do jogador
-
-**Top 3 do Ranking:**
-- Cards com medalhas para os 3 melhores jogadores
-
-**Preview de Partidas Pendentes:**
-- Até 3 partidas pendentes que requerem ação
-
-**Resultados Recentes:**
-- Últimas 3 partidas validadas com mudanças de pontos
-
-**Ações Rápidas:**
-- Botão proeminente "Registrar Partida"
-- Visualizar ranking completo
+Isso posiciona o produto como ferramenta de uso institucional, e não como rede social aberta.
 
 ---
 
-## 4. PAPÉIS E PERMISSÕES
+## 4. Proposta de Valor Atual
 
-### 4.1 Sistema de Três Níveis de Permissão
+### Para jogadores
 
-| Papel | Descrição | Pode Jogar | Acessa Admin |
-|-------|-----------|:----------:|:------------:|
-| **Jogador** | Usuário padrão | ✅ | ❌ |
-| **Moderador** | Admin limitado | ✅ | ✅ |
-| **Admin** | Controle total | ✅ | ✅ |
+- enxergar evolução individual de forma clara
+- saber exatamente sua posição, divisão e desempenho recente
+- receber reconhecimento social por vitórias, sequência e conquistas
+- reagir aos resultados dos outros e acompanhar o movimento da comunidade
 
-### 4.2 Matriz Detalhada de Permissões
+### Para a operação
 
-| Ação | Jogador | Moderador | Admin |
-|------|:-------:|:---------:|:-----:|
-| Registrar próprias partidas | ✅ | ✅ | ✅ |
-| Ver rankings/notícias | ✅ | ✅ | ✅ |
-| Trocar própria senha | ✅ | ✅ | ✅ |
-| Acessar painel admin | ❌ | ✅ | ✅ |
-| Adicionar novos jogadores | ❌ | ✅ | ✅ |
-| Resetar senhas de outros | ❌ | ✅ | ✅ |
-| Cancelar partidas | ❌ | ✅ | ✅ |
-| Editar pontos manualmente | ❌ | ❌ | ✅ |
-| Ativar/desativar jogadores | ❌ | ❌ | ✅ |
-| Resetar estatísticas | ❌ | ❌ | ✅ |
-| Mudar papéis de usuários | ❌ | ❌ | ✅ |
-| Modificar configurações do sistema | ❌ | ❌ | ✅ |
+- reduzir conferência manual de resultados
+- minimizar discussão sobre placares e responsabilidade de confirmação
+- ter rastreabilidade administrativa
+- conseguir intervir em casos excepcionais sem quebrar o histórico
 
-### 4.3 Estados Especiais de Usuário
+### Para a gestão
 
-**Modo Observador (hide_from_ranking = true):**
-- Usuário pode fazer login e visualizar conteúdo
-- NÃO aparece nos rankings
-- NÃO PODE registrar ou participar de partidas
-- Perfeito para administradores que querem observar sem jogar
-
-**Usuários Inativos (is_active = false):**
-- Não podem fazer login
-- Não aparecem nos rankings
-- Não podem ser selecionados como oponentes
-- Histórico de partidas anteriores é preservado
+- medir frequência, atividade e engajamento do ranking
+- identificar jogadores mais ativos e rivalidades
+- usar o ranking como ferramenta de retenção
+- reforçar a cultura competitiva da escola ou clube
 
 ---
 
-## 5. STACK TÉCNICO
+## 5. O Produto Implementado Hoje
 
-### 5.1 Tecnologias Frontend
+### 5.1 Acesso, autenticação e sessão
 
-**Framework:** Next.js 16.0.7 (App Router)
-**Linguagem:** TypeScript 5
-**Biblioteca UI:** React 19.2.0
-**Estilização:** Tailwind CSS 4 (utility-first)
-**Biblioteca de Componentes:** Radix UI (@radix-ui/react-*)
-**Ícones:** Lucide React 0.556.0
+- login por **Supabase Auth**
+- middleware protege rotas do app e redireciona para `/login` quando não há sessão
+- logout limpa cache local e queries persistidas
+- o app mantém cache local de dados para abrir mais rápido e revalidar em seguida
 
-**Gerenciamento de Estado:**
-- TanStack React Query 5.90.12 (estado do servidor)
-- Stores customizados estilo Zustand (estado do cliente)
+### 5.2 Home
 
-**Animações:** class-variance-authority para variantes
-**Utilitários:** clsx, tailwind-merge
+A tela inicial já funciona como um dashboard operacional compacto.
 
-### 5.2 Backend e Banco de Dados
+Ela mostra:
 
-**Provedor BaaS:** Supabase
-- Banco de dados PostgreSQL
-- Autenticação integrada
-- Assinaturas Realtime
-- Capacidades de Storage
+- pontos atuais do usuário
+- posição no ranking
+- vitórias e derrotas
+- destaques da semana:
+  - líder de sequência de vitórias
+  - jogador mais ativo nos últimos 7 dias
+- top ranking com destaque visual forte para o topo
+- preview de partidas pendentes
+- preview de resultados recentes
+- atalhos para registrar jogo e abrir ranking
 
-**Auth:** Supabase Auth (email/senha)
-**Padrão de API:** Next.js Server Actions
-**Segurança:** Políticas Row Level Security (RLS)
+### 5.3 Ranking
 
-### 5.3 Principais Tabelas do Banco
+O ranking atual é mais sofisticado que uma simples lista por pontos.
 
-**users:**
-- Perfis de usuário e autenticação
-- Pontos de rating e estatísticas
-- Atribuições de papéis (jogador/moderador/admin)
-- Status ativo/inativo
-- Flag de ocultar do ranking
+Recursos implementados:
 
-**matches:**
-- Registros de partidas com referências aos jogadores
-- Placares e resultados
-- Rastreamento de status (pendente/editado/validado/cancelado)
-- Variações de pontos
-- Trilha de auditoria (created_by, approved_by)
+- listagem completa dos jogadores elegíveis
+- busca por nome com filtro client-side
+- contador global de **jogos validados**
+- divisões visuais por blocos de **6 jogadores**
+- destaque especial para o **Top 3**
+- card individual com:
+  - posição
+  - nome
+  - vitórias/derrotas
+  - pontuação atual
+- abertura de **H2H** entre o usuário logado e o jogador selecionado
+- histórico completo de partidas validadas do jogador selecionado
 
-**daily_limits:**
-- Rastreia partidas entre pares de jogadores por data
-- Impõe limites diários de partidas por oponente
+**Importante:** as divisões são hoje uma **camada de apresentação e segmentação visual**, não ligas separadas com regras próprias.
 
-**rating_transactions:**
-- Registro histórico de todas as mudanças de pontos
-- Links para partidas para rastreabilidade
-- Inclui motivo (victory/defeat/admin_adjustment)
+### 5.4 Registro de jogo
 
-**settings:**
-- Configuração em nível de sistema
-- Pontos por vitória/derrota
-- Limites diários de jogos
-- Rating inicial para novos jogadores
+O fluxo de registro foi simplificado para reduzir fricção:
 
-**admin_logs:**
-- Trilha de auditoria completa de ações administrativas
-- Rastreamento de quem, o quê, quando, por quê
-- Valores antes/depois para mudanças
-- Categorizado por tipo de ação
+- seleção de adversário via combobox
+- apenas jogadores **ativos** e **visíveis no ranking** entram na lista
+- placares rápidos no formato:
+  - `3x0`
+  - `3x1`
+  - `3x2`
+  - `0x3`
+  - `1x3`
+  - `2x3`
+- prévia da variação ELO
+- respeito ao limite diário configurado
+- proteção contra reenvio duplicado com `requestId`
 
-### 5.4 Deploy e Infraestrutura
+### 5.5 Partidas
 
-**Hospedagem:** Provavelmente Vercel (plataforma nativa Next.js)
-**Banco de Dados:** Supabase cloud PostgreSQL
-**CDN:** Automático via Vercel
-**Ambiente:** URL de produção via config Supabase
+A área de partidas está dividida em dois contextos:
 
----
+- **Pendentes**
+- **Recentes**
 
-## 6. REGRAS DE NEGÓCIO E GAMIFICAÇÃO
+No fluxo pendente:
 
-### 6.1 Sistema de Pontos (Configurável)
+- quem registrou aguarda
+- quem precisa agir pode **confirmar** ou **contestar**
+- ao contestar, o placar é ajustado e a responsabilidade volta para o outro lado
+- o sistema exibe prazo de resposta e urgência visual
 
-| Evento | Pontos Concedidos | Propósito |
-|--------|-------------------|-----------|
-| **Vitória** | +20 pts (padrão) | Recompensa por vencer |
-| **Derrota** | +8 pts (padrão) | Incentivo para continuar jogando |
-| **Ajuste Admin** | Variável | Correções manuais |
+No fluxo recente:
 
-**Insight Chave:** Até perder dá pontos para incentivar participação e prevenir desmotivação.
+- só entram partidas **validadas**
+- o jogador vê resultado, placar, delta de pontos e status
 
-### 6.2 Regras das Partidas
+### 5.6 Feed de notícias
 
-**Formato:** Melhor de 5 sets (primeiro a ganhar 3 sets vence)
-**Sem Empates:** Toda partida tem um vencedor
-**Validação Obrigatória:** Ambos jogadores devem confirmar para pontos serem aplicados
+O feed atual é um **feed automático de resultados**, não um CMS editorial.
 
-**Fluxo de Contestação:**
-1. Jogador A registra partida com placar
-2. Partida entra em status "pendente"
-3. Jogador B pode "Confirmar" (valida imediatamente) ou "Contestar" (ajusta placar)
-4. Se contestado, status vira "editado" e retorna ao Jogador A
-5. Jogador A deve confirmar placar ajustado
-6. Uma vez confirmado pelo oponente, partida valida e pontos são aplicados
+Cada partida validada gera um item com:
 
-### 6.3 Limites Diários
+- vencedor e perdedor
+- placar final
+- pontos ganhos/perdidos
+- timestamp relativo
 
-- **Padrão:** 2 partidas por dia entre os mesmos jogadores
-- Previne farming de pontos
-- Encoraja jogar contra adversários diversos
-- Configurável pelos administradores
-- Rastreado via tabela `daily_limits`
+Além disso, o feed já tem camada social:
 
-### 6.4 Cálculo de Rating
+- reações por partida
+- uma reação por usuário
+- troca ou remoção da própria reação
+- painel com “quem reagiu”
 
-**Rating Inicial:** 250 pontos (configurável)
-**Adição Simples:** Pontos de vitória/derrota adicionados diretamente ao rating atual
-**Sem Complexidade ELO:** Pontos fixos por resultado independente do rating do oponente
-**Transparente:** Jogadores veem exatamente quantos pontos ganharão antes de confirmar
+### 5.7 Perfil do jogador
 
-### 6.5 Estados do Ciclo de Vida da Partida
+O perfil reúne status competitivo e progressão.
 
-```
-[Registrar] → [Pendente] → [Validado] → [Aparece em Notícias/Ranking]
-                  ↓
-             [Editado] (se contestado)
-                  ↓
-             [Volta para Pendente]
-```
+O usuário vê:
 
----
+- nome e email
+- posição, divisão e destaque visual quando está no topo
+- rating atual
+- vitórias/derrotas
+- win rate
+- streak
+- histórico de rating dos últimos 7 dias
+- últimas partidas validadas
+- seção de conquistas
 
-## 7. PAINEL ADMINISTRATIVO
+### 5.8 Configurações do perfil
 
-### 7.1 Visão Geral do Dashboard Admin
+O jogador pode:
 
-**Hub Central com cards linkando para:**
-- Gestão de Partidas
-- Gestão de Jogadores
-- Configuração do Sistema
-- Logs de Atividade
+- alterar a própria senha
+- ver status das notificações push
+- ativar notificações
+- sincronizar o dispositivo
+- reativar o lembrete de push dentro do app
 
-**Exibe:**
-- Papel do admin (Moderador vs Admin Completo)
-- Estatísticas rápidas de partidas pendentes e jogadores ativos
+### 5.9 Página de regras
 
-### 7.2 Gestão de Partidas (Moderador + Admin)
+Existe uma tela pública para usuários autenticados explicando:
 
-**Recursos:**
-- Visualizar todas as partidas com filtros (Todas, Pendentes, Validadas, Canceladas)
-- Cancelar partidas com motivo obrigatório
-- Reversão automática de pontos para partidas validadas
-- Informações detalhadas (jogadores, placar, datas, status)
+- divisões do ranking
+- destaque do Top 3
+- lógica ELO com exemplos
+- limite de jogos por dia
+- rating inicial
+- critérios mínimos para liberar conquistas de rating
+- prazo de confirmação automática
 
-**Lógica de Cancelar Partida:**
+Isso é importante do ponto de vista de negócio porque reduz percepção de “caixa-preta”.
 
-*Partidas Pendentes:*
-- Simplesmente definir status como "cancelado"
+### 5.10 Modo TV
 
-*Partidas Validadas:*
-1. Reverter mudanças de pontos de ambos jogadores
-2. Atualizar estatísticas de vitória/derrota dos jogadores
-3. Criar transações de rating reversas
-4. Definir partida como "cancelada"
-5. Registrar ação com motivo em admin_logs
+O sistema já possui um **modo TV** em `/tv`, voltado para uso em monitores, recepção, salão ou eventos internos.
 
-### 7.3 Gestão de Jogadores
+Recursos:
 
-**Capacidades do Moderador:**
-- Adicionar novos jogadores com senhas temporárias
-- Resetar senhas de jogadores
-- Visualizar informações de todos os jogadores
+- ranking ao vivo
+- modos `grid` e `table`
+- destaque da última partida validada
+- foco nos jogadores impactados pela última partida
+- animação de mudança de posição
+- som opcional
+- modo `demo`
 
-**Capacidades Exclusivas do Admin:**
-
-**Editar Pontos Manualmente:**
-- Ajustar rating do jogador com motivo obrigatório
-- Cria transação de rating para auditoria
-- Útil para correções ou eventos especiais
-
-**Ativar/Desativar Jogadores:**
-- Jogadores desativados não podem fazer login
-- Removidos dos rankings e listas de oponentes
-
-**Toggle Ocultar do Ranking:**
-- Torna jogador um observador
-- Previne registro de partidas
-- Deve não ter partidas pendentes primeiro
-
-**Resetar Estatísticas:**
-- Zerar vitórias, derrotas, jogos disputados
-- Resetar para rating inicial
-- Ação irreversível com confirmação
-
-**Mudar Papéis de Usuários:**
-- Promover jogadores para moderador/admin
-- Rebaixar moderadores/admins para jogadores
-- Não pode mudar próprio papel (previne lockout de admin)
-
-**Fluxo de Criação de Jogador:**
-1. Admin insere nome, email, senha temporária
-2. Sistema cria usuário auth no Supabase
-3. Cria registro de usuário com rating inicial
-4. Admin comunica credenciais ao jogador
-5. Jogador faz login e troca senha
-
-### 7.4 Configuração do Sistema (Apenas Admin)
-
-**Configurações Ajustáveis:**
-- **Pontos por Vitória:** Padrão 20
-- **Pontos por Derrota:** Padrão 8
-- **Limite Diário de Jogos:** Padrão 2
-- **Rating Inicial do Jogador:** Padrão 250
-
-**Impacto da Configuração:**
-- Mudanças se aplicam a todas partidas futuras imediatamente
-- Partidas passadas permanecem inalteradas
-- Cada mudança registrada em admin_logs
-
-### 7.5 Logs de Atividade Admin
-
-**Trilha de Auditoria Completa:**
-- Toda ação administrativa registrada
-
-**Informações Capturadas:**
-- Quem executou ação (nome do admin + papel)
-- Qual ação (tipos categorizados)
-- Alvo (nome de jogador/partida/configuração)
-- Quando (timestamp)
-- Por quê (motivo quando aplicável)
-- Detalhes (valores antes/depois)
-
-**Tipos de Ação Registrados:**
-- user_created
-- user_password_reset
-- user_activated / user_deactivated
-- user_stats_reset
-- user_rating_changed
-- user_role_changed
-- user_hidden_from_ranking / user_shown_in_ranking
-- match_cancelled
-- setting_changed
-
-**Recursos:**
-- Exibição cronológica
-- Visualizações de detalhes expansíveis
-- Filtros por admin e tipo de ação
-- Paginação para performance
-- Registro permanente (não pode ser deletado)
+Esse módulo amplia o valor do produto para ambientes físicos e reforça clima de competição.
 
 ---
 
-## 8. EXPERIÊNCIA DO USUÁRIO
+## 6. Regras de Negócio Atuais
 
-### 8.1 Inventário de Telas
+### 6.1 Elegibilidade para aparecer no ranking
 
-| Tela | Propósito | Elementos Chave |
-|------|-----------|----------------|
-| **Home** | Dashboard | Stats, top 3, partidas pendentes, ações rápidas |
-| **Ranking** | Ver todos jogadores | Busca, medalhas, posições, estatísticas |
-| **Partidas** | Histórico de partidas | Abas Pendentes/Recentes, ações confirmar/contestar |
-| **Registrar Partida** | Criar nova partida | Seletor de oponente, seletor rápido de placar |
-| **Notícias** | Feed de atividades | Resultados de partidas, timestamps |
-| **Perfil** | Estatísticas pessoais | Gráfico, streak, histórico, configurações |
-| **Login** | Autenticação | Email/senha, toggle de registro |
-| **Admin** | Hub de gestão | Dashboard com links de seções |
-| **Admin/Jogadores** | Gestão de usuários | Adicionar, editar, resetar, ativar |
-| **Admin/Partidas** | Supervisão de partidas | Filtrar, cancelar com motivos |
-| **Admin/Configurações** | Config do sistema | Editar valores de pontos e limites |
-| **Admin/Logs** | Trilha de auditoria | Histórico de atividades pesquisável |
+Para aparecer no ranking principal, o usuário precisa estar:
 
-### 8.2 Estrutura de Navegação
+- com `is_active = true`
+- com `hide_from_ranking = false`
+- com pelo menos `1` jogo disputado
 
-**Barra de Navegação Inferior:**
-- Home (ícone casa)
-- Notícias (ícone jornal)
-- Partidas (ícone checklist)
-- Ranking (ícone troféu)
-- Admin (ícone escudo) - condicional ao papel
-- Perfil (ícone usuário)
+### 6.2 Formato de partida
 
-**Botão de Ação Flutuante (FAB):**
-- "Registrar Jogo" (botão + proeminente)
-- Sempre visível exceto em páginas admin
-- Acesso rápido à ação mais comum
+- melhor de 5 sets
+- encerra ao atingir 3 sets
+- não existe empate
+- o placar é armazenado como resultado agregado (`resultado_a` x `resultado_b`)
 
-**Cabeçalho Superior:**
-- Nome do app: "Smash Pong"
-- Título da página atual
-- Badge com nome do usuário
-- Botão de logout
-- Botão voltar (em páginas de detalhe)
+### 6.3 Limite diário de confrontos
 
-### 8.3 Padrões de Design Visual
+Existe limite configurável de partidas por dia contra o mesmo adversário.
 
-**Codificação por Cores:**
-- Vencedores: Texto verde
-- Perdedores: Texto vermelho
-- Ações primárias: Cor da marca roxo/azul
-- Medalhas: Ouro (#1), Prata (#2), Bronze (#3)
-- Badges de status: Âmbar (pendente), Verde (validado), Vermelho (cancelado)
+Configuração atual do produto:
 
-**Estados de Carregamento:**
-- Telas skeleton para todas visualizações em lista
-- Spinner para ações em progresso
-- Estados desabilitados para ações indisponíveis
+- chave: `limite_jogos_diarios`
+- fallback do frontend: `2`
 
-**Estados Vazios:**
-- Mensagens úteis quando não há dados
-- Chamadas para ação para começar
-- "Registre sua primeira partida" etc.
+Objetivo de negócio:
 
-**Design Responsivo:**
-- Abordagem mobile-first
-- Largura máxima 440px para leitura mobile otimizada
-- Navegação inferior sempre acessível
-- Cabeçalho fixo com info chave
+- evitar farming de pontos
+- incentivar variedade de confrontos
+- distribuir melhor a atividade do ranking
 
-### 8.4 Fluxos de Usuário
+### 6.4 Ciclo de vida de uma partida
 
-**Fluxo de Registro de Novo Jogador:**
-```
-Admin cria conta → Jogador recebe credenciais →
-Login com senha temp → Trocar senha no perfil →
-Registrar primeira partida → Aparece no ranking
-```
+Estados relevantes no produto:
 
-**Fluxo de Registro de Partida:**
-```
-Clicar "Registrar Jogo" → Selecionar oponente →
-Escolher placar (3x0, 3x1, etc.) → Ver preview de pontos →
-Submeter → Oponente confirma/contesta →
-Pontos aplicados → Aparece no feed de notícias
-```
+- `pendente`
+- `edited`
+- `validado`
+- `cancelado`
 
-**Fluxo de Contestação:**
-```
-Receber notificação de partida pendente →
-Discordar do placar → Clicar "Contestar" →
-Ajustar placar → Submeter →
-Criador recebe partida editada →
-Criador confirma → Partida valida
-```
+Fluxo:
 
----
+1. jogador A registra o placar
+2. partida entra como `pendente`
+3. jogador B confirma ou contesta
+4. se contestar, partida vira `edited`
+5. responsabilidade volta para o outro jogador
+6. quando confirmada, vira `validado`
+7. moderador ou admin podem cancelar em qualquer etapa
 
-## 9. DADOS E SEGURANÇA
+### 6.5 Confirmação automática por prazo
 
-### 9.1 Dados Coletados
+O produto já implementa SLA de confirmação:
 
-**Dados de Usuário:**
-- Endereço de email (para login)
-- Nome completo
-- Senha (hasheada pelo Supabase)
-- Rating atual
-- Estatísticas de vitórias/derrotas
-- Histórico de partidas
-- Atribuição de papel
-- Status ativo
+- existe um prazo configurável em horas
+- se ninguém responder dentro do prazo, o sistema valida automaticamente com o placar atual
 
-**Dados de Partida:**
-- IDs dos jogadores
-- Placares
-- Timestamps
-- Status
-- Variações de pontos
-- IDs do criador e aprovador
+Configuração:
 
-**Dados do Sistema:**
-- Configurações
-- Logs de ações admin
-- Limites diários de partidas por par de jogadores
+- chave: `pending_confirmation_deadline_hours`
+- fallback do frontend: `6`
 
-### 9.2 Segurança de Dados
+Esse comportamento reduz acúmulo de pendências e evita travamento do ranking.
 
-**Autenticação:**
-- Supabase Auth com hashing bcrypt de senhas
-- Autenticação baseada em sessão
-- Atualização automática de sessão
-- Reset seguro de senha via email
+### 6.6 Pontuação ELO
 
-**Autorização:**
-- Políticas Row Level Security (RLS) em todas as tabelas
-- Verificações de permissão server-side
-- Renderização de UI baseada em papel no frontend
-- Não pode burlar permissões via chamadas diretas de API
+O ranking usa modelo **ELO**, com características atuais:
 
-**Trilha de Auditoria:**
-- Todas as ações admin registradas
-- Não pode deletar ou modificar logs
-- Inclui valores antes/depois
-- Timestamps para todos os registros
+- soma zero entre vencedor e perdedor
+- quanto mais improvável a vitória, maior o ganho
+- derrota para jogador muito mais fraco pesa mais
+- `k_factor` configurável
+- `k_factor` é congelado na partida para auditoria e consistência futura
 
-### 9.3 Retenção de Dados
+Configurações:
 
-**Histórico de Partidas:**
-- Armazenado permanentemente
-- Habilita estatísticas históricas
-- Permite recálculo de rating
+- `k_factor`
+- `rating_inicial`
 
-**Partidas Canceladas:**
-- Mantidas no banco com status "cancelado"
-- Pontos revertidos mas registro preservado
-- Visível nos logs admin
+Fallbacks usados no app:
 
-**Usuários Desativados:**
-- Perfil e histórico mantidos
-- Podem ser reativados sem perda de dados
-- Partidas passadas permanecem no sistema
+- `k_factor = 24`
+- `rating_inicial = 250`
+
+### 6.7 Impacto da validação
+
+Só partidas **validadas**:
+
+- alteram ranking
+- entram no feed
+- contam para conquistas
+- entram nas métricas consolidadas
+- afetam histórico competitivo do usuário
+
+### 6.8 Cancelamento administrativo
+
+Quando uma partida validada é cancelada:
+
+- rating é revertido
+- estatísticas são revertidas
+- conquistas vinculadas àquela partida podem ser revogadas
+- o evento fica registrado em log
+
+### 6.9 Reações no feed
+
+Regras atuais:
+
+- só existem reações em partidas validadas
+- cada usuário pode ter apenas uma reação por partida
+- o usuário pode trocar ou remover sua reação
+
+### 6.10 Observador e usuário inativo
+
+O produto separa **papel** de **estado operacional**.
+
+**Observador** (`hide_from_ranking = true`):
+
+- consegue entrar no app
+- não aparece no ranking
+- não entra na lista de adversários
+- não pode registrar partida
+
+**Inativo** (`is_active = false`):
+
+- sai das listagens operacionais ativas
+- deixa de compor ranking e seleção normal
+- preserva histórico
 
 ---
 
-## 10. PROPOSTA DE VALOR
+## 7. Gamificação e Retenção
 
-### 10.1 Para Escolas de Tênis de Mesa
+### 7.1 Conquistas
 
-**Administração Fácil:**
-- Auto-serviço de registro de jogadores (pelo admin)
-- Sem cálculos manuais de ranking
-- Rastreamento automático de pontos
-- Trilha de auditoria completa para disputas
+O sistema de conquistas já está implementado com:
 
-**Aumento de Engajamento:**
-- Gamificação encoraja mais partidas
-- Pontos até em derrotas reduzem medo
-- Rankings visíveis criam competição saudável
-- Feed de notícias celebra conquistas
+- catálogo versionado de conquistas
+- categorias múltiplas
+- raridades:
+  - bronze
+  - prata
+  - ouro
+  - platina
+  - diamante
+  - especial
+- desbloqueio automático após validação de partida
+- toast de celebração
+- histórico no perfil
 
-**Configuração Flexível:**
-- Ajustar valores de pontos conforme necessário
-- Controlar limites diários de partidas
-- Definir ratings iniciais
-- Modificar regras sem mudanças de código
+Categorias já usadas no produto:
 
-**Suporte Multi-Admin:**
-- Delegar para moderadores
-- Manter controle total de admin
-- Separação clara de permissões
-- Controle de acesso baseado em papéis
+- primeiros passos
+- vitórias
+- sequências
+- rating
+- especiais
+- sociais
+- veterania
+- atividade
+- marcos
 
-### 10.2 Para Estudantes/Jogadores
+### 7.2 Gatilhos de retenção já presentes
 
-**Sistema Transparente:**
-- Ver pontos exatos antes de confirmar
-- Visualizar todo histórico de partidas
-- Acompanhar progresso pessoal
-- Entender algoritmo de ranking
+- streak visível
+- top 3 fortemente destacado
+- divisões do ranking
+- feed social de resultados
+- reações de outros jogadores
+- painel TV
+- métricas de atividade semanal
+- pendências com prazo
 
-**Mecânicas de Jogo Justo:**
-- Confirmação mútua previne trapaça
-- Contestação permite correção de erros
-- Supervisão admin para disputas
-- Trilha de auditoria para responsabilização
+### 7.3 Gate de maturidade para conquistas de rating
 
-**Recursos de Motivação:**
-- Rastreamento de sequência de vitórias
-- Gráficos de progresso
-- Posicionamento no leaderboard
-- Reconhecimento de conquistas (medalhas top 3)
+As conquistas da categoria `rating` só abrem quando o sistema atinge massa crítica mínima.
 
-**Conveniência Mobile:**
-- Instalável como app (PWA)
-- Registro rápido de partidas
-- Atualizações em tempo real
-- Acessível de qualquer lugar
+Parâmetros configuráveis:
 
-### 10.3 Vantagens Competitivas
+- `achievements_rating_min_players`
+- `achievements_rating_min_validated_matches`
 
-**vs. Sistemas Papel/Planilha:**
-- Cálculos automáticos
-- Sem erros de entrada manual
-- Sempre atualizado
-- Acessível de celulares
-
-**vs. Apps Genéricos de Esporte:**
-- Feito especificamente para tênis de mesa
-- Formato simples melhor de 5
-- Limites diários previnem abuso
-- Branding específico da escola
-
-**vs. Sistemas Complexos de Ranking:**
-- Sem fórmulas ELO complicadas
-- Pontos fixos e previsíveis
-- Fácil de entender para todas as idades
-- Setup rápido e onboarding
+Isso evita premiar “Top 1” ou “rating alto” cedo demais, quando a base ainda é pequena.
 
 ---
 
-## 11. ANÁLISE DE MONETIZAÇÃO
+## 8. Papéis, Permissões e Governança
 
-### 11.1 Modelos Possíveis de Receita
+### 8.1 Perfis oficiais
 
-#### Modelo 1: **Assinatura por Escola (B2B)**
-Vender licença da aplicação para a escola inteira.
+- `player`
+- `moderator`
+- `admin`
 
-**Estruturas possíveis:**
-- **Licença Única:** Pagamento único (ex: R$ 2.000 - R$ 5.000)
-- **Assinatura Mensal:** R$ 100 - R$ 300/mês
-- **Assinatura Anual:** R$ 1.000 - R$ 3.000/ano (desconto vs mensal)
+### 8.2 Matriz prática de acesso
 
-**Prós:**
-- Negociação única com decisor (dono/diretor)
-- Pagamento garantido independente de quantos alunos usam
-- Relacionamento B2B mais previsível
-- Escola controla distribuição aos alunos
-- Menos complexidade de cobrança
+| Capacidade | Jogador | Moderador | Admin |
+|------------|:-------:|:---------:|:-----:|
+| Usar app principal | Sim | Sim | Sim |
+| Registrar e confirmar partidas | Sim | Sim | Sim |
+| Ver ranking, notícias e perfil | Sim | Sim | Sim |
+| Acessar área admin | Não | Sim | Sim |
+| Criar jogador | Não | Sim | Sim |
+| Resetar senha de outro usuário | Não | Sim | Sim |
+| Ver e cancelar partidas | Não | Sim | Sim |
+| Aceitar pendência manualmente | Não | Sim | Sim |
+| Ver métricas e logs | Não | Sim | Sim |
+| Ver configurações | Não | Sim | Sim |
+| Salvar configurações | Não | Não | Sim |
+| Editar nome de outro usuário | Não | Não | Sim |
+| Ajustar rating manualmente | Não | Não | Sim |
+| Ativar/desativar usuário | Não | Não | Sim |
+| Ocultar/mostrar no ranking | Não | Não | Sim |
+| Resetar estatísticas | Não | Não | Sim |
+| Alterar role de outro usuário | Não | Não | Sim |
 
-**Contras:**
-- Precisa convencer escola a pagar (pode ser resistente)
-- Receita não escala com número de alunos
-- Ciclo de vendas pode ser mais longo
-- Dependência de renovação anual
+### 8.3 Auditoria
 
-#### Modelo 2: **Assinatura por Aluno (B2C)**
-Cada aluno paga individualmente para usar o app.
+O produto possui trilha administrativa para eventos como:
 
-**Estruturas possíveis:**
-- **Freemium:** Grátis com features limitadas + R$ 9,90 - R$ 19,90/mês para premium
-- **Assinatura Direta:** R$ 5 - R$ 15/mês por aluno
-- **Pacote Familiar:** Desconto para múltiplos alunos da mesma família
+- criação de jogador
+- reset de senha
+- ativação/desativação
+- alteração de nome
+- ajuste manual de rating
+- mudança de role
+- ocultar/mostrar no ranking
+- reset de estatísticas
+- cancelamento de partida
+- validação manual de pendência
+- confirmação automática por sistema
+- alteração de configuração
 
-**Prós:**
-- Receita escala com crescimento de alunos
-- Alunos podem pagar sem depender da escola
-- Menor barreira de entrada (preço individual baixo)
-- Modelo recorrente previsível
-
-**Contras:**
-- Gestão de muitas cobranças individuais
-- Taxa de churn pode ser alta
-- Precisa gateway de pagamento (custos)
-- Escola pode não apoiar se não recebe parte
-
-#### Modelo 3: **White-Label Personalizado**
-Versão customizada com branding da escola.
-
-**Estruturas possíveis:**
-- **Setup Único + Mensalidade:** R$ 1.500 setup + R$ 200/mês
-- **Licença Premium:** R$ 5.000 - R$ 10.000/ano com customizações
-- **Por Feature:** Cobrar por funcionalidades extras (torneios, analytics avançado)
-
-**Prós:**
-- Preços premium justificados
-- Diferenciação clara de valor
-- Fidelização maior da escola
-- Possibilidade de upsell
-
-**Contras:**
-- Requer desenvolvimento adicional
-- Suporte mais complexo
-- Escala menos eficiente
-
-#### Modelo 4: **Freemium (Gratuito + Premium)**
-Base grátis para escolas pequenas, pago para features avançadas.
-
-**Estruturas possíveis:**
-- **Tier Grátis:** Até 20 alunos, features básicas
-- **Tier Pro:** R$ 150/mês - Até 100 alunos + analytics
-- **Tier Enterprise:** R$ 500/mês - Ilimitado + suporte prioritário
-
-**Prós:**
-- Baixa barreira de entrada
-- Conversão gradual conforme escola cresce
-- Marketing boca-a-boca facilitado
-- Upsell natural
-
-**Contras:**
-- Muitos usuários grátis podem não converter
-- Custos de infraestrutura para tier grátis
-- Complexidade de features por tier
-
-### 11.2 Métricas de Valor
-
-Para entender quanto cobrar, considere:
-
-**Tempo Economizado pela Escola:**
-- Sem app: ~2-5 horas/semana gerenciando rankings manualmente
-- Com app: ~15 minutos/semana (apenas supervisionar)
-- **Economia: 1,5 - 4,5 horas/semana = 6-18 horas/mês**
-
-Se administrador ganha R$ 50/hora:
-- Economia mensal: R$ 300 - R$ 900
-- **Valor justificado: até R$ 200-300/mês**
-
-**Aumento de Retenção:**
-- Taxa de churn de alunos sem engajamento: ~20-30% ao ano
-- Com app e gamificação: possível redução para ~10-15%
-- Em escola de 230 alunos com mensalidade R$ 200:
-  - Perda anual sem app: 46-69 alunos = R$ 110.400 - R$ 165.600
-  - Perda anual com app: 23-35 alunos = R$ 55.200 - R$ 84.000
-  - **Valor retido: R$ 55.200 - R$ 81.600/ano**
-
-**ROI para a Escola:**
-Se app custa R$ 2.400/ano (R$ 200/mês):
-- Economia de tempo: R$ 3.600 - R$ 10.800/ano
-- Receita retida: R$ 55.200 - R$ 81.600/ano
-- **Retorno total: R$ 58.800 - R$ 92.400/ano**
-- **ROI: 2.450% - 3.850%** (retorno de 24x a 38x o investimento!)
-
-### 11.3 Comparação de Abordagens
-
-| Critério | B2B (Escola) | B2C (Aluno) | Freemium | White-Label |
-|----------|:------------:|:-----------:|:--------:|:-----------:|
-| **Facilidade de venda** | Média | Difícil | Fácil | Difícil |
-| **Receita previsível** | Alta | Média | Baixa | Alta |
-| **Escalabilidade** | Média | Alta | Alta | Baixa |
-| **Margem** | Alta | Média | Variável | Muito Alta |
-| **Churn risk** | Baixo | Alto | Médio | Muito Baixo |
-| **Complexidade técnica** | Baixa | Alta | Média | Muito Alta |
-| **Tempo p/ primeira venda** | Médio | Longo | Curto | Longo |
+Isso é importante para ambientes com coordenação, professores e operadores.
 
 ---
 
-## 12. CENÁRIOS DE VENDA
+## 9. Painel Administrativo Atual
 
-### 12.1 Cenário A: Vender para a Escola (Recomendado Inicial)
+O admin hoje já não é apenas um “CRUD de usuários”. Ele opera a plataforma.
 
-**Proposta:**
-"Pacote Completo de Ranking Digital para sua Escola de Tênis de Mesa"
+### 9.1 Módulos disponíveis
 
-**Modelo de Precificação Sugerido:**
-- **Setup Inicial:** R$ 800 (configuração, treinamento, importação de 230 alunos)
-- **Mensalidade:** R$ 299/mês ou R$ 2.990/ano (economia de 2 meses)
-- **Inclui:**
-  - Até 300 alunos
-  - Suporte prioritário
-  - Customizações básicas (logo, cores)
-  - Atualizações ilimitadas
-  - Backups diários
+- **Pendências**
+- **Partidas**
+- **Jogadores**
+- **Métricas**
+- **Configurações**
+- **Histórico**
+- **Painel TV**
+- **Perfis e permissões**
 
-**Argumentos de Venda:**
+### 9.2 Jogadores
 
-1. **ROI Comprovado:**
-   - "Economize 6-18 horas/mês em gestão manual de rankings"
-   - "Aumente retenção de alunos em até 50% com gamificação"
+O módulo de jogadores suporta:
 
-2. **Solução Turnkey:**
-   - "Em 1 semana sua escola está no ar"
-   - "Nós cuidamos da tecnologia, você foca no ensino"
+- listagem paginada
+- busca por nome ou email
+- filtro por status
+- filtro por role
+- criação de novo jogador
+- reset de senha
+- alteração de nome
+- ajuste de rating
+- ativar/desativar conta
+- ocultar/exibir no ranking
+- reset de estatísticas
+- mudança de perfil
 
-3. **Risco Baixo:**
-   - "Teste grátis por 30 dias"
-   - "Sem fidelidade - cancele quando quiser"
+### 9.3 Pendências
 
-4. **Prova Social:**
-   - "Já implementado com sucesso em escola com 230 alunos"
-   - "Taxa de engajamento de 80% dos alunos ativos"
+O módulo de pendências permite:
 
-**Cálculos para Escola de 230 Alunos:**
-- Investimento anual: R$ 2.990 + R$ 800 setup = R$ 3.790 (primeiro ano)
-- Custo por aluno/ano: R$ 16,48 (após primeiro ano: R$ 13,00)
-- Custo por aluno/mês: R$ 1,30 (após primeiro ano: R$ 1,08)
-- **Decisão:** Menos de 1% da mensalidade média - escola pode facilmente absorver
+- ver fila aberta de partidas aguardando ação
+- ver se a pendência é original ou contestada
+- identificar quem está aguardando resposta
+- visualizar timeline da pendência
+- validar manualmente a partida
+- cancelar a partida com motivo
 
-**Objeções Comuns e Respostas:**
+### 9.4 Partidas
 
-| Objeção | Resposta |
-|---------|----------|
-| "Muito caro" | "R$ 1,30/aluno/mês é menos que 1% da mensalidade. E o retorno em retenção paga 24x-38x o investimento." |
-| "Alunos não vão usar" | "Sistema já validado com seus 230 alunos. Teste grátis 30 dias para confirmar engajamento." |
-| "Já temos planilha" | "Com 230 alunos, planilhas são insustentáveis. App economiza 10+ horas/mês e aumenta retenção." |
-| "E se eu cancelar?" | "Sem fidelidade. Mas com ROI de 2.450%+, provavelmente vai querer manter." |
+O módulo de partidas permite:
 
-### 12.2 Cenário B: Vender para Cada Aluno
+- listar partidas por status
+- inspecionar histórico
+- cancelar partidas
+- reverter pontuação em partidas validadas quando aplicável
 
-**Proposta:**
-"App Premium de Ranking para Aprimorar seu Jogo de Tênis de Mesa"
+### 9.5 Configurações
 
-**Modelo de Precificação Sugerido:**
-- **Versão Grátis:** Features básicas (ver ranking, registrar partidas)
-- **Versão Premium:** R$ 9,90/mês ou R$ 89,90/ano
-  - Estatísticas avançadas
-  - Gráficos de progresso
-  - Histórico ilimitado
-  - Análise de performance
-  - Badges e conquistas
+Hoje o produto já administra regras de negócio sem precisar alterar código:
 
-**Argumentos de Venda:**
+- `k_factor`
+- `limite_jogos_diarios`
+- `pending_confirmation_deadline_hours`
+- `rating_inicial`
+- `achievements_rating_min_players`
+- `achievements_rating_min_validated_matches`
 
-1. **Desenvolvimento Pessoal:**
-   - "Acompanhe seu progresso como um profissional"
-   - "Veja tendências e melhore seu jogo"
+### 9.6 Métricas
 
-2. **Competição Saudável:**
-   - "Compare-se com colegas de forma justa"
-   - "Conquiste badges e reconhecimento"
+O painel de métricas já mede:
 
-3. **Preço Acessível:**
-   - "Menos que um lanche por mês"
-   - "Investimento em seu desenvolvimento esportivo"
+- registros de partidas
+- partidas validadas
+- taxa de validação
+- jogadores ativos
+- contas ativas
+- taxa de participação
+- média de registros por dia
+- horas desde o último registro
+- maior intervalo sem atividade
+- novos usuários
+- pendências abertas
+- ações administrativas
 
-**Cálculos para Escola de 230 Alunos:**
-- Se 30% convertem para premium (69 alunos)
-- Receita mensal: 69 × R$ 9,90 = R$ 683,10
-- Receita anual: R$ 8.197,20
-- **Comparação:** Receita superior ao B2B, mas muito maior complexidade operacional
+Também já oferece recortes analíticos como:
 
-**Prós deste Modelo:**
-- Alunos sentem ownership
-- Podem continuar usando mesmo se trocarem de escola
-- Portabilidade de dados
+- visão por dia
+- visão por dia da semana
+- tendência mensal
+- jogadores mais ativos
+- jogadores mais ativos nos últimos 7 dias
+- rivalidades mais frequentes
+- quebra por status de partida
+- quebra por tipo de ação administrativa
+- insights textuais
 
-**Contras deste Modelo:**
-- Baixa taxa de conversão esperada (10-30%)
-- Gestão de muitas cobranças pequenas
-- Custo de gateway de pagamento (5-10% do valor)
-- Escola pode não apoiar se não receber parte
-
-### 12.3 Cenário C: Modelo Híbrido (Melhor dos Dois Mundos)
-
-**Proposta:**
-"Solução Flexível: Escola Decide Como Monetizar"
-
-**Estrutura:**
-1. **Escola compra licença base:** R$ 99/mês
-   - Inclui app completo para todos os alunos
-   - Features padrão
-
-2. **Escola escolhe como repassar:**
-   - **Opção A:** Absorver custo (marketing/retenção)
-   - **Opção B:** Adicionar R$ 10-20 na mensalidade
-   - **Opção C:** Oferecer como opcional premium
-
-3. **Revenue Share em upsells:**
-   - Se alunos comprarem features extras (analytics avançado)
-   - Escola recebe 30% do valor
-
-**Cálculos:**
-- Custo base escola: R$ 199/mês
-- Se escola adiciona R$ 10/mês em 230 alunos:
-  - Receita extra escola: R$ 2.300/mês
-  - Lucro líquido escola: R$ 2.101/mês
-  - **ROI para escola: 1.056%** (mais de 10x o investimento mensalmente!)
-
-**Benefícios:**
-- Escola tem controle total
-- Pode usar como ferramenta de marketing
-- Flexibilidade de modelo
-- Ganha-ganha
-
-### 12.4 Recomendação Final
-
-Para **primeira venda** e contexto atual:
-
-**Modelo Recomendado: Cenário A (B2B para Escola)**
-
-**Justificativa:**
-1. Escola já está usando (implantação existente com 230 alunos)
-2. Decisor único - negociação mais rápida
-3. Menos complexidade de cobrança
-4. ROI extraordinário: 2.450% - 3.850% (retorno de 24x-38x)
-5. Case de sucesso comprovado e em operação
-
-**Precificação Inicial Sugerida:**
-- **R$ 2.990/ano (R$ 249/mês) - Plano Anual**
-- Inclui: até 300 alunos, suporte, atualizações
-- Setup/treinamento: R$ 800 (apenas primeiro ano)
-
-**Pitch de Venda:**
-> "Sua escola com 230 alunos economiza 10+ horas/mês em gestão de rankings e pode aumentar retenção de alunos em até 50%, retendo até R$ 81.600/ano em receita que seria perdida. Por apenas R$ 249/mês (R$ 1,08 por aluno - menos de 1% da mensalidade), você elimina planilhas, reduz disputas e motiva estudantes a praticarem mais. O app já está rodando com seus alunos - vamos apenas formalizar o valor. ROI comprovado de 2.450%-3.850%."
-
-**Próximos Passos:**
-1. Formalizar proposta escrita
-2. Oferecer trial de 30 dias
-3. Coletar métricas de engajamento durante trial
-4. Apresentar resultados e fechar contrato
-5. Usar como case para vender para outras escolas
+Do ponto de vista de negócio, isso transforma o app em ferramenta de gestão de engajamento, não apenas ranking.
 
 ---
 
-## 13. ESCALABILIDADE E CRESCIMENTO
+## 10. Dados, Entidades e Estrutura Operacional
 
-### 13.1 Capacidade Atual
+### 10.1 Entidades centrais
 
-**Arquitetura Técnica:**
-- Suporta centenas de usuários simultâneos
-- Supabase escala automaticamente
-- Next.js lida com conteúdo estático + dinâmico
-- Distribuição CDN para velocidade global
+Hoje o produto gira principalmente em torno de:
 
-**Performance:**
-- Paginação em todas as listas (20 itens/página)
-- Caching inteligente via React Query
-- Otimizações de banco com índices
-- PWA reduz carga de servidor
+- `users`
+- `matches`
+- `settings`
+- `notifications`
+- `admin_logs`
+- `achievements`
+- `user_achievements`
+- `match_reactions`
+- `push_subscriptions`
+- `match_metrics`
 
-### 13.2 Limitações Atuais
+Também existem estruturas auxiliares e históricas, como:
 
-**Arquitetura Mono-Tenant:**
-- Uma instância = uma escola
-- Não há multi-tenancy (isolamento entre escolas)
-- Cada nova escola requer deploy separado
-- Não escala operacionalmente
+- `match_sets`
+- `daily_limits`
+- `rating_transactions`
+- `ranking_snapshots`
+- `news_posts`
+- `live_updates`
 
-**Gestão Manual:**
-- Promoção de admins requer intervenção
-- Sem onboarding automatizado
-- Configuração inicial manual
-- Suporte um-a-um
+### 10.2 Leitura de modelagem de negócio
 
-**Infraestrutura:**
-- Banco de dados único (single point)
-- Sem separação por cliente
-- Custos não otimizados para multi-escola
+- `users` centraliza identidade, status, role e performance
+- `matches` é o coração transacional do produto
+- `settings` torna regras do ranking ajustáveis
+- `notifications` sustenta a sincronização de pendências
+- `admin_logs` dá governança
+- `achievements` e `user_achievements` suportam gamificação
+- `match_reactions` adiciona camada social
+- `push_subscriptions` habilita recall operacional
+- `match_metrics` expõe um total consolidado de jogos validados
 
-### 13.3 Potencial de Multi-Escola
+### 10.3 Implicação de negócio
 
-**Modificações Necessárias:**
+O sistema já está estruturado para operar como produto de ranking contínuo, com:
 
-1. **Multi-Tenancy:**
-   - Adicionar campo `school_id` em todas as tabelas
-   - Políticas RLS por escola
-   - Isolamento completo de dados
-   - Subdomínios por escola (escola-xpto.smashpong.com)
+- rastreabilidade
+- parametrização
+- governança
+- social layer
+- analytics
 
-2. **Sistema de Cadastro:**
-   - Página de signup para escolas
-   - Onboarding wizard (nome, logo, cores)
-   - Criação automática de primeiro admin
-   - Templates de configuração inicial
+Isso o coloca acima de uma solução “planilha + grupo de WhatsApp”.
 
-3. **Billing e Pagamentos:**
-   - Integração Stripe/Mercado Pago
-   - Gestão de planos (free/pro/enterprise)
-   - Cobranças recorrentes automáticas
-   - Dashboard de faturamento
+### 10.4 Base tecnológica atual
 
-4. **Analytics por Escola:**
-   - Métricas de engajamento
-   - Uso de features
-   - Performance de alunos
-   - Exportação de relatórios
+O produto está implementado hoje sobre:
 
-**Estimativa de Esforço:**
-- Desenvolvimento: 2-3 meses full-time
-- Investimento: R$ 20.000 - R$ 40.000 (dev + infraestrutura)
-- Break-even: ~10-15 escolas pagantes
+- **Next.js 16** com App Router
+- **React 19**
+- **TypeScript**
+- **Tailwind CSS v4**
+- **Radix UI** para primitives de interface
+- **TanStack Query** para cache, sincronização e persistência local
+- **Supabase** para auth, banco PostgreSQL e realtime
+- **web-push + service worker** para notificações push
 
-### 13.4 Features Futuras Possíveis
+Em termos de arquitetura de negócio, isso significa:
 
-**Módulo de Torneios:**
-- Criação de campeonatos
-- Chaveamento automático
-- Transmissão ao vivo de placares
-- Premiações e badges especiais
-- **Monetização:** +R$ 50-100/mês por escola
-
-**Analytics Avançado:**
-- Heatmaps de vitórias/derrotas
-- Análise de adversários
-- Previsão de rankings
-- Recomendações de treino
-- **Monetização:** Feature premium +R$ 30/mês
-
-**Integração com Dispositivos:**
-- Placares eletrônicos conectados
-- Registro automático via sensores
-- App de árbitro para oficializar jogos
-- **Monetização:** Hardware + software bundle
-
-**Social Features:**
-- Chat entre jogadores
-- Grupos e equipes
-- Desafios e missões
-- Feed social estilo rede
-- **Monetização:** Ads ou premium social
-
-**Marketplace de Aulas:**
-- Agendamento de aulas particulares
-- Sistema de pagamento integrado
-- Avaliação de professores
-- **Monetização:** Comissão de 10-20% por transação
-
-### 13.5 Roadmap de Crescimento
-
-**Fase 1: Validação (Atual)**
-- ✅ Produto funcionando perfeitamente
-- ✅ Primeira escola usando (230 alunos - validação massiva!)
-- 🎯 **Próximo:** Fechar primeiro contrato pago
-- 🎯 **Meta:** 1-3 escolas pagantes em 3 meses
-
-**Fase 2: Escala Manual (Meses 3-6)**
-- Vender para 5-10 escolas na mesma região
-- Refinar proposta de valor e pricing
-- Coletar cases de sucesso e métricas
-- Desenvolver materiais de marketing
-- **Receita alvo:** R$ 1.500 - R$ 3.000/mês
-
-**Fase 3: Multi-Tenancy (Meses 6-12)**
-- Desenvolver arquitetura multi-escola
-- Implementar signup e onboarding automatizado
-- Integrar gateway de pagamento
-- Criar dashboard de gestão de escolas
-- **Receita alvo:** R$ 10.000 - R$ 20.000/mês
-
-**Fase 4: Expansão (Ano 2)**
-- Marketing digital escalável
-- Parcerias com federações de tênis de mesa
-- Features premium e upsells
-- Expansão geográfica (outras cidades/estados)
-- **Receita alvo:** R$ 50.000+/mês
-
-### 13.6 Projeção Financeira (Cenário Otimista)
-
-**Modelo: B2B R$ 150/mês por escola**
-
-| Mês | Escolas | MRR | Custos | Lucro Mensal |
-|-----|:-------:|:---:|:------:|:------------:|
-| 3 | 3 | R$ 450 | R$ 200 | R$ 250 |
-| 6 | 8 | R$ 1.200 | R$ 400 | R$ 800 |
-| 12 | 20 | R$ 3.000 | R$ 800 | R$ 2.200 |
-| 18 | 40 | R$ 6.000 | R$ 1.500 | R$ 4.500 |
-| 24 | 80 | R$ 12.000 | R$ 3.000 | R$ 9.000 |
-
-**Custos incluem:** Supabase, Vercel, gateway pagamento, marketing, suporte.
-
-**Premissas:**
-- Churn: 10% ao ano (retenção de 90%)
-- CAC (Custo de Aquisição): R$ 300 por escola
-- LTV (Lifetime Value): R$ 1.800 (12 meses × R$ 150)
-- LTV/CAC: 6x (excelente)
+- app web com custo operacional relativamente enxuto
+- boa velocidade de iteração
+- capacidade de observabilidade e governança sem backend tradicional separado
+- viabilidade de operar como produto SaaS enxuto
 
 ---
 
-## CONCLUSÃO
+## 11. Experiência do Usuário, PWA e Tempo Real
 
-O **Smash Pong** é uma aplicação bem arquitetada e focada que resolve um problema real para escolas de tênis de mesa: manter rankings justos, engajadores e transparentes. A combinação de regras simples, design mobile-first, controles administrativos robustos e trilha completa de auditoria o torna valioso tanto para administradores quanto para jogadores.
+### 11.1 PWA
 
-### Proposta de Valor Central
+O produto é instalável como aplicativo web:
 
-**Para a Escola:**
-- ⏱️ Economia de tempo através de automação (6-18 horas/mês)
-- 📈 Aumento de engajamento via gamificação
-- ⚖️ Jogo justo através de validação e auditoria
-- 🔧 Flexibilidade via configurações ajustáveis
-- 📱 Acessibilidade como PWA mobile-first
+- `manifest`
+- ícones dedicados
+- `start_url` em `/login`
+- modo standalone
+- prompt de instalação
+- suporte a iOS e Android/Chrome
 
-**Para os Alunos:**
-- 🎮 Gamificação que motiva a praticar mais
-- 📊 Transparência total no sistema de pontos
-- 🏆 Reconhecimento público de conquistas
-- 📈 Visualização clara de progresso pessoal
-- 🤝 Competição justa e validada
+### 11.2 Push notifications
 
-### Recomendação de Estratégia de Venda
+O produto já envia push para:
 
-**Modelo Recomendado:** Venda B2B para a escola
+- nova partida para confirmar
+- placar contestado com responsabilidade transferida
 
-**Precificação Inicial:**
-- R$ 2.990/ano (ou R$ 249/mês)
-- Inclui até 300 alunos, suporte, atualizações
-- Setup único: R$ 800
+Observação operacional:
 
-**Justificativa:**
-1. ✅ Decisor único (mais rápido de fechar)
-2. ✅ ROI extraordinário (2.450%-3.850% = retorno de 24x-38x!)
-3. ✅ Case de sucesso MASSIVO (230 alunos já usando)
-4. ✅ Baixa complexidade operacional
-5. ✅ Custo irrisório por aluno (R$ 1,08/mês = menos de 1% da mensalidade)
+- push depende de configuração VAPID no ambiente
+- quando não há configuração, o produto continua funcionando sem quebrar o fluxo principal
 
-**Próximos Passos Sugeridos:**
-1. Formalizar proposta comercial
-2. Oferecer trial de 30 dias
-3. Coletar métricas durante trial (engajamento, partidas/dia, retenção)
-4. Apresentar ROI com dados reais
-5. Fechar primeiro contrato
-6. Usar como case para vendas futuras
+Benefício operacional:
 
-### Potencial de Escala
+- reduz tempo de resposta
+- diminui pendências esquecidas
+- aumenta retorno do jogador ao app
 
-Com investimento em multi-tenancy (R$ 20-40k), o app pode escalar para:
-- **Curto prazo (6 meses):** 10-20 escolas = R$ 1.500-3.000/mês
-- **Médio prazo (1 ano):** 50-100 escolas = R$ 7.500-15.000/mês
-- **Longo prazo (2 anos):** 200+ escolas = R$ 30.000+/mês
+### 11.3 Realtime
 
-A fundação técnica é sólida. O produto resolve um problema real com solução elegante. O próximo passo crítico é **validar a disposição de pagamento** da primeira escola e usar isso como combustível para crescimento.
+O app já usa atualização em tempo real para:
+
+- pendências
+- ranking
+- dados derivados que afetam perfil e notícias
+- modo TV
+
+### 11.4 Resiliência de rede
+
+O app também já tem:
+
+- cache persistido de queries
+- banner de status de rede
+- retomada automática após reconexão
+
+**Importante:** isso melhora a resiliência, mas não configura um modo offline transacional completo. O produto ainda depende de conectividade para operar fluxos críticos.
 
 ---
 
-## NÚMEROS-CHAVE PARA ANÁLISE
+## 12. Leitura de Produto e Posicionamento
 
-### Contexto da Escola
-- **230 alunos** (validação massiva do produto)
-- **R$ 46.000/mês** de receita da escola
-- **R$ 552.000/ano** de receita anual
-- **Mensalidade média:** R$ 200/aluno
+### 12.1 O que o Smash Pong App é hoje
 
-### Proposta de Valor Quantificada
+Hoje o produto é melhor descrito como:
 
-**Investimento no App:**
-- R$ 2.990/ano (R$ 249/mês)
-- Setup único: R$ 800
-- **Total primeiro ano:** R$ 3.790
+> uma plataforma de ranking interno gamificado para operação recorrente de tênis de mesa, com controle de partidas, engajamento social e gestão administrativa.
 
-**Retorno Esperado:**
-- Economia de tempo: R$ 3.600 - R$ 10.800/ano
-- Receita retida (retenção): R$ 55.200 - R$ 81.600/ano
-- **Retorno total:** R$ 58.800 - R$ 92.400/ano
-- **ROI:** 2.450% - 3.850% (24x a 38x o investimento!)
+Ele já deixou de ser apenas “um app para anotar jogo”.
 
-**Custo por Aluno:**
-- R$ 1,08/mês por aluno (após primeiro ano)
-- **Menos de 1% da mensalidade média**
-- Completamente absorvível pela escola
+### 12.2 Diferenciais já implementados
 
-### Modelos de Venda Comparados
+- fluxo fechado e controlado por operação
+- validação bilateral de resultado
+- confirmação automática por SLA
+- admin com governança real
+- feed social com reações
+- conquistas
+- ranking com camadas visuais
+- modo TV
+- push notification
+- analytics de engajamento
 
-| Modelo | Receita Anual | Complexidade | Recomendação |
-|--------|:-------------:|:------------:|:------------:|
-| **B2B (Escola)** | R$ 2.990 | Baixa | ⭐⭐⭐⭐⭐ IDEAL |
-| B2C (30% conversão) | R$ 8.197 | Muito Alta | ⭐⭐ |
-| Híbrido (+R$ 10/aluno) | R$ 25.200 | Média | ⭐⭐⭐⭐ |
+### 12.3 O que ainda não aparece como produto no código
 
-### Por Que B2B é Ideal
-1. **ROI imbatível:** 2.450%-3.850%
-2. **Decisão rápida:** Um decisor (diretor/dono)
-3. **Custo irrisório:** R$ 1,08/aluno/mês
-4. **Produto validado:** Já rodando com 230 alunos
-5. **Caso de uso perfeito:** Para vender para outras escolas
+Até o momento, o código não mostra implementação de:
+
+- cobrança/assinatura dentro do app
+- multi-tenant explícito para várias escolas na mesma base
+- torneios, chaves ou campeonatos eliminatórios
+- comentários longos no feed
+- cadastro público/self-service
+- app nativo dedicado
+
+Isso significa que o posicionamento atual é forte em **ranking recorrente**, e não em gestão esportiva completa.
 
 ---
 
-**Documento gerado em:** 23 de dezembro de 2025
-**Versão:** 2.0 (atualizado para 230 alunos)
-**Propósito:** Análise de modelo de negócio e estratégia de monetização
+## 13. Potencial Comercial
+
+### 13.1 Leitura estratégica
+
+Pelo estado atual do produto, o melhor encaixe comercial parece ser:
+
+- **SaaS para escolas e clubes**
+- **ferramenta de retenção para comunidades esportivas**
+- **camada digital de engajamento para ranking presencial**
+
+### 13.2 Argumentos comerciais fortes
+
+- aumenta frequência e recorrência de jogos
+- cria senso de progresso e pertencimento
+- reduz trabalho administrativo
+- dá visibilidade pública ao ranking via TV
+- cria memória de comunidade com feed e histórico
+- melhora governança em ambientes com muitos jogadores
+
+### 13.3 Modelos de monetização possíveis
+
+Como hipótese comercial, o produto já suporta bem modelos como:
+
+- mensalidade por unidade esportiva
+- plano por faixa de jogadores
+- setup/onboarding inicial
+- add-ons premium para métricas, TV ou branding
+
+Esses modelos **não estão implementados no código**, mas o produto já tem densidade funcional para sustentá-los.
+
+---
+
+## 14. Nuances Importantes e Observações
+
+### 14.1 Este documento substitui premissas antigas
+
+Alguns documentos históricos do repositório ainda refletem fases anteriores do produto, por exemplo:
+
+- ranking descrito como “sem divisões”
+- pontuação antiga não baseada em ELO
+- rating inicial em outro valor
+- notícias tratadas como posts editoriais
+
+O estado atual do produto é o descrito neste arquivo.
+
+### 14.2 Divisões são visuais
+
+As divisões do ranking ajudam leitura e motivação, mas não criam regras diferentes de pontuação ou elegibilidade.
+
+### 14.3 Notícias são feed de partidas validadas
+
+Apesar de existir estrutura histórica para `news_posts`, a experiência atual de notícias é essencialmente um feed derivado das partidas validadas.
+
+### 14.4 Confirmação automática é parte central da operação
+
+O produto hoje não depende exclusivamente de moderação humana para destravar ranking. A confirmação automática virou parte da lógica principal de fluidez operacional.
+
+### 14.5 Moderador já é papel operacional forte
+
+O moderador não é apenas “apoio”. Ele já consegue manter a operação rodando em grande parte do dia a dia, sem acesso às decisões mais sensíveis de governança.
+
+---
+
+## 15. Síntese Final
+
+O Smash Pong App evoluiu para um produto de **operação competitiva recorrente**.
+
+Hoje ele combina:
+
+- **sistema de ranking confiável**
+- **ritual social de validação e reconhecimento**
+- **camada de gamificação**
+- **governança administrativa**
+- **telemetria operacional**
+
+Para o usuário final, ele transforma jogo casual em progresso visível.
+
+Para a escola ou clube, ele transforma um ranking informal em um sistema com:
+
+- regra
+- histórico
+- transparência
+- engajamento
+- controle
+
+Esse é o contexto de negócio real do produto no estado atual do código.
