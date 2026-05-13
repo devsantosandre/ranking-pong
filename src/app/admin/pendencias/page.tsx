@@ -21,13 +21,14 @@ import {
   type AdminPendingMatchesResponse,
 } from "@/app/actions/admin";
 
-type PendingFilter = "all" | "pendente" | "edited";
+type PendingFilter = "all" | "pendente" | "edited" | "nonexistent";
 
 function buildFilterOptions(): Array<{ key: PendingFilter; label: string }> {
   return [
     { key: "all", label: "Todas" },
     { key: "pendente", label: "Pendentes" },
     { key: "edited", label: "Contestadas" },
+    { key: "nonexistent", label: "Jogo inexistente" },
   ];
 }
 
@@ -49,7 +50,15 @@ function describeTimelineEvent(event: AdminAnalyticsPendingMatch["timeline"][num
     return `Registrada por ${event.actorName}`;
   }
 
-  return `Placar contestado por ${event.actorName}`;
+  if (event.type === "contested") {
+    return `Placar contestado por ${event.actorName}`;
+  }
+
+  if (event.type === "nonexistent_rejected") {
+    return `Jogo confirmado como existente por ${event.actorName}`;
+  }
+
+  return `Jogo marcado como inexistente por ${event.actorName}`;
 }
 
 function formatDateOnly(dateInput: string) {
@@ -123,15 +132,26 @@ function PendingActionModal({
   if (!state) return null;
 
   const isCancel = state.mode === "cancel";
-  const title = isCancel ? "Cancelar partida" : "Aceitar partida";
-  const confirmText = isCancel ? "Cancelar partida" : "Aceitar partida";
+  const isNonexistent = state.match.pendingKind === "nonexistent";
+  const title = isCancel
+    ? "Cancelar partida"
+    : isNonexistent
+      ? "Aceitar cancelamento"
+      : "Aceitar partida";
+  const confirmText = isCancel
+    ? "Cancelar partida"
+    : isNonexistent
+      ? "Cancelar partida"
+      : "Aceitar partida";
   const playerAWon = state.match.scoreA > state.match.scoreB;
   const playerBWon = state.match.scoreB > state.match.scoreA;
-  const resultSummary = playerAWon
-    ? `Placar informado: ${state.match.playerAName} venceu`
-    : playerBWon
-      ? `Placar informado: ${state.match.playerBName} venceu`
-      : "Placar informado";
+  const resultSummary = isNonexistent
+    ? "Solicitação: jogo não aconteceu"
+    : playerAWon
+      ? `Placar informado: ${state.match.playerAName} venceu`
+      : playerBWon
+        ? `Placar informado: ${state.match.playerBName} venceu`
+        : "Placar informado";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
@@ -191,6 +211,11 @@ function PendingActionModal({
               Esta ação cancela a partida diretamente por aqui. Como ela ainda não foi
               validada, não há pontos para reverter.
             </p>
+          ) : isNonexistent ? (
+            <p>
+              Esta ação aceita a solicitação de jogo inexistente e cancela a partida sem
+              aplicar pontos ao ranking.
+            </p>
           ) : (
             <p>
               Esta ação valida a partida pelo admin, aplica os pontos do placar atual e
@@ -229,7 +254,7 @@ function PendingActionModal({
           </Button>
           <Button
             type="button"
-            className={`flex-1 ${isCancel ? "bg-red-600 hover:bg-red-700 text-white" : ""}`}
+            className={`flex-1 ${isCancel || isNonexistent ? "bg-red-600 hover:bg-red-700 text-white" : ""}`}
             onClick={() => void onConfirm()}
             disabled={loading}
           >
@@ -252,20 +277,30 @@ function PendingMatchRow({
   onAccept: (match: AdminAnalyticsPendingMatch) => void;
   onCancel: (match: AdminAnalyticsPendingMatch) => void;
 }) {
-  const statusLabel = match.status === "edited" ? "Contestada" : "Pendente";
+  const statusLabel =
+    match.pendingKind === "nonexistent"
+      ? "Jogo inexistente"
+      : match.status === "edited"
+        ? "Contestada"
+        : "Pendente";
   const statusTone =
-    match.status === "edited"
+    match.pendingKind === "nonexistent"
+      ? "bg-red-100 text-red-700"
+      : match.status === "edited"
       ? "bg-blue-100 text-blue-700"
       : "bg-amber-100 text-amber-700";
   const playerAWon = match.scoreA > match.scoreB;
   const playerBWon = match.scoreB > match.scoreA;
   const hasTimelineHistory = match.timeline.length > 1;
   const hasPendingStateChange = match.pendingSinceAt !== match.createdAt;
-  const resultSummary = playerAWon
-    ? `Placar informado: ${match.playerAName} venceu`
-    : playerBWon
-      ? `Placar informado: ${match.playerBName} venceu`
-      : "Placar informado";
+  const resultSummary =
+    match.pendingKind === "nonexistent"
+      ? "O jogador responsável informou que este jogo não aconteceu"
+      : playerAWon
+        ? `Placar informado: ${match.playerAName} venceu`
+        : playerBWon
+          ? `Placar informado: ${match.playerBName} venceu`
+          : "Placar informado";
 
   return (
     <article className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -338,7 +373,9 @@ function PendingMatchRow({
           <span className="font-semibold text-foreground">{match.waitingForUserName}</span>
         </div>
         <div className="rounded-lg bg-background/80 px-3 py-2">
-          Confirma automaticamente em{" "}
+          {match.pendingKind === "nonexistent"
+            ? "Cancela automaticamente em "
+            : "Confirma automaticamente em "}
           <span className="font-semibold text-foreground">
             {formatDateTime(match.deadlineAt)}
           </span>
@@ -384,7 +421,7 @@ function PendingMatchRow({
           disabled={loading}
         >
           <CheckCircle2 className="mr-2 h-4 w-4" />
-          Aceitar
+          {match.pendingKind === "nonexistent" ? "Aceitar cancelamento" : "Aceitar"}
         </Button>
         <button
           type="button"
@@ -505,7 +542,20 @@ export default function AdminPendenciasPage() {
 
     try {
       if (actionState.mode === "accept") {
-        await adminValidatePendingMatch(actionState.match.id, "pendencias");
+        if (actionState.match.pendingKind === "nonexistent") {
+          const result = await adminCancelMatch(
+            actionState.match.id,
+            "Solicitação de jogo inexistente aceita pelo admin.",
+            "pendencias"
+          );
+          if (!result.success) {
+            setActionError(result.error);
+            setActionLoading(false);
+            return;
+          }
+        } else {
+          await adminValidatePendingMatch(actionState.match.id, "pendencias");
+        }
       } else {
         const result = await adminCancelMatch(
           actionState.match.id,
@@ -535,6 +585,8 @@ export default function AdminPendenciasPage() {
         return items.filter((item) => item.status === "pendente");
       case "edited":
         return items.filter((item) => item.status === "edited");
+      case "nonexistent":
+        return items.filter((item) => item.pendingKind === "nonexistent");
       default:
         return items;
     }
@@ -569,7 +621,7 @@ export default function AdminPendenciasPage() {
               </p>
               <p className="text-xs text-muted-foreground">
                 Aqui o admin enxerga rapidamente quais jogos ainda esperam resposta, de
-                quem é a pendência agora e pode resolver os casos antes da confirmação automática.
+                quem é a pendência agora e pode resolver os casos antes da confirmação ou cancelamento automático.
               </p>
             </div>
           </div>
@@ -637,6 +689,12 @@ export default function AdminPendenciasPage() {
                 description="Jogos que voltaram para revisão"
                 tone="border-blue-200 bg-blue-50"
               />
+              <SummaryCard
+                title="Jogo inexistente"
+                value={formatNumber(data.nonexistentCount)}
+                description="Pedidos aguardando confirmação de cancelamento"
+                tone="border-red-200 bg-red-50"
+              />
             </div>
 
             <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -647,7 +705,7 @@ export default function AdminPendenciasPage() {
                 <div className="min-w-0">
                   <h2 className="text-sm font-semibold text-foreground">Filtros rápidos</h2>
                   <p className="text-xs text-muted-foreground">
-                    O prazo configurado hoje é de {deadlineHours}h para confirmar ou contestar antes da validação automática pelo sistema.
+                    O prazo configurado hoje é de {deadlineHours}h para confirmar, contestar ou aceitar cancelamento antes da ação automática pelo sistema.
                   </p>
                 </div>
               </div>
@@ -710,13 +768,16 @@ export default function AdminPendenciasPage() {
             <div className="min-w-0">
                   <h2 className="text-sm font-semibold text-foreground">Como acompanhar</h2>
                   <p className="text-xs text-muted-foreground">
-                    Use este painel para acompanhar os jogos em aberto e agir antes que o sistema confirme automaticamente.
+                    Use este painel para acompanhar os jogos em aberto e agir antes que o sistema confirme ou cancele automaticamente.
                   </p>
                 </div>
               </div>
           <div className="mt-4 space-y-3 text-sm text-foreground">
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
               Pendente significa que o adversário ainda não confirmou o placar enviado.
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+              Jogo inexistente significa que um jogador pediu cancelamento e o outro precisa confirmar; sem resposta no prazo, o sistema cancela.
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
               Contestada significa que alguém alterou o placar e a outra pessoa precisa

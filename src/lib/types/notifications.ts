@@ -1,6 +1,8 @@
 export type PendingNotificationEvent =
   | "pending_created"
   | "pending_transferred"
+  | "nonexistent_claimed"
+  | "nonexistent_rejected"
   | "pending_resolved";
 
 export type PendingNotificationStatus =

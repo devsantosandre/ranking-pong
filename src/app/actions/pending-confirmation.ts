@@ -2,11 +2,14 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 import {
   enforcePendingConfirmationSla,
   getPendingConfirmationDeadlineHours,
   getOpenPendingConfirmationSnapshots,
 } from "@/lib/matches/confirmation-sla";
+
+const RECENT_MATCHES_PAGE_SIZE = 20;
 
 type RankingVisibleUser = {
   id: string;
@@ -58,6 +61,20 @@ type CurrentUserPendingMatchRow = {
   player_b: PendingUserRelation;
 };
 
+type CurrentUserRecentMatchRow = CurrentUserPendingMatchRow;
+
+type RecentNotificationRow = {
+  created_at: string;
+  payload: unknown;
+};
+
+type RecentAdminLogRow = {
+  target_id: string | null;
+  action: string | null;
+  admin_role: string | null;
+  created_at: string | null;
+};
+
 export type CurrentUserPendingMatch = {
   id: string;
   player_a_id: string;
@@ -72,6 +89,9 @@ export type CurrentUserPendingMatch = {
   pontos_variacao_a: number | null;
   pontos_variacao_b: number | null;
   confirmation_deadline_at: string | null;
+  pending_kind: "score" | "nonexistent";
+  pending_context: "default" | "nonexistent_rejected";
+  pending_context_actor_id: string | null;
   player_a: {
     id: string;
     name: string | null;
@@ -84,6 +104,50 @@ export type CurrentUserPendingMatch = {
     full_name: string | null;
     email: string | null;
   };
+};
+
+export type MatchCancellationReason = "nonexistent" | null;
+export type MatchCancellationActor = "system" | "player" | "admin" | null;
+
+export type CurrentUserRecentMatch = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  vencedor_id: string | null;
+  resultado_a: number;
+  resultado_b: number;
+  status: string;
+  criado_por: string;
+  aprovado_por: string | null;
+  created_at: string;
+  pontos_variacao_a: number | null;
+  pontos_variacao_b: number | null;
+  cancellation_reason: MatchCancellationReason;
+  cancellation_actor: MatchCancellationActor;
+  cancellation_actor_name: string | null;
+  cancellation_resolved_at: string | null;
+  player_a: {
+    id: string;
+    name: string | null;
+    full_name: string | null;
+    email: string | null;
+  };
+  player_b: {
+    id: string;
+    name: string | null;
+    full_name: string | null;
+    email: string | null;
+  };
+};
+
+export type CurrentUserRecentMatchesPage = {
+  matches: CurrentUserRecentMatch[];
+  nextPage: number | undefined;
+};
+
+export type CurrentUserMatchCounts = {
+  pendentes: number;
+  recentes: number;
 };
 
 export type HomeStreakHighlightResult = {
@@ -130,6 +194,149 @@ function normalizePendingUserRelation(
     full_name: normalized?.full_name ?? null,
     email: normalized?.email ?? null,
   };
+}
+
+function parseRecentPendingNotificationPayload(
+  payload: unknown
+): PendingNotificationPayloadV1 | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const candidate = payload as Partial<PendingNotificationPayloadV1>;
+  if (
+    candidate.event !== "pending_created" &&
+    candidate.event !== "pending_transferred" &&
+    candidate.event !== "nonexistent_claimed" &&
+    candidate.event !== "nonexistent_rejected" &&
+    candidate.event !== "pending_resolved"
+  ) {
+    return null;
+  }
+
+  if (
+    typeof candidate.match_id !== "string" ||
+    typeof candidate.status !== "string" ||
+    typeof candidate.actor_id !== "string" ||
+    typeof candidate.created_by !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    event: candidate.event,
+    match_id: candidate.match_id,
+    status: candidate.status as PendingNotificationPayloadV1["status"],
+    actor_id: candidate.actor_id,
+    actor_name: typeof candidate.actor_name === "string" ? candidate.actor_name : null,
+    created_by: candidate.created_by,
+  };
+}
+
+async function getCancellationInfoByMatchId(
+  supabase: ReturnType<typeof createAdminClient>,
+  canceledMatchIds: string[]
+) {
+  const cancellationInfoByMatchId = new Map<
+    string,
+    {
+      reason: MatchCancellationReason;
+      actor: MatchCancellationActor;
+      actorName: string | null;
+      resolvedAt: string | null;
+    }
+  >();
+
+  if (canceledMatchIds.length === 0) {
+    return cancellationInfoByMatchId;
+  }
+
+  const [notificationsResult, adminLogsResult] = await Promise.all([
+    supabase
+      .from("notifications")
+      .select("created_at, payload")
+      .eq("tipo", "confirmacao")
+      .in("payload->>match_id", canceledMatchIds)
+      .order("created_at", { ascending: true })
+      .returns<RecentNotificationRow[]>(),
+    supabase
+      .from("admin_logs")
+      .select("target_id, action, admin_role, created_at")
+      .eq("target_type", "match")
+      .in("target_id", canceledMatchIds)
+      .in("action", ["match_auto_cancelled_nonexistent"])
+      .order("created_at", { ascending: true })
+      .returns<RecentAdminLogRow[]>(),
+  ]);
+
+  if (notificationsResult.error) {
+    throw new Error("Erro ao carregar histórico de cancelamento");
+  }
+
+  if (adminLogsResult.error) {
+    throw new Error("Erro ao carregar logs de cancelamento");
+  }
+
+  const latestPendingKindByMatchId = new Map<string, "score" | "nonexistent">();
+  const latestCancelledResolutionByMatchId = new Map<
+    string,
+    {
+      actor: MatchCancellationActor;
+      actorName: string | null;
+      resolvedAt: string;
+    }
+  >();
+
+  for (const row of notificationsResult.data ?? []) {
+    const payload = parseRecentPendingNotificationPayload(row.payload);
+    if (!payload || !canceledMatchIds.includes(payload.match_id)) {
+      continue;
+    }
+
+    if (
+      payload.event === "pending_created" ||
+      payload.event === "pending_transferred" ||
+      payload.event === "nonexistent_claimed" ||
+      payload.event === "nonexistent_rejected"
+    ) {
+      latestPendingKindByMatchId.set(
+        payload.match_id,
+        payload.event === "nonexistent_claimed" ? "nonexistent" : "score"
+      );
+      continue;
+    }
+
+    if (payload.event === "pending_resolved" && payload.status === "cancelado") {
+      latestCancelledResolutionByMatchId.set(payload.match_id, {
+        actor: payload.actor_id === "system" ? "system" : "player",
+        actorName: payload.actor_name,
+        resolvedAt: row.created_at,
+      });
+
+      if (latestPendingKindByMatchId.get(payload.match_id) === "nonexistent") {
+        cancellationInfoByMatchId.set(payload.match_id, {
+          reason: "nonexistent",
+          actor: payload.actor_id === "system" ? "system" : "player",
+          actorName: payload.actor_name,
+          resolvedAt: row.created_at,
+        });
+      }
+    }
+  }
+
+  for (const log of adminLogsResult.data ?? []) {
+    if (log.action !== "match_auto_cancelled_nonexistent" || !log.target_id) {
+      continue;
+    }
+
+    const resolved = latestCancelledResolutionByMatchId.get(log.target_id);
+    cancellationInfoByMatchId.set(log.target_id, {
+      reason: "nonexistent",
+      actor: log.admin_role === "system" ? "system" : "admin",
+      actorName: resolved?.actorName ?? "Cancelamento automático",
+      resolvedAt: resolved?.resolvedAt ?? log.created_at,
+    });
+  }
+
+  return cancellationInfoByMatchId;
 }
 
 export async function getCurrentUserPendingConfirmationStatusAction(): Promise<CurrentUserPendingConfirmationStatus> {
@@ -230,6 +437,15 @@ export async function getCurrentUserPendingMatchesAction(): Promise<
   const deadlineByMatchId = new Map(
     snapshots.map((snapshot) => [snapshot.matchId, snapshot.currentDeadlineAt])
   );
+  const pendingKindByMatchId = new Map(
+    snapshots.map((snapshot) => [snapshot.matchId, snapshot.pendingKind])
+  );
+  const pendingContextByMatchId = new Map(
+    snapshots.map((snapshot) => [snapshot.matchId, snapshot.pendingContext])
+  );
+  const pendingContextActorByMatchId = new Map(
+    snapshots.map((snapshot) => [snapshot.matchId, snapshot.pendingContextActorId])
+  );
 
   return ((matchesResult.data ?? []) as CurrentUserPendingMatchRow[]).map((match) => ({
     id: match.id,
@@ -245,9 +461,141 @@ export async function getCurrentUserPendingMatchesAction(): Promise<
     pontos_variacao_a: match.pontos_variacao_a,
     pontos_variacao_b: match.pontos_variacao_b,
     confirmation_deadline_at: deadlineByMatchId.get(match.id) ?? null,
+    pending_kind: pendingKindByMatchId.get(match.id) ?? "score",
+    pending_context: pendingContextByMatchId.get(match.id) ?? "default",
+    pending_context_actor_id: pendingContextActorByMatchId.get(match.id) ?? null,
     player_a: normalizePendingUserRelation(match.player_a, match.player_a_id),
     player_b: normalizePendingUserRelation(match.player_b, match.player_b_id),
   }));
+}
+
+export async function getCurrentUserRecentMatchesAction(
+  page = 0
+): Promise<CurrentUserRecentMatchesPage> {
+  const safePage = Number.isFinite(page) && page > 0 ? Math.trunc(page) : 0;
+  const from = safePage * RECENT_MATCHES_PAGE_SIZE;
+  const to = from + RECENT_MATCHES_PAGE_SIZE - 1;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      matches: [],
+      nextPage: undefined,
+    };
+  }
+
+  const adminSupabase = createAdminClient();
+  await enforcePendingConfirmationSla({ supabase: adminSupabase });
+
+  const { data, error } = await adminSupabase
+    .from("matches")
+    .select(
+      `
+      id,
+      player_a_id,
+      player_b_id,
+      vencedor_id,
+      resultado_a,
+      resultado_b,
+      status,
+      criado_por,
+      aprovado_por,
+      created_at,
+      pontos_variacao_a,
+      pontos_variacao_b,
+      player_a:users!player_a_id(id, name, full_name, email),
+      player_b:users!player_b_id(id, name, full_name, email)
+    `
+    )
+    .or(`player_a_id.eq.${user.id},player_b_id.eq.${user.id}`)
+    .in("status", ["validado", "cancelado"])
+    .order("created_at", { ascending: false })
+    .range(from, to)
+    .returns<CurrentUserRecentMatchRow[]>();
+
+  if (error) {
+    throw new Error("Erro ao carregar partidas recentes");
+  }
+
+  const rows = data ?? [];
+  const canceledMatchIds = rows
+    .filter((match) => match.status === "cancelado")
+    .map((match) => match.id);
+  const cancellationInfoByMatchId = await getCancellationInfoByMatchId(
+    adminSupabase,
+    canceledMatchIds
+  );
+
+  return {
+    matches: rows.map((match) => {
+      const cancellationInfo = cancellationInfoByMatchId.get(match.id);
+
+      return {
+        id: match.id,
+        player_a_id: match.player_a_id,
+        player_b_id: match.player_b_id,
+        vencedor_id: match.vencedor_id,
+        resultado_a: match.resultado_a,
+        resultado_b: match.resultado_b,
+        status: match.status,
+        criado_por: match.criado_por,
+        aprovado_por: match.aprovado_por,
+        created_at: match.created_at,
+        pontos_variacao_a: match.pontos_variacao_a,
+        pontos_variacao_b: match.pontos_variacao_b,
+        cancellation_reason: cancellationInfo?.reason ?? null,
+        cancellation_actor: cancellationInfo?.actor ?? null,
+        cancellation_actor_name: cancellationInfo?.actorName ?? null,
+        cancellation_resolved_at: cancellationInfo?.resolvedAt ?? null,
+        player_a: normalizePendingUserRelation(match.player_a, match.player_a_id),
+        player_b: normalizePendingUserRelation(match.player_b, match.player_b_id),
+      };
+    }),
+    nextPage: rows.length === RECENT_MATCHES_PAGE_SIZE ? safePage + 1 : undefined,
+  };
+}
+
+export async function getCurrentUserMatchCountsAction(): Promise<CurrentUserMatchCounts> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      pendentes: 0,
+      recentes: 0,
+    };
+  }
+
+  const adminSupabase = createAdminClient();
+  await enforcePendingConfirmationSla({ supabase: adminSupabase });
+
+  const baseFilter = `player_a_id.eq.${user.id},player_b_id.eq.${user.id}`;
+  const [pendingResult, recentResult] = await Promise.all([
+    adminSupabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .or(baseFilter)
+      .in("status", ["pendente", "edited"]),
+    adminSupabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .or(baseFilter)
+      .in("status", ["validado", "cancelado"]),
+  ]);
+
+  if (pendingResult.error || recentResult.error) {
+    throw new Error("Erro ao carregar contadores de partidas");
+  }
+
+  return {
+    pendentes: pendingResult.count ?? 0,
+    recentes: recentResult.count ?? 0,
+  };
 }
 
 export async function getHomeHighlightsAction(): Promise<HomeHighlightsActionResult> {

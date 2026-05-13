@@ -28,7 +28,7 @@ Válido para `tipo = 'confirmacao'`.
 
 | Campo | Tipo | Descrição |
 |------|------|-----------|
-| `event` | string | `pending_created`, `pending_transferred`, `pending_resolved` |
+| `event` | string | `pending_created`, `pending_transferred`, `nonexistent_claimed`, `pending_resolved` |
 | `match_id` | string | ID da partida |
 | `status` | string | `pendente`, `edited`, `validado`, `cancelado` |
 | `actor_id` | string | ID de quem disparou o evento |
@@ -50,6 +50,7 @@ AND criado_por != :userId
 Resumo:
 - Em `pendente`, quem não criou deve agir.
 - Em `edited`, a ação é transferida para o outro jogador.
+- Quando o último evento é `nonexistent_claimed`, a pendência continua em `edited`, mas a ação esperada é confirmar o cancelamento. Se o prazo expirar, o sistema cancela a partida.
 
 ---
 
@@ -98,6 +99,7 @@ Arquivo: `src/app/actions/matches.ts`
 
 - `registerMatchAction` -> envia push para o oponente (`pending_created`).
 - `contestMatchAction` -> envia push para o outro jogador (`pending_transferred`).
+- `reportMatchDidNotHappenAction` -> envia push para o outro jogador confirmar cancelamento (`nonexistent_claimed`).
 
 Arquivo: `src/lib/push.ts`
 
@@ -177,7 +179,9 @@ Observação:
 1. A registra partida -> B recebe alerta e badge sem refresh.
 2. B contesta -> pendência sai de B e aparece para A.
 3. A confirma -> pendência some para ambos.
-4. Admin cancela (`pendente/edited`) -> pendência some para ambos.
+4. B marca "jogo não existiu" -> pendência sai de B e aparece para A confirmar cancelamento.
+5. A confirma cancelamento -> pendência some para ambos e a partida fica `cancelado`.
+6. Admin cancela (`pendente/edited`) -> pendência some para ambos.
 
 ### Push
 

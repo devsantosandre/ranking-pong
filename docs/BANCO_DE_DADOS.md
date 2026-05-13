@@ -92,7 +92,7 @@ Registro de todas as partidas do sistema.
 
 **Status possíveis:**
 - `pendente` - Aguardando confirmação do oponente
-- `edited` - Placar foi contestado/editado
+- `edited` - Pendência transferida por placar contestado/editado ou por solicitação de jogo inexistente
 - `validado` - Confirmada e pontos aplicados
 - `cancelado` - Cancelada por admin
 - `in_progress` - Em andamento (futuro)
@@ -310,12 +310,15 @@ Notificações dos usuários.
 - `idx_notifications_user_lida_created_at (user_id, lida, created_at DESC)`
 
 **Payload usado em `tipo = 'confirmacao'` (V1):**
-- `event`: `pending_created` | `pending_transferred` | `pending_resolved`
+- `event`: `pending_created` | `pending_transferred` | `nonexistent_claimed` | `pending_resolved`
 - `match_id`: UUID da partida
 - `status`: `pendente` | `edited` | `validado` | `cancelado`
 - `actor_id`: UUID de quem disparou o evento
 - `actor_name`: Nome exibível de quem disparou o evento
 - `created_by`: UUID de quem criou/ajustou o registro principal da pendência
+
+Observação:
+- `nonexistent_claimed` usa `status = 'edited'`; a diferença fica no payload para indicar que a próxima confirmação cancela a partida, e não valida o placar.
 
 **Policies relevantes (RLS):**
 - `Users can view own notifications` (`SELECT` em `user_id = auth.uid()`)

@@ -14,11 +14,16 @@ import { queryKeys } from "./query-keys";
 import {
   confirmMatchAction,
   contestMatchAction,
+  confirmMatchDidHappenAction,
   registerMatchAction,
+  reportMatchDidNotHappenAction,
 } from "@/app/actions/matches";
 import {
+  getCurrentUserMatchCountsAction,
   getCurrentUserPendingMatchesAction,
+  getCurrentUserRecentMatchesAction,
   getHomeHighlightsAction,
+  type CurrentUserRecentMatch,
   type CurrentUserPendingMatch,
 } from "@/app/actions/pending-confirmation";
 
@@ -50,6 +55,13 @@ export type MatchWithUsers = MatchData & {
   player_a: UserInfo;
   player_b: UserInfo;
   confirmation_deadline_at?: string | null;
+  pending_kind?: "score" | "nonexistent";
+  pending_context?: "default" | "nonexistent_rejected";
+  pending_context_actor_id?: string | null;
+  cancellation_reason?: CurrentUserRecentMatch["cancellation_reason"];
+  cancellation_actor?: CurrentUserRecentMatch["cancellation_actor"];
+  cancellation_actor_name?: string | null;
+  cancellation_resolved_at?: string | null;
 };
 
 export type PlayerValidatedMatch = {
@@ -267,37 +279,15 @@ export function usePendingMatches(userId: string | undefined) {
 }
 
 export function useRecentMatches(userId: string | undefined) {
-  const supabase = createClient();
-
   return useInfiniteQuery({
     queryKey: queryKeys.matches.recent(userId || "anonymous"),
     queryFn: async ({ pageParam = 0 }) => {
       if (!userId) {
-        return { matches: [] as MatchWithUsers[], nextPage: undefined };
+        return { matches: [] as CurrentUserRecentMatch[], nextPage: undefined };
       }
 
-      const from = pageParam * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      const { data: matchesData, error: matchesError } = await supabase
-        .from("matches")
-        .select("*")
-        .or(`player_a_id.eq.${userId},player_b_id.eq.${userId}`)
-        .eq("status", "validado")
-        .order("created_at", { ascending: false })
-        .range(from, to);
-
-      if (matchesError) throw matchesError;
-      if (!matchesData || matchesData.length === 0) {
-        return { matches: [] as MatchWithUsers[], nextPage: undefined };
-      }
-
-      const matchesWithUsers = await fetchMatchesWithUsers(supabase, matchesData as MatchData[]);
-
-      return {
-        matches: matchesWithUsers,
-        nextPage: matchesData.length === PAGE_SIZE ? pageParam + 1 : undefined,
-      };
+      const page = typeof pageParam === "number" ? pageParam : 0;
+      return getCurrentUserRecentMatchesAction(page);
     },
     getNextPageParam: (lastPage) => lastPage.nextPage,
     initialPageParam: 0,
@@ -379,8 +369,6 @@ export function usePlayerValidatedMatches(playerId: string | undefined) {
 }
 
 export function useMatchCounts(userId: string | undefined) {
-  const supabase = createClient();
-
   return useQuery({
     queryKey: queryKeys.matches.counts(userId),
     queryFn: async () => {
@@ -388,28 +376,7 @@ export function useMatchCounts(userId: string | undefined) {
         return { pendentes: 0, recentes: 0 } as MatchCounts;
       }
 
-      const baseFilter = `player_a_id.eq.${userId},player_b_id.eq.${userId}`;
-
-      const [pendingResult, recentResult] = await Promise.all([
-        supabase
-          .from("matches")
-          .select("id", { count: "exact", head: true })
-          .or(baseFilter)
-          .in("status", ["pendente", "edited"]),
-        supabase
-          .from("matches")
-          .select("id", { count: "exact", head: true })
-          .or(baseFilter)
-          .eq("status", "validado"),
-      ]);
-
-      if (pendingResult.error) throw pendingResult.error;
-      if (recentResult.error) throw recentResult.error;
-
-      return {
-        pendentes: pendingResult.count ?? 0,
-        recentes: recentResult.count ?? 0,
-      } as MatchCounts;
+      return getCurrentUserMatchCountsAction();
     },
     enabled: !!userId,
   });
@@ -602,6 +569,52 @@ export function useContestMatch() {
       const result = await contestMatchAction(matchId, userId, newOutcome);
       if (!result.success) {
         throw new Error(result.error || "Erro ao contestar partida");
+      }
+      return result;
+    },
+    networkMode: "online",
+    retry: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.matches.all, "pending-status"],
+      });
+    },
+  });
+}
+
+export function useReportMatchDidNotHappen() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ matchId, userId }: { matchId: string; userId: string }) => {
+      const result = await reportMatchDidNotHappenAction(matchId, userId);
+      if (!result.success) {
+        throw new Error(result.error || "Erro ao marcar jogo como inexistente");
+      }
+      return result;
+    },
+    networkMode: "online",
+    retry: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.matches.all, "pending-status"],
+      });
+    },
+  });
+}
+
+export function useConfirmMatchDidHappen() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ matchId, userId }: { matchId: string; userId: string }) => {
+      const result = await confirmMatchDidHappenAction(matchId, userId);
+      if (!result.success) {
+        throw new Error(result.error || "Erro ao informar que o jogo existiu");
       }
       return result;
     },

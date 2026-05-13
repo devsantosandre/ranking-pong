@@ -11,6 +11,7 @@ import { validatePendingMatchByActor } from "@/lib/matches/validate-pending-matc
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 import {
   enforcePendingConfirmationSla,
+  getOpenPendingConfirmationSnapshots,
   getPendingConfirmationDeadlineHours,
   shiftOpenPendingConfirmationDeadlines,
 } from "@/lib/matches/confirmation-sla";
@@ -190,6 +191,7 @@ export type AdminAnalyticsRivalry = {
 export type AdminAnalyticsPendingMatch = {
   id: string;
   status: "pendente" | "edited";
+  pendingKind: "score" | "nonexistent";
   playersLabel: string;
   scoreLabel: string;
   playerAName: string;
@@ -207,7 +209,7 @@ export type AdminAnalyticsPendingMatch = {
   deadlineAt: string;
   timeline: {
     id: string;
-    type: "registered" | "contested";
+    type: "registered" | "contested" | "nonexistent_claimed" | "nonexistent_rejected";
     actorName: string;
     occurredAt: string;
   }[];
@@ -218,6 +220,7 @@ export type AdminPendingMatchesResponse = {
   openCount: number;
   pendingCount: number;
   editedCount: number;
+  nonexistentCount: number;
   items: AdminAnalyticsPendingMatch[];
 };
 
@@ -337,6 +340,12 @@ const ADMIN_ACTION_METADATA: Record<
     key: "match_auto_validated",
     label: "Partidas confirmadas automaticamente",
     description: "Partidas validadas pelo sistema ao fim do prazo configurado.",
+  },
+  match_auto_cancelled_nonexistent: {
+    key: "match_auto_cancelled_nonexistent",
+    label: "Partidas canceladas automaticamente",
+    description:
+      "Partidas canceladas pelo sistema quando uma solicitação de jogo inexistente não recebeu resposta no prazo.",
   },
   match_corrected_without_recalculation: {
     key: "match_corrected_without_recalculation",
@@ -1137,9 +1146,10 @@ function mapPendingMatchRows(
     string,
     {
       pendingSinceAt: string;
+      pendingKind: "score" | "nonexistent";
       timeline: {
         id: string;
-        type: "registered" | "contested";
+        type: "registered" | "contested" | "nonexistent_claimed" | "nonexistent_rejected";
         actorName: string;
         occurredAt: string;
       }[];
@@ -1188,6 +1198,7 @@ function mapPendingMatchRows(
       return {
         id: match.id,
         status: match.status,
+        pendingKind: timelineEntry?.pendingKind ?? "score",
         playersLabel: `${playerAName} x ${playerBName}`,
         scoreLabel: `${scoreA}x${scoreB}`,
         playerAName,
@@ -1221,6 +1232,8 @@ function parsePendingNotificationPayload(
   if (
     candidate.event !== "pending_created" &&
     candidate.event !== "pending_transferred" &&
+    candidate.event !== "nonexistent_claimed" &&
+    candidate.event !== "nonexistent_rejected" &&
     candidate.event !== "pending_resolved"
   ) {
     return null;
@@ -1254,9 +1267,10 @@ function buildPendingTimelineByMatchId(
     string,
     {
       pendingSinceAt: string;
+      pendingKind: "score" | "nonexistent";
       timeline: {
         id: string;
-        type: "registered" | "contested";
+        type: "registered" | "contested" | "nonexistent_claimed" | "nonexistent_rejected";
         actorName: string;
         occurredAt: string;
       }[];
@@ -1269,22 +1283,37 @@ function buildPendingTimelineByMatchId(
       continue;
     }
 
-    if (payload.event !== "pending_created" && payload.event !== "pending_transferred") {
+    if (
+      payload.event !== "pending_created" &&
+      payload.event !== "pending_transferred" &&
+      payload.event !== "nonexistent_claimed" &&
+      payload.event !== "nonexistent_rejected"
+    ) {
       continue;
     }
 
     const current = timelineByMatchId.get(payload.match_id) ?? {
       pendingSinceAt: row.created_at,
+      pendingKind: "score" as const,
       timeline: [],
     };
 
     current.timeline.push({
       id: `${payload.match_id}-${payload.event}-${row.created_at}`,
-      type: payload.event === "pending_created" ? "registered" : "contested",
+      type:
+        payload.event === "pending_created"
+          ? "registered"
+          : payload.event === "pending_transferred"
+            ? "contested"
+            : payload.event === "nonexistent_rejected"
+              ? "nonexistent_rejected"
+              : "nonexistent_claimed",
       actorName: payload.actor_name || "Jogador",
       occurredAt: row.created_at,
     });
     current.pendingSinceAt = row.created_at;
+    current.pendingKind =
+      payload.event === "nonexistent_claimed" ? "nonexistent" : "score";
 
     timelineByMatchId.set(payload.match_id, current);
   }
@@ -1910,6 +1939,17 @@ export async function adminValidatePendingMatch(
 
   if (!adminActor) {
     throw new Error("Usuário não autenticado");
+  }
+
+  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
+    supabase,
+  });
+  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
+
+  if (pendingSnapshot?.pendingKind === "nonexistent") {
+    throw new Error(
+      "Esta pendência é uma solicitação de cancelamento por jogo inexistente. Cancele a partida para aceitar a solicitação."
+    );
   }
 
   const result = await validatePendingMatchByActor({
@@ -3270,6 +3310,7 @@ export async function adminGetPendingMatches(): Promise<AdminPendingMatchesRespo
       openCount: 0,
       pendingCount: 0,
       editedCount: 0,
+      nonexistentCount: 0,
       items: [],
     };
   }
@@ -3302,6 +3343,7 @@ export async function adminGetPendingMatches(): Promise<AdminPendingMatchesRespo
     openCount: items.length,
     pendingCount: items.filter((item) => item.status === "pendente").length,
     editedCount: items.filter((item) => item.status === "edited").length,
+    nonexistentCount: items.filter((item) => item.pendingKind === "nonexistent").length,
     items,
   };
 }

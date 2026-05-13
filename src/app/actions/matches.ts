@@ -6,7 +6,9 @@ import { sendPushToUsers } from "@/lib/push";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 import { validatePendingMatchByActor } from "@/lib/matches/validate-pending-match";
 import {
+  cancelPendingMatchForNonexistent,
   enforcePendingConfirmationSla,
+  getOpenPendingConfirmationSnapshots,
   transferMatchConfirmationResponsibility,
 } from "@/lib/matches/confirmation-sla";
 
@@ -37,6 +39,14 @@ function createConfirmMatchTelemetry() {
 }
 
 function createContestMatchTelemetry() {
+  return createMatchActionTelemetry();
+}
+
+function createReportMatchDidNotHappenTelemetry() {
+  return createMatchActionTelemetry();
+}
+
+function createConfirmMatchDidHappenTelemetry() {
   return createMatchActionTelemetry();
 }
 
@@ -200,6 +210,30 @@ export async function confirmMatchAction(
     responsibleUserId: userId,
   });
   const actorName = await getActorName(supabase, userId);
+  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
+    responsibleUserId: userId,
+  });
+  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
+
+  if (pendingSnapshot?.pendingKind === "nonexistent") {
+    const cancellationResult = await cancelPendingMatchForNonexistent({
+      matchId,
+      actorUserId: userId,
+      actorName,
+      actorType: "player",
+    });
+
+    if (!cancellationResult.success) {
+      return fail(cancellationResult.error, cancellationResult.reason);
+    }
+
+    telemetry.finish("success_cancelled");
+    return {
+      success: true,
+      unlockedAchievements: [],
+    };
+  }
+
   const result = await validatePendingMatchByActor({
     matchId,
     actorUserId: userId,
@@ -372,6 +406,291 @@ export async function contestMatchAction(
     },
   });
   telemetry.step("emit_transfer_push");
+  telemetry.finish("success");
+
+  return { success: true };
+}
+
+export async function reportMatchDidNotHappenAction(
+  matchId: string,
+  requestedUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  const telemetry = createReportMatchDidNotHappenTelemetry();
+  const fail = (errorMessage: string, reason: string) => {
+    telemetry.finish("error", reason);
+    return { success: false, error: errorMessage };
+  };
+  const supabase = await createClient();
+  const authenticatedUserId = await getAuthenticatedUserId(supabase);
+
+  if (!authenticatedUserId) {
+    return fail("Usuário não autenticado", "not_authenticated");
+  }
+
+  if (requestedUserId !== authenticatedUserId) {
+    return fail("Sessão inválida para revisar a partida", "actor_mismatch");
+  }
+
+  const userId = authenticatedUserId;
+  await enforcePendingConfirmationSla({
+    responsibleUserId: userId,
+  });
+
+  const { data: match, error: matchError } = await supabase
+    .from("matches")
+    .select("player_a_id, player_b_id, status, criado_por")
+    .eq("id", matchId)
+    .single();
+  telemetry.step("fetch_match");
+
+  if (matchError || !match) {
+    return fail("Partida não encontrada", "match_not_found");
+  }
+
+  if (match.status === "validado") {
+    return fail(
+      "Não é possível marcar uma partida já confirmada como inexistente",
+      "match_already_validated"
+    );
+  }
+
+  if (match.status === "cancelado") {
+    return fail("Esta partida já foi cancelada", "match_already_canceled");
+  }
+
+  if (match.status !== "pendente" && match.status !== "edited") {
+    return fail("Esta partida não está pendente", "match_not_pending");
+  }
+
+  const waitingUserId =
+    match.criado_por === match.player_a_id
+      ? match.player_b_id
+      : match.criado_por === match.player_b_id
+        ? match.player_a_id
+        : null;
+
+  if (!waitingUserId || waitingUserId !== userId) {
+    return fail(
+      "Esta partida não está aguardando sua resposta",
+      "actor_not_waiting_user"
+    );
+  }
+
+  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
+    responsibleUserId: userId,
+  });
+  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
+
+  if (pendingSnapshot?.pendingContext === "nonexistent_rejected") {
+    return fail(
+      "O adversário já informou que este jogo existiu. Confirme ou conteste o placar.",
+      "nonexistent_already_rejected"
+    );
+  }
+
+  const { data: updatedRows, error: updateError } = await supabase
+    .from("matches")
+    .update({
+      status: "edited",
+      criado_por: userId,
+    })
+    .eq("id", matchId)
+    .neq("criado_por", userId)
+    .in("status", ["pendente", "edited"])
+    .select("id");
+  telemetry.step("update_match");
+
+  if (updateError) {
+    return fail("Erro ao marcar jogo como inexistente", "update_match_failed");
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    return fail(
+      "Esta partida já foi processada por outro usuário",
+      "match_already_processed"
+    );
+  }
+
+  const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
+
+  try {
+    await transferMatchConfirmationResponsibility({
+      matchId,
+      responsibleUserId: recipientId,
+    });
+  } catch (transferError) {
+    await supabase
+      .from("matches")
+      .update({
+        status: match.status,
+        criado_por: match.criado_por,
+      })
+      .eq("id", matchId);
+
+    return fail(
+      transferError instanceof Error
+        ? transferError.message
+        : "Erro ao atualizar a responsabilidade da pendência",
+      "pending_confirmation_transfer_failed"
+    );
+  }
+
+  const actorName = await getActorName(supabase, userId);
+  const payload: PendingNotificationPayloadV1 = {
+    event: "nonexistent_claimed",
+    match_id: matchId,
+    status: "edited",
+    actor_id: userId,
+    actor_name: actorName,
+    created_by: userId,
+  };
+
+  await emitPendingNotification(supabase, recipientId, payload);
+  telemetry.step("emit_nonexistent_notification");
+
+  await sendPushToUsers([recipientId], {
+    title: "Jogo marcado como inexistente",
+    body: `${actorName || "Seu adversário"} informou que esse jogo não aconteceu. Revise a pendência.`,
+    url: "/partidas",
+    tag: `pending-match-${matchId}`,
+    data: {
+      matchId,
+      event: "nonexistent_claimed",
+    },
+  });
+  telemetry.step("emit_nonexistent_push");
+  telemetry.finish("success");
+
+  return { success: true };
+}
+
+export async function confirmMatchDidHappenAction(
+  matchId: string,
+  requestedUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  const telemetry = createConfirmMatchDidHappenTelemetry();
+  const fail = (errorMessage: string, reason: string) => {
+    telemetry.finish("error", reason);
+    return { success: false, error: errorMessage };
+  };
+  const supabase = await createClient();
+  const authenticatedUserId = await getAuthenticatedUserId(supabase);
+
+  if (!authenticatedUserId) {
+    return fail("Usuário não autenticado", "not_authenticated");
+  }
+
+  if (requestedUserId !== authenticatedUserId) {
+    return fail("Sessão inválida para revisar a partida", "actor_mismatch");
+  }
+
+  const userId = authenticatedUserId;
+  await enforcePendingConfirmationSla({
+    responsibleUserId: userId,
+  });
+
+  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
+    responsibleUserId: userId,
+  });
+  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
+
+  if (!pendingSnapshot || pendingSnapshot.pendingKind !== "nonexistent") {
+    return fail(
+      "Esta partida não está aguardando sua resposta sobre jogo inexistente",
+      "pending_not_nonexistent"
+    );
+  }
+
+  const { data: match, error: matchError } = await supabase
+    .from("matches")
+    .select("player_a_id, player_b_id, status, criado_por")
+    .eq("id", matchId)
+    .single();
+  telemetry.step("fetch_match");
+
+  if (matchError || !match) {
+    return fail("Partida não encontrada", "match_not_found");
+  }
+
+  if (match.status === "validado") {
+    return fail("Esta partida já foi confirmada", "match_already_validated");
+  }
+
+  if (match.status === "cancelado") {
+    return fail("Esta partida já foi cancelada", "match_already_canceled");
+  }
+
+  const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
+
+  const { data: updatedRows, error: updateError } = await supabase
+    .from("matches")
+    .update({
+      status: "edited",
+      criado_por: userId,
+    })
+    .eq("id", matchId)
+    .neq("criado_por", userId)
+    .in("status", ["pendente", "edited"])
+    .select("id");
+  telemetry.step("update_match");
+
+  if (updateError) {
+    return fail("Erro ao informar que o jogo existiu", "update_match_failed");
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    return fail(
+      "Esta partida já foi processada por outro usuário",
+      "match_already_processed"
+    );
+  }
+
+  try {
+    await transferMatchConfirmationResponsibility({
+      matchId,
+      responsibleUserId: recipientId,
+    });
+  } catch (transferError) {
+    await supabase
+      .from("matches")
+      .update({
+        status: match.status,
+        criado_por: match.criado_por,
+      })
+      .eq("id", matchId);
+
+    return fail(
+      transferError instanceof Error
+        ? transferError.message
+        : "Erro ao atualizar a responsabilidade da pendência",
+      "pending_confirmation_transfer_failed"
+    );
+  }
+
+  const actorName = await getActorName(supabase, userId);
+  const payload: PendingNotificationPayloadV1 = {
+    event: "nonexistent_rejected",
+    match_id: matchId,
+    status: "edited",
+    actor_id: userId,
+    actor_name: actorName,
+    created_by: userId,
+  };
+
+  await emitPendingNotification(supabase, recipientId, payload);
+  telemetry.step("emit_nonexistent_rejected_notification");
+
+  await sendPushToUsers([recipientId], {
+    title: "Jogo confirmado como existente",
+    body: `${actorName || "Seu adversário"} informou que esse jogo aconteceu. Confirme o placar ou conteste.`,
+    url: "/partidas",
+    tag: `pending-match-${matchId}`,
+    data: {
+      matchId,
+      event: "nonexistent_rejected",
+    },
+  });
+  telemetry.step("emit_nonexistent_rejected_push");
   telemetry.finish("success");
 
   return { success: true };

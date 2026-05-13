@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useHomeHighlights, useRanking, useMatches } from "@/lib/queries";
+import { useHomeHighlights, useRanking, useMatches, useRecentMatches } from "@/lib/queries";
 import { HomePageSkeleton, PendingMatchListSkeleton } from "@/components/skeletons";
 import Link from "next/link";
 import { useMemo } from "react";
@@ -12,6 +12,7 @@ export default function Home() {
   const { user, loading: authLoading } = useAuth();
   const { data: rankingData, isLoading: rankingLoading } = useRanking(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
+  const { data: recentMatchesData, isLoading: recentMatchesLoading } = useRecentMatches(user?.id);
   const { data: highlightsData, isLoading: highlightsLoading } = useHomeHighlights();
 
   // Flatten paginated data
@@ -46,10 +47,9 @@ export default function Home() {
     .filter((m) => m.status === "pendente" || m.status === "edited")
     .slice(0, 3);
 
-  // Partidas recentes (validadas)
-  const recentMatches = matches
-    .filter((m) => m.status === "validado")
-    .slice(0, 3);
+  const recentMatches = useMemo(() => {
+    return recentMatchesData?.pages.flatMap((page) => page.matches).slice(0, 3) ?? [];
+  }, [recentMatchesData]);
 
   const getPlayerName = (player: { full_name: string | null; name: string | null; email: string | null }) => {
     return player.full_name || player.name || player.email?.split("@")[0] || "Jogador";
@@ -250,11 +250,30 @@ export default function Home() {
             <p className="py-4 text-center text-sm text-muted-foreground">
               Faça login para ver seu histórico
             </p>
+          ) : recentMatchesLoading ? (
+            <PendingMatchListSkeleton count={2} />
           ) : recentMatches.length > 0 ? (
             recentMatches.map((match) => {
               const euSouA = match.player_a_id === user.id;
               const euVenci = match.vencedor_id === user.id;
+              const isCancelled = match.status === "cancelado";
+              const isNonexistentCancellation =
+                isCancelled && match.cancellation_reason === "nonexistent";
               const meusPoints = euSouA ? match.pontos_variacao_a : match.pontos_variacao_b;
+              const badgeLabel = isNonexistentCancellation
+                ? "Jogo inexistente"
+                : isCancelled
+                  ? "Cancelado"
+                  : euVenci
+                    ? "Vitória"
+                    : "Derrota";
+              const badgeClassName = isNonexistentCancellation
+                ? "bg-red-100 text-red-700"
+                : isCancelled
+                  ? "bg-muted text-muted-foreground"
+                  : euVenci
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-red-100 text-red-600";
 
               return (
                 <article
@@ -266,13 +285,9 @@ export default function Home() {
                       {new Date(match.created_at).toLocaleDateString("pt-BR")}
                     </p>
                     <span
-                      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
-                        euVenci
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-red-100 text-red-600"
-                      }`}
+                      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClassName}`}
                     >
-                      {euVenci ? "Vitória" : "Derrota"}
+                      {badgeLabel}
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-foreground">
@@ -282,7 +297,16 @@ export default function Home() {
                     </span>{" "}
                     {getPlayerName(match.player_b)}
                   </p>
-                  {meusPoints !== undefined && meusPoints !== null && (
+                  {isNonexistentCancellation ? (
+                    <p className="text-xs font-medium text-red-700">
+                      Partida cancelada porque o jogo não existiu.
+                    </p>
+                  ) : isCancelled ? (
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Partida cancelada sem alteração no ranking.
+                    </p>
+                  ) : null}
+                  {!isCancelled && meusPoints !== undefined && meusPoints !== null && (
                     <p className={`text-xs font-semibold ${euVenci ? "text-green-600" : "text-red-500"}`}>
                       {meusPoints >= 0 ? `+${meusPoints}` : meusPoints} pts
                     </p>

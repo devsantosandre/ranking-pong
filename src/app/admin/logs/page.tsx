@@ -35,6 +35,10 @@ const actionLabels: Record<string, { label: string; color: string }> = {
     label: "Confirmação automática",
     color: "bg-cyan-100 text-cyan-700",
   },
+  match_auto_cancelled_nonexistent: {
+    label: "Cancelamento automático",
+    color: "bg-red-100 text-red-700",
+  },
   match_corrected_without_recalculation: {
     label: "Correção sem recálculo",
     color: "bg-amber-100 text-amber-800",
@@ -158,7 +162,9 @@ function formatValue(value: unknown, action: string): React.ReactNode {
   }
 
   if (
-    (action === "match_validated_by_admin" || action === "match_auto_validated") &&
+    (action === "match_validated_by_admin" ||
+      action === "match_auto_validated" ||
+      action === "match_auto_cancelled_nonexistent") &&
     typeof value === "object"
   ) {
     const obj = value as Record<string, unknown>;
@@ -167,7 +173,11 @@ function formatValue(value: unknown, action: string): React.ReactNode {
     if (obj.origem) {
       parts.push(`Origem: ${String(obj.origem)}`);
     }
-    if (action === "match_auto_validated" && obj.prazo_confirmacao_horas !== undefined) {
+    if (
+      (action === "match_auto_validated" ||
+        action === "match_auto_cancelled_nonexistent") &&
+      obj.prazo_confirmacao_horas !== undefined
+    ) {
       parts.push(`Prazo aplicado: ${String(obj.prazo_confirmacao_horas)}h`);
     }
     if (obj.player_a && obj.player_b) {

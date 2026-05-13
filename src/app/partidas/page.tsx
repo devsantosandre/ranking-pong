@@ -12,10 +12,13 @@ import {
   useConfirmMatch,
   useContestMatch,
   usePendingConfirmationStatus,
+  useConfirmMatchDidHappen,
+  useReportMatchDidNotHappen,
   type MatchWithUsers,
   type UserInfo,
 } from "@/lib/queries";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { PendingMatchListSkeleton } from "@/components/skeletons";
 import { useAchievementToast } from "@/components/achievement-unlock-toast";
 
@@ -27,6 +30,16 @@ const statusBadge: Record<string, { label: string; className: string }> = {
 };
 
 function getRecentMatchBadge(match: MatchWithUsers, euVenci: boolean) {
+  if (match.status === "cancelado") {
+    return {
+      label: match.cancellation_reason === "nonexistent" ? "Jogo inexistente" : "Cancelado",
+      className:
+        match.cancellation_reason === "nonexistent"
+          ? "bg-red-100 text-red-700"
+          : "bg-muted text-muted-foreground",
+    };
+  }
+
   if (match.status === "validado" && match.aprovado_por === null) {
     return {
       label: "Validado pelo sistema",
@@ -40,7 +53,28 @@ function getRecentMatchBadge(match: MatchWithUsers, euVenci: boolean) {
   };
 }
 
+function getCancellationMessage(match: MatchWithUsers) {
+  if (match.status !== "cancelado") return null;
+
+  if (match.cancellation_reason === "nonexistent") {
+    if (match.cancellation_actor === "system") {
+      return "Cancelada automaticamente porque o prazo expirou após a solicitação de jogo inexistente.";
+    }
+
+    return "Cancelada após os jogadores confirmarem que o jogo não existiu.";
+  }
+
+  return "Esta partida foi cancelada e não alterou o ranking.";
+}
+
 const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
+
+type PendingMatchLoadingAction =
+  | "confirm"
+  | "contest"
+  | "confirmDidHappen"
+  | "reportDidNotHappen"
+  | null;
 
 function parseOutcome(outcome: string): { left: number; right: number } | null {
   const match = outcome.match(/^(\d{1,2})x(\d{1,2})$/);
@@ -128,6 +162,11 @@ export default function PartidasPage() {
   const [draftOutcome, setDraftOutcome] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [previewAlertDismissed, setPreviewAlertDismissed] = useState(false);
+  const [reportDidNotHappenModal, setReportDidNotHappenModal] = useState({
+    isOpen: false,
+    matchId: "",
+  });
+  const [reportDidNotHappenError, setReportDidNotHappenError] = useState<string | null>(null);
 
   // Achievement toast hook
   const { showAchievements } = useAchievementToast();
@@ -152,6 +191,8 @@ export default function PartidasPage() {
   const { data: pendingStatus } = usePendingConfirmationStatus(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
+  const confirmDidHappenMutation = useConfirmMatchDidHappen();
+  const reportDidNotHappenMutation = useReportMatchDidNotHappen();
   const previewAlertEnabled = searchParams.get("previewAlert") === "1";
   const visibleActionError =
     actionError ||
@@ -167,6 +208,26 @@ export default function PartidasPage() {
   const totalPendentes = pendentes.length;
   const totalRecentes = matchCounts?.recentes ?? recentes.length;
   const deadlineHours = pendingStatus?.deadlineHours ?? 6;
+  const loadingMatchId =
+    confirmMutation.isPending
+      ? confirmMutation.variables?.matchId
+      : contestMutation.isPending
+        ? contestMutation.variables?.matchId
+        : confirmDidHappenMutation.isPending
+          ? confirmDidHappenMutation.variables?.matchId
+          : reportDidNotHappenMutation.isPending
+            ? reportDidNotHappenMutation.variables?.matchId
+            : null;
+  const loadingAction: PendingMatchLoadingAction =
+    confirmMutation.isPending
+      ? "confirm"
+      : contestMutation.isPending
+        ? "contest"
+        : confirmDidHappenMutation.isPending
+          ? "confirmDidHappen"
+          : reportDidNotHappenMutation.isPending
+            ? "reportDidNotHappen"
+            : null;
 
   const handleConfirm = (matchId: string) => {
     if (!user) return;
@@ -207,6 +268,58 @@ export default function PartidasPage() {
         },
       }
     );
+  };
+
+  const handleReportDidNotHappen = (matchId: string) => {
+    if (!user) return;
+
+    setActionError(null);
+    setReportDidNotHappenError(null);
+    setReportDidNotHappenModal({ isOpen: true, matchId });
+  };
+
+  const handleConfirmDidHappen = (matchId: string) => {
+    if (!user) return;
+
+    setActionError(null);
+    confirmDidHappenMutation.mutate(
+      { matchId, userId: user.id },
+      {
+        onError: (err) => {
+          const message =
+            err instanceof Error
+              ? err.message
+              : "Erro ao informar que o jogo existiu. Tente novamente.";
+          setActionError(message);
+          void refetchPending();
+          void refetchRecent();
+        },
+      }
+    );
+  };
+
+  const handleConfirmReportDidNotHappen = async () => {
+    if (!user || !reportDidNotHappenModal.matchId) return false;
+
+    setActionError(null);
+    setReportDidNotHappenError(null);
+
+    try {
+      await reportDidNotHappenMutation.mutateAsync({
+        matchId: reportDidNotHappenModal.matchId,
+        userId: user.id,
+      });
+      return true;
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Erro ao marcar jogo como inexistente. Tente novamente.";
+      setReportDidNotHappenError(message);
+      void refetchPending();
+      void refetchRecent();
+      return false;
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -323,13 +436,12 @@ export default function PartidasPage() {
           <p className="text-sm font-semibold text-foreground">Prazo para confirmar</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Quem recebeu a pendência tem até {deadlineHours}h para confirmar ou
-            contestar. Depois disso, o sistema aceita automaticamente a partida com o
-            placar atual.
+            contestar. Se alguém informar que o jogo não existiu, o outro jogador tem o
+            mesmo prazo para confirmar o cancelamento.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Se o placar estiver incorreto e o prazo expirar, a correção posterior pode
-            prejudicar o ranking, a sequência de vitórias e exigir intervenção do
-            admin.
+            Quando o prazo expira, o sistema confirma placares pendentes ou cancela
+            automaticamente jogos marcados como inexistentes.
           </p>
         </div>
 
@@ -355,13 +467,12 @@ export default function PartidasPage() {
                 user={user}
                 editingId={editingId}
                 draftOutcome={draftOutcome}
-                loadingMatchId={
-                  confirmMutation.isPending || contestMutation.isPending
-                    ? (confirmMutation.variables?.matchId || contestMutation.variables?.matchId)
-                    : null
-                }
+                loadingMatchId={loadingMatchId}
+                loadingAction={loadingAction}
                 onConfirm={handleConfirm}
                 onContest={handleContest}
+                onConfirmDidHappen={handleConfirmDidHappen}
+                onReportDidNotHappen={handleReportDidNotHappen}
                 onStartEdit={(id, outcome) => {
                   setEditingId(id);
                   setDraftOutcome((prev) => ({ ...prev, [id]: outcome }));
@@ -394,6 +505,22 @@ export default function PartidasPage() {
           />
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={reportDidNotHappenModal.isOpen}
+        onClose={() => {
+          setReportDidNotHappenModal({ isOpen: false, matchId: "" });
+          setReportDidNotHappenError(null);
+        }}
+        onConfirm={handleConfirmReportDidNotHappen}
+        title="Confirmar jogo inexistente"
+        description="Enviar para o adversário confirmar que este jogo não existiu?"
+        confirmText="Confirmar envio"
+        cancelText="Voltar"
+        variant="warning"
+        loading={reportDidNotHappenMutation.isPending}
+        errorMessage={reportDidNotHappenError ?? undefined}
+      />
     </AppShell>
   );
 }
@@ -405,8 +532,11 @@ function PendingMatchCard({
   editingId,
   draftOutcome,
   loadingMatchId,
+  loadingAction,
   onConfirm,
   onContest,
+  onConfirmDidHappen,
+  onReportDidNotHappen,
   onStartEdit,
   onCancelEdit,
   onDraftChange,
@@ -418,8 +548,11 @@ function PendingMatchCard({
   editingId: string | null;
   draftOutcome: Record<string, string>;
   loadingMatchId: string | null | undefined;
+  loadingAction: PendingMatchLoadingAction;
   onConfirm: (id: string) => void;
   onContest: (id: string, outcome: string) => void;
+  onConfirmDidHappen: (id: string) => void;
+  onReportDidNotHappen: (id: string) => void;
   onStartEdit: (id: string, outcome: string) => void;
   onCancelEdit: () => void;
   onDraftChange: (id: string, outcome: string) => void;
@@ -446,6 +579,9 @@ function PendingMatchCard({
     isEditing && selectedUserScore ? selectedUserScore.right : defaultOpponentScore;
   const iWon = myScore > opponentScore;
   const opponentWon = opponentScore > myScore;
+  const isNonexistentPending = match.pending_kind === "nonexistent";
+  const isNonexistentRejected = match.pending_context === "nonexistent_rejected";
+  const iRejectedNonexistent = isNonexistentRejected && match.pending_context_actor_id === user.id;
   const resultSummaryPrefix = isEditing ? "Novo placar:" : "Placar informado:";
   const resultSummary = iWon
     ? `${resultSummaryPrefix} você venceu`
@@ -456,7 +592,18 @@ function PendingMatchCard({
   const deadlineLabel = match.confirmation_deadline_at
     ? formatDeadlineDateTime(match.confirmation_deadline_at)
     : null;
+  const deadlineActionLabel = isNonexistentPending
+    ? "Cancela automaticamente em"
+    : "Confirma automaticamente em";
   const deadlineHighlight = getDeadlineHighlight(match.confirmation_deadline_at ?? null);
+  const isConfirmLoading = isThisLoading && loadingAction === "confirm";
+  const isContestLoading = isThisLoading && loadingAction === "contest";
+  const isConfirmDidHappenLoading = isThisLoading && loadingAction === "confirmDidHappen";
+  const isReportDidNotHappenLoading = isThisLoading && loadingAction === "reportDidNotHappen";
+  const actionsGridClassName =
+    !isEditing && isNonexistentPending
+      ? "grid gap-2 min-[480px]:grid-cols-2"
+      : "grid gap-2 sm:grid-cols-3";
 
   return (
     <article className="space-y-3 rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
@@ -521,7 +668,11 @@ function PendingMatchCard({
       {euCriei && !euDevoAgir ? (
         <div className="space-y-1 text-center">
           <p className="text-xs text-muted-foreground">
-            Aguardando o adversário confirmar ou contestar.
+            {isNonexistentRejected && iRejectedNonexistent
+              ? "Você informou que este jogo existiu. Aguardando o adversário confirmar ou contestar o placar."
+              : isNonexistentPending
+              ? "Aguardando o adversário confirmar que este jogo não existiu."
+              : "Aguardando o adversário confirmar ou contestar."}
           </p>
           {deadlineLabel ? (
             <div
@@ -529,7 +680,9 @@ function PendingMatchCard({
             >
               <div className="flex items-center gap-1.5">
                 <Clock3 className={`h-3.5 w-3.5 ${deadlineHighlight.iconClassName}`} />
-                <p className="text-xs font-semibold">Confirma automaticamente em {deadlineLabel}</p>
+                <p className="text-xs font-semibold">
+                  {deadlineActionLabel} {deadlineLabel}
+                </p>
               </div>
               {deadlineHighlight.label ? (
                 <p className="text-[11px] font-medium">{deadlineHighlight.label}</p>
@@ -559,7 +712,13 @@ function PendingMatchCard({
       ) : (
         <div className="space-y-1 text-center">
           <p className="text-xs text-muted-foreground">
-            Confirme o placar ou conteste caso esteja errado.
+            {isNonexistentPending
+              ? "O adversário informou que este jogo não existiu. Confirme para cancelar a partida."
+              : isNonexistentRejected
+                ? iRejectedNonexistent
+                  ? "Você informou que este jogo existiu. Confirme o placar ajustado ou conteste se ainda estiver errado."
+                  : "O adversário informou que este jogo existiu. Confirme o placar ou conteste alterando o resultado."
+              : "Confirme o placar ou conteste caso esteja errado."}
           </p>
           {deadlineLabel ? (
             <div
@@ -567,7 +726,9 @@ function PendingMatchCard({
             >
               <div className="flex items-center gap-1.5">
                 <Clock3 className={`h-3.5 w-3.5 ${deadlineHighlight.iconClassName}`} />
-                <p className="text-xs font-semibold">Confirma automaticamente em {deadlineLabel}</p>
+                <p className="text-xs font-semibold">
+                  {deadlineActionLabel} {deadlineLabel}
+                </p>
               </div>
               {deadlineHighlight.label ? (
                 <p className="text-[11px] font-medium">{deadlineHighlight.label}</p>
@@ -578,37 +739,90 @@ function PendingMatchCard({
       )}
 
       {euDevoAgir && (
-        <div className="flex gap-2">
+        <div className={actionsGridClassName}>
           {!isEditing ? (
-            <>
-              <button
-                onClick={() => onConfirm(match.id)}
-                disabled={isThisLoading}
-                className="flex-1 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] disabled:opacity-50"
-              >
-                {isThisLoading ? (
-                  <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-                ) : (
-                  "Confirmar"
-                )}
-              </button>
-              <button
-                onClick={() =>
-                  onStartEdit(match.id, currentUserOutcome)
-                }
-                className="flex-1 rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
-              >
-                Contestar
-              </button>
-            </>
+            isNonexistentPending ? (
+              <>
+                <button
+                  onClick={() => onConfirmDidHappen(match.id)}
+                  disabled={isThisLoading}
+                  className="min-h-11 whitespace-nowrap rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {isConfirmDidHappenLoading ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                  ) : (
+                    "O jogo existiu"
+                  )}
+                </button>
+                <button
+                  onClick={() => onConfirm(match.id)}
+                  disabled={isThisLoading}
+                  aria-label="Confirmar cancelamento"
+                  className="min-h-11 whitespace-nowrap rounded-full border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {isConfirmLoading ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                  ) : (
+                    "Cancelar partida"
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => onConfirm(match.id)}
+                  disabled={isThisLoading}
+                  className="rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {isConfirmLoading ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                  ) : (
+                    "Confirmar"
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    onStartEdit(match.id, currentUserOutcome)
+                  }
+                  className="rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
+                >
+                  Contestar
+                </button>
+                <button
+                  onClick={() => onReportDidNotHappen(match.id)}
+                  disabled={isThisLoading || isNonexistentRejected}
+                  title={
+                    isNonexistentRejected
+                      ? iRejectedNonexistent
+                        ? "Você já informou que este jogo existiu. Confirme ou conteste o placar."
+                        : "O adversário já informou que este jogo existiu. Confirme ou conteste o placar."
+                      : undefined
+                  }
+                  className="rounded-full border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {isReportDidNotHappenLoading ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                  ) : (
+                    "Jogo não existiu"
+                  )}
+                </button>
+                {isNonexistentRejected ? (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 sm:col-span-3">
+                    {iRejectedNonexistent
+                      ? "Você já respondeu que o jogo existiu. Para encerrar a pendência, confirme o placar ou conteste informando o resultado correto."
+                      : "O adversário já respondeu que o jogo existiu. Para encerrar a pendência, confirme o placar ou conteste informando o resultado correto."}
+                  </p>
+                ) : null}
+              </>
+            )
           ) : (
             <>
               <button
                 onClick={() => onContest(match.id, selectedMatchOutcome)}
                 disabled={isThisLoading}
-                className="flex-1 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] disabled:opacity-50"
+                className="rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:scale-[1.01] disabled:opacity-50 sm:col-span-2"
               >
-                {isThisLoading ? (
+                {isContestLoading ? (
                   <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                 ) : (
                   "Salvar"
@@ -616,7 +830,7 @@ function PendingMatchCard({
               </button>
               <button
                 onClick={onCancelEdit}
-                className="flex-1 rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
+                className="rounded-full border border-border px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
               >
                 Cancelar
               </button>
@@ -642,12 +856,14 @@ function RecentMatchCard({
 }) {
   const euSouA = match.player_a_id === userId;
   const euVenci = match.vencedor_id === userId;
+  const isCancelled = match.status === "cancelado";
   const badge = getRecentMatchBadge(match, euVenci);
   const meusPoints = euSouA ? match.pontos_variacao_a : match.pontos_variacao_b;
   const opponent = euSouA ? match.player_b : match.player_a;
   const opponentName = getPlayerName(opponent);
   const myScore = euSouA ? match.resultado_a : match.resultado_b;
   const opponentScore = euSouA ? match.resultado_b : match.resultado_a;
+  const cancellationMessage = getCancellationMessage(match);
   const pointsLabel =
     typeof meusPoints === "number" ? `${meusPoints > 0 ? "+" : ""}${meusPoints} pts` : null;
   const pointsClassName =
@@ -656,9 +872,13 @@ function RecentMatchCard({
         ? "text-green-600"
         : "text-red-600"
       : "";
-  const resultSummary = euVenci
-    ? "Você venceu esta partida"
-    : "Você perdeu esta partida";
+  const resultSummary = isCancelled
+    ? match.cancellation_reason === "nonexistent"
+      ? "Partida cancelada porque o jogo não existiu"
+      : "Partida cancelada"
+    : euVenci
+      ? "Você venceu esta partida"
+      : "Você perdeu esta partida";
 
   return (
     <article className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
@@ -685,7 +905,7 @@ function RecentMatchCard({
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
           <div
             className={`rounded-lg border px-2 py-2 ${
-              euVenci
+              !isCancelled && euVenci
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                 : "border-border bg-background text-foreground"
             }`}
@@ -698,7 +918,7 @@ function RecentMatchCard({
 
           <div
             className={`rounded-lg border px-2 py-2 text-right ${
-              !euVenci
+              !isCancelled && !euVenci
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                 : "border-border bg-background text-foreground"
             }`}
@@ -718,7 +938,13 @@ function RecentMatchCard({
         </p>
       ) : null}
 
-      {pointsLabel ? <p className={`text-xs font-semibold ${pointsClassName}`}>{pointsLabel}</p> : null}
+      {cancellationMessage ? (
+        <p className="text-xs font-medium text-red-700">{cancellationMessage}</p>
+      ) : null}
+
+      {!isCancelled && pointsLabel ? (
+        <p className={`text-xs font-semibold ${pointsClassName}`}>{pointsLabel}</p>
+      ) : null}
     </article>
   );
 }

@@ -181,6 +181,7 @@ No fluxo pendente:
 - quem registrou aguarda
 - quem precisa agir pode **confirmar** ou **contestar**
 - ao contestar, o placar é ajustado e a responsabilidade volta para o outro lado
+- se o jogo não existiu, o jogador pode devolver a pendência para o adversário confirmar o cancelamento
 - o sistema exibe prazo de resposta e urgência visual
 
 No fluxo recente:
@@ -312,8 +313,10 @@ Fluxo:
 3. jogador B confirma ou contesta
 4. se contestar, partida vira `edited`
 5. responsabilidade volta para o outro jogador
-6. quando confirmada, vira `validado`
-7. moderador ou admin podem cancelar em qualquer etapa
+6. se alguém indicar que o jogo não existiu, a partida permanece como `edited`, mas a pendência passa a ser de confirmação de cancelamento
+7. quando o placar é confirmado, vira `validado`
+8. quando o cancelamento por jogo inexistente é confirmado, vira `cancelado`
+9. moderador ou admin podem cancelar em qualquer etapa
 
 ### 6.5 Confirmação automática por prazo
 
@@ -321,6 +324,7 @@ O produto já implementa SLA de confirmação:
 
 - existe um prazo configurável em horas
 - se ninguém responder dentro do prazo, o sistema valida automaticamente com o placar atual
+- se a pendência atual for de jogo inexistente e ninguém responder dentro do prazo, o sistema cancela automaticamente a partida
 
 Configuração:
 

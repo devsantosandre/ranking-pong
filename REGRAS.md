@@ -57,8 +57,9 @@
 - **Tabs:** "Recentes" e "Pendentes/Confirmação"
 - Pendentes exibem status, instrução e CTAs apenas para quem deve agir:
   - Quem registrou e aguarda não vê botões
-  - O oponente pode **Confirmar** ou **Contestar** (seleciona novo placar rápido)
+  - O oponente pode **Confirmar**, **Contestar** (seleciona novo placar rápido) ou marcar que o **jogo não existiu**
   - Se alguém ajustar o placar, volta para pendente e só o outro lado vê os botões para confirmar/ajustar novamente
+  - Se alguém marcar que o jogo não existiu, a pendência volta para o outro jogador confirmar o cancelamento
 - Recentes mostram badge “Validado”, placar e variação aplicada
 
 ### Tela: Registrar Jogo (Wizard 2 passos)
@@ -102,6 +103,7 @@
 ### Fluxo de confirmação/contestação
 - Registrar: cria partida **pendente** para o oponente.
 - Oponente: **Confirmar** aplica pontos e move para Recentes/Notícias; **Contestar** abre seleção de placar rápido e salva, devolvendo para pendente com `edited` para o outro lado confirmar.
+- Jogo inexistente: quem deve agir pode marcar que a partida não aconteceu; o app devolve para o adversário confirmar o cancelamento. Se o prazo de confirmação expirar, o sistema cancela automaticamente a partida.
 - Limite diário respeitado mesmo em pendentes (não permite 3º jogo/dia contra o mesmo adversário).
 
 ---
@@ -355,7 +357,6 @@
 6. **Notícias de resultados** - feed
 7. **Inatividade** - cron + notificações básicas
 8. **Testes e Deploy** - end-to-end mobile, Vercel + Supabase
-
 
 
 

@@ -12,6 +12,7 @@ Eventos enviados no V1:
 
 - `pending_created` (nova partida para confirmar)
 - `pending_transferred` (partida contestada e ação transferida)
+- `nonexistent_claimed` (jogador informou que o jogo não existiu e o outro precisa confirmar cancelamento)
 
 Entrega:
 

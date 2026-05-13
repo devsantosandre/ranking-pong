@@ -183,6 +183,18 @@ Pontos ganhos/perdidos com K = 24:
    └── Status: "validado"
 ```
 
+### Jogo inexistente
+
+Quando o jogador que precisa agir informa que o jogo não existiu:
+
+```
+1. A partida continua pendente como "edited"
+2. O payload da pendência recebe event = "nonexistent_claimed"
+3. A responsabilidade volta para o outro jogador
+4. Se o outro jogador confirmar, a partida é cancelada sem aplicar ELO
+5. Se o prazo expirar, o sistema cancela automaticamente sem aplicar ELO
+```
+
 ---
 
 ## Reversão (Cancelamento)
