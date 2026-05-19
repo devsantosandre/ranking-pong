@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { deleteSingleTestUser } from "./cleanup";
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
@@ -96,10 +97,11 @@ export async function createTestUser(label: string): Promise<TestUser> {
   };
 }
 
-// Remove o usuário (cascade leva linhas em public.users)
+// Remove o usuário com limpeza ordenada:
+// 1. Tabelas sem ON DELETE CASCADE (ex.: admin_logs.admin_id)
+// 2. Auth user — cascateia public.users → matches, notifications, daily_limits, etc.
 export async function deleteTestUser(userId: string): Promise<void> {
-  const admin = adminClient();
-  await admin.auth.admin.deleteUser(userId).catch(() => undefined);
+  await deleteSingleTestUser(userId, adminClient());
 }
 
 // Garante que um usuário tenha role específico (ex.: admin)

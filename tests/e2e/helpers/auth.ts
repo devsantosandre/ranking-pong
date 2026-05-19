@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
+import { deleteSingleTestUser } from "../../helpers/cleanup";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
@@ -42,7 +43,7 @@ export async function createE2EUser(label: string): Promise<E2EUser> {
 }
 
 export async function deleteE2EUser(userId: string): Promise<void> {
-  await admin.auth.admin.deleteUser(userId).catch(() => undefined);
+  await deleteSingleTestUser(userId, admin);
 }
 
 export async function loginViaUI(page: Page, email: string, password: string) {
