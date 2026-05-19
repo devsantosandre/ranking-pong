@@ -17,6 +17,7 @@ tests/
 │   ├── 02-auth.test.ts          # Cadastro, login, logout, persistência de sessão
 │   ├── 03-realtime.test.ts      # WebSocket handshake, postgres_changes via Realtime
 │   ├── 04-matches-crud.test.ts  # RPC register_match, idempotência, validação, ratings
+│   ├── 04b-match-full-flows.test.ts  # Todos os fluxos: confirmação, contestação, inexistente, cancelamento
 │   ├── 05-rls-policies.test.ts  # Row Level Security: leitura, escrita, isolamento
 │   ├── 06-ranking.test.ts       # Ordenação, conservação de pontos ELO, snapshots
 │   ├── 07-achievements.test.ts  # Catálogo seedado, leitura, inserção de conquistas
@@ -117,6 +118,7 @@ Usuários criados (senha: `Pong#QA2026!`):
 | 2 | Autenticação | 5 | ✅ Passou |
 | 3 | Realtime / WebSocket | 2 | ✅ Passou |
 | 4 | CRUD Partidas (RPC) | 7 | ✅ Passou |
+| 4b | Fluxo completo de partidas | 23 | ✅ Passou |
 | 5 | RLS Policies | 7 | ✅ Passou |
 | 6 | Ranking / ELO | 3 | ✅ Passou |
 | 7 | Conquistas | 3 | ✅ Passou |
@@ -126,7 +128,7 @@ Usuários criados (senha: `Pong#QA2026!`):
 | 11 | Performance (< 1s HML) | 4 | ✅ Passou |
 | — | Unitários ELO | 6 | ✅ Passou |
 | — | Unitários Divisões | 6 | ✅ Passou |
-| **TOTAL** | | **58** | **✅ 58/58** |
+| **TOTAL** | | **81** | **✅ 81/81** |
 
 ### Playwright — E2E
 
