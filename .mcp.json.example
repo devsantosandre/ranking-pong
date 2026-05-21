@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "supabase-hml": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--db-url",
+        "postgresql://postgres:SUA_SENHA@localhost:5432/postgres"
+      ]
+    }
+  }
+}
