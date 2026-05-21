@@ -4,8 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@supabase/mcp-server-supabase@latest",
-        "--db-url",
+        "@modelcontextprotocol/server-postgres",
         "postgresql://postgres:SUA_SENHA@localhost:5432/postgres"
       ]
     }
