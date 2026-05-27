@@ -10,6 +10,7 @@ import {
   useUsers,
   useRegisterMatch,
   useSettings,
+  useDailyLimitForPair,
 } from "@/lib/queries";
 import { calculateElo } from "@/lib/elo";
 
@@ -46,6 +47,7 @@ export default function RegistrarJogoPage() {
   const { data: users = [], isLoading: loadingUsers } = useUsers(user?.id);
   const { data: settings } = useSettings();
   const registerMutation = useRegisterMatch();
+  const { data: dailyLimitStatus } = useDailyLimitForPair(user?.id, opponentId);
 
   useEffect(() => {
     requestIdRef.current = null;
@@ -75,10 +77,15 @@ export default function RegistrarJogoPage() {
   const selectedOpponent = users.find((u) => u.id === opponentId);
   const opponentName = selectedOpponent?.full_name || selectedOpponent?.name || selectedOpponent?.email || "Adversário";
 
+  const jogosHojeContraAdv = dailyLimitStatus?.jogosHoje ?? 0;
+  const limiteAtingido = jogosHojeContraAdv >= limiteJogosDiarios;
+  const jogosRestantes = Math.max(0, limiteJogosDiarios - jogosHojeContraAdv);
+
   const canSubmit =
     selectedOutcome !== "" &&
     opponentId !== "" &&
-    !registerMutation.isPending;
+    !registerMutation.isPending &&
+    !limiteAtingido;
 
   const quickOutcomes = ["3x0", "3x1", "3x2", "0x3", "1x3", "2x3"];
   const { resumoSets, winsA, winsB } = useMemo(() => {
@@ -149,8 +156,25 @@ export default function RegistrarJogoPage() {
         opponentId,
         outcome: selectedOutcome,
         requestId,
+        optimisticOpponent: selectedOpponent
+          ? {
+              id: selectedOpponent.id,
+              name: selectedOpponent.name ?? null,
+              full_name: selectedOpponent.full_name ?? null,
+              email: selectedOpponent.email ?? null,
+            }
+          : null,
+        optimisticSelf: {
+          id: user.id,
+          name: user.name ?? null,
+          full_name: null,
+          email: null,
+        },
       },
       {
+        // Só navega depois que o servidor confirmar (ou que ficou claramente offline).
+        // Erros de negócio (limite diário, K factor, etc.) caem em onError e
+        // mantêm o usuário na tela com a mensagem.
         onSuccess: () => {
           requestIdRef.current = null;
           router.push("/partidas");
@@ -269,7 +293,41 @@ export default function RegistrarJogoPage() {
               Máx. {limiteJogosDiarios} jogos/dia
             </span>
           </div>
+          {opponentId && (
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                Hoje contra <span className="font-semibold text-foreground">{opponentName}</span>
+              </span>
+              <span
+                className={`font-semibold ${
+                  limiteAtingido ? "text-red-500" : "text-foreground"
+                }`}
+              >
+                {jogosHojeContraAdv}/{limiteJogosDiarios} jogos
+              </span>
+            </div>
+          )}
         </article>
+
+        {opponentId && limiteAtingido && (
+          <article className="rounded-2xl border border-red-200 bg-red-50 p-3 shadow-sm">
+            <p className="text-sm font-semibold text-red-700">
+              Limite diário atingido
+            </p>
+            <p className="text-xs text-red-600 mt-1">
+              Você já registrou {jogosHojeContraAdv} jogos hoje contra {opponentName}.
+              Volte amanhã para registrar novas partidas com esse adversário.
+            </p>
+          </article>
+        )}
+
+        {opponentId && !limiteAtingido && jogosRestantes === 1 && (
+          <article className="rounded-2xl border border-amber-200 bg-amber-50 p-3 shadow-sm">
+            <p className="text-xs text-amber-700">
+              Último jogo do dia contra {opponentName}.
+            </p>
+          </article>
+        )}
 
         {/* Erro */}
         {(error || registerMutation.error) && (

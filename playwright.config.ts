@@ -2,9 +2,14 @@ import { defineConfig, devices } from "@playwright/test";
 import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
+// Captura o valor explícito do shell ANTES do dotenv sobrescrever — permite
+// rodar contra um servidor local com PLAYWRIGHT_BASE_URL=http://localhost:3000.
+const SHELL_BASE_URL = process.env.PLAYWRIGHT_BASE_URL;
+
 loadEnv({ path: resolve(__dirname, ".env.test"), override: true });
 
-const BASE_URL = process.env.APP_BASE_URL || "https://hml.rankingpong.com.br";
+const BASE_URL =
+  SHELL_BASE_URL || process.env.APP_BASE_URL || "https://hml.rankingpong.com.br";
 
 export default defineConfig({
   testDir: "./tests/e2e",

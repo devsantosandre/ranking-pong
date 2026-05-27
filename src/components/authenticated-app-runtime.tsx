@@ -8,6 +8,7 @@ import { useRealtimePendingSync } from "@/lib/hooks/use-realtime-pending";
 import { useRealtimeRankingSync } from "@/lib/hooks/use-realtime-ranking-sync";
 import { usePrefetchNews } from "@/lib/hooks/use-prefetch-news";
 import { PushSubscriptionProvider } from "@/lib/hooks/use-push-subscription";
+import { usePendingMatchFlush } from "@/lib/sync/use-pending-match-flush";
 
 function RealtimePendingBridge({ userId }: { userId: string }) {
   useRealtimePendingSync(userId);
@@ -24,6 +25,11 @@ function NewsPrefetchBridge({ userId }: { userId: string }) {
   return null;
 }
 
+function PendingMatchFlushBridge({ userId }: { userId: string }) {
+  usePendingMatchFlush(userId);
+  return null;
+}
+
 export function AuthenticatedAppRuntime({
   userId,
   children,
@@ -36,6 +42,7 @@ export function AuthenticatedAppRuntime({
       <RealtimePendingBridge userId={userId} />
       <RealtimeRankingBridge userId={userId} />
       <NewsPrefetchBridge userId={userId} />
+      <PendingMatchFlushBridge userId={userId} />
       {children}
       <NetworkStatusLayer />
       <InstallPrompt />

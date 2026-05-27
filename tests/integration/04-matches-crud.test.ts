@@ -130,6 +130,105 @@ describe("Partidas — RPC register_match_with_notification_v1 e fluxo de confir
     });
 
     expect(error).not.toBeNull();
+    expect((error?.message || "").toLowerCase()).toMatch(/same_player/);
+  });
+
+  it("RPC rejeita actor_mismatch (logado como A tenta registrar como B)", async () => {
+    const playerA = await createTestUser("am-a");
+    const playerB = await createTestUser("am-b");
+    created.push(playerA, playerB);
+
+    // Loga como A mas tenta registrar com p_player_id = B
+    const supaA = userClient(playerA.accessToken);
+    const { error } = await supaA.rpc("register_match_with_notification_v1", {
+      p_player_id: playerB.id, // <- alvo errado
+      p_opponent_id: playerA.id,
+      p_resultado_a: 3,
+      p_resultado_b: 0,
+      p_request_id: randomUUID(),
+      p_timezone: "America/Sao_Paulo",
+    });
+
+    expect(error).not.toBeNull();
+    expect((error?.message || "").toLowerCase()).toMatch(/actor_mismatch/);
+  });
+
+  it("RPC rejeita not_authenticated quando chamado sem sessão", async () => {
+    const playerA = await createTestUser("noauth-a");
+    const playerB = await createTestUser("noauth-b");
+    created.push(playerA, playerB);
+
+    // anonClient sem signIn — auth.uid() será null
+    const supa = anonClient();
+    const { error } = await supa.rpc("register_match_with_notification_v1", {
+      p_player_id: playerA.id,
+      p_opponent_id: playerB.id,
+      p_resultado_a: 3,
+      p_resultado_b: 1,
+      p_request_id: randomUUID(),
+      p_timezone: "America/Sao_Paulo",
+    });
+
+    expect(error).not.toBeNull();
+    expect((error?.message || "").toLowerCase()).toMatch(/not_authenticated/);
+  });
+
+  it("RPC rejeita score com número negativo", async () => {
+    const playerA = await createTestUser("neg-a");
+    const playerB = await createTestUser("neg-b");
+    created.push(playerA, playerB);
+
+    const supa = userClient(playerA.accessToken);
+    const { error } = await supa.rpc("register_match_with_notification_v1", {
+      p_player_id: playerA.id,
+      p_opponent_id: playerB.id,
+      p_resultado_a: -1,
+      p_resultado_b: 3,
+      p_request_id: randomUUID(),
+      p_timezone: "America/Sao_Paulo",
+    });
+
+    expect(error).not.toBeNull();
+    expect((error?.message || "").toLowerCase()).toMatch(/invalid_score/);
+  });
+
+  it("RPC rejeita score acima de 99", async () => {
+    const playerA = await createTestUser("big-a");
+    const playerB = await createTestUser("big-b");
+    created.push(playerA, playerB);
+
+    const supa = userClient(playerA.accessToken);
+    const { error } = await supa.rpc("register_match_with_notification_v1", {
+      p_player_id: playerA.id,
+      p_opponent_id: playerB.id,
+      p_resultado_a: 100,
+      p_resultado_b: 0,
+      p_request_id: randomUUID(),
+      p_timezone: "America/Sao_Paulo",
+    });
+
+    expect(error).not.toBeNull();
+    expect((error?.message || "").toLowerCase()).toMatch(/invalid_score/);
+  });
+
+  it("RPC rejeita invalid_input quando p_request_id é null", async () => {
+    const playerA = await createTestUser("nullreq-a");
+    const playerB = await createTestUser("nullreq-b");
+    created.push(playerA, playerB);
+
+    const supa = userClient(playerA.accessToken);
+    const { error } = await supa.rpc("register_match_with_notification_v1", {
+      p_player_id: playerA.id,
+      p_opponent_id: playerB.id,
+      p_resultado_a: 3,
+      p_resultado_b: 0,
+      p_request_id: null as unknown as string,
+      p_timezone: "America/Sao_Paulo",
+    });
+
+    expect(error).not.toBeNull();
+    // pode falhar como invalid_input ou rejeição do PG por tipo
+    expect((error?.message || "").toLowerCase()).toMatch(/invalid_input|null|uuid/);
   });
 
   it("partida em status pendente cria match_confirmation_state com responsável correto", async () => {

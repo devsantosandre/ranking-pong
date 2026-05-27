@@ -55,3 +55,38 @@ export async function loginViaUI(page: Page, email: string, password: string) {
     page.getByRole("button", { name: "Entrar" }).click(),
   ]);
 }
+
+/**
+ * Login robusto para ambientes onde o redirect pós-login não dispara
+ * de forma confiável (ex.: localhost com SameSite/Secure cookies).
+ *
+ * Estratégia:
+ * 1. Submete o formulário.
+ * 2. Espera que o @supabase/ssr escreva o cookie sb-...-auth-token.
+ * 3. Navega manualmente para a página alvo, deixando o middleware revalidar.
+ */
+export async function loginByCookieReady(
+  page: Page,
+  email: string,
+  password: string,
+  postLoginPath = "/"
+) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Senha").fill(password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+
+  // Aguarda o cookie de auth do Supabase aparecer (independente do redirect).
+  await page.waitForFunction(
+    () => /sb-[^=]+-auth-token/.test(document.cookie),
+    null,
+    { timeout: 20_000 }
+  );
+
+  // Navega manualmente; middleware vai validar o cookie e liberar.
+  await page.goto(postLoginPath);
+  await page.waitForURL(
+    (url) => !url.pathname.startsWith("/login"),
+    { timeout: 20_000 }
+  );
+}
