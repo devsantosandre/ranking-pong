@@ -6,12 +6,10 @@ import { useState, useMemo } from "react";
 import { AlertCircle, Clock3, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
-  usePendingMatches,
+  usePendingDashboard,
   useRecentMatches,
-  useMatchCounts,
   useConfirmMatch,
   useContestMatch,
-  usePendingConfirmationStatus,
   useConfirmMatchDidHappen,
   useReportMatchDidNotHappen,
   type MatchWithUsers,
@@ -171,13 +169,14 @@ export default function PartidasPage() {
   // Achievement toast hook
   const { showAchievements } = useAchievementToast();
 
-  // React Query hooks
+  // React Query hooks — usePendingDashboard substitui 3 chamadas separadas:
+  //   usePendingMatches + useMatchCounts + usePendingConfirmationStatus
   const {
-    data: pendingData,
-    isLoading: pendingLoading,
-    error: pendingError,
+    data: dashboardData,
+    isLoading: dashboardLoading,
+    error: dashboardError,
     refetch: refetchPending,
-  } = usePendingMatches(user?.id);
+  } = usePendingDashboard(user?.id);
   const {
     data: recentData,
     isLoading: recentLoading,
@@ -187,8 +186,6 @@ export default function PartidasPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useRecentMatches(user?.id);
-  const { data: matchCounts } = useMatchCounts(user?.id);
-  const { data: pendingStatus } = usePendingConfirmationStatus(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
   const confirmDidHappenMutation = useConfirmMatchDidHappen();
@@ -200,14 +197,14 @@ export default function PartidasPage() {
       ? "Exemplo de erro ao confirmar partida. Tente novamente."
       : null);
 
-  const pendentes = pendingData ?? [];
+  const pendentes = dashboardData?.pendingMatches ?? [];
   const recentes = useMemo(() => {
     return recentData?.pages.flatMap((page) => page.matches) ?? [];
   }, [recentData]);
 
   const totalPendentes = pendentes.length;
-  const totalRecentes = matchCounts?.recentes ?? recentes.length;
-  const deadlineHours = pendingStatus?.deadlineHours ?? 6;
+  const totalRecentes = dashboardData?.recentCount ?? recentes.length;
+  const deadlineHours = dashboardData?.deadlineHours ?? 6;
   const loadingMatchId =
     confirmMutation.isPending
       ? confirmMutation.variables?.matchId
@@ -340,7 +337,7 @@ export default function PartidasPage() {
   };
 
   // Loading enquanto auth ou dados carregam
-  if (authLoading || pendingLoading || recentLoading) {
+  if (authLoading || dashboardLoading || recentLoading) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
         <div className="space-y-4">
@@ -371,7 +368,7 @@ export default function PartidasPage() {
   }
 
   // Erro
-  if (pendingError || recentError) {
+  if (dashboardError || recentError) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
         <p className="py-8 text-center text-sm text-red-500">

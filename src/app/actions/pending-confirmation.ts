@@ -630,6 +630,144 @@ export async function getCurrentUserMatchCountsAction(): Promise<CurrentUserMatc
   };
 }
 
+/**
+ * Resposta agregada da dashboard de partidas pendentes.
+ * Substitui 3 chamadas separadas (pendingMatches + pendingStatus + matchCounts)
+ * por uma única requisição com 4 queries em paralelo.
+ *
+ * O caller pode derivar client-side:
+ *   pendingActionsCount = pendingMatches.filter(m => m.criado_por !== userId).length
+ *   nextDeadlineAt      = min(pendingMatches.map(m => m.confirmation_deadline_at))
+ *   pendentes           = pendingMatches.length
+ */
+export type CurrentUserPendingDashboard = {
+  pendingMatches: CurrentUserPendingMatch[];
+  recentCount: number;
+  deadlineHours: number;
+};
+
+const EMPTY_PENDING_DASHBOARD: CurrentUserPendingDashboard = {
+  pendingMatches: [],
+  recentCount: 0,
+  deadlineHours: 6,
+};
+
+/**
+ * Action combinada: retorna todas as informações da aba de partidas pendentes.
+ *
+ * Caminho crítico (após otimizações):
+ *   1. auth.getUser()
+ *   2. Promise.all:
+ *      a. getOpenPendingConfirmationSnapshots → deadlineHours + pendingKind/Context (2 queries)
+ *      b. matches com info dos jogadores (1 query)
+ *      c. COUNT partidas recentes (1 query)
+ *   = 1 auth + 3 queries paralelas
+ *
+ * after(): SLA enforcement
+ */
+export async function getCurrentUserPendingDashboardAction(): Promise<CurrentUserPendingDashboard> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return EMPTY_PENDING_DASHBOARD;
+
+  const adminSupabase = createAdminClient();
+
+  // SLA em background — não bloqueia o carregamento
+  after(async () => {
+    try {
+      await enforcePendingConfirmationSla({ supabase: createAdminClient() });
+    } catch (e) {
+      console.error("[after/getPendingDashboard/sla]", e);
+    }
+  });
+
+  const baseFilter = `player_a_id.eq.${user.id},player_b_id.eq.${user.id}`;
+
+  // 3 queries em paralelo: snapshots de confirmação, partidas pendentes, contagem recentes
+  const [snapshotsResult, matchesResult, recentCountResult] = await Promise.all([
+    getOpenPendingConfirmationSnapshots({ supabase: adminSupabase }),
+    adminSupabase
+      .from("matches")
+      .select(
+        `
+        id,
+        player_a_id,
+        player_b_id,
+        vencedor_id,
+        resultado_a,
+        resultado_b,
+        status,
+        criado_por,
+        aprovado_por,
+        created_at,
+        pontos_variacao_a,
+        pontos_variacao_b,
+        player_a:users!player_a_id(id, name, full_name, email),
+        player_b:users!player_b_id(id, name, full_name, email)
+      `
+      )
+      .or(baseFilter)
+      .in("status", ["pendente", "edited"])
+      .order("created_at", { ascending: false }),
+    adminSupabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .or(baseFilter)
+      .in("status", ["validado", "cancelado"]),
+  ]);
+
+  if (matchesResult.error) {
+    throw new Error("Erro ao carregar partidas pendentes");
+  }
+
+  const { deadlineHours, items: snapshots } = snapshotsResult;
+
+  const deadlineByMatchId = new Map(
+    snapshots.map((s) => [s.matchId, s.currentDeadlineAt])
+  );
+  const pendingKindByMatchId = new Map(
+    snapshots.map((s) => [s.matchId, s.pendingKind])
+  );
+  const pendingContextByMatchId = new Map(
+    snapshots.map((s) => [s.matchId, s.pendingContext])
+  );
+  const pendingContextActorByMatchId = new Map(
+    snapshots.map((s) => [s.matchId, s.pendingContextActorId])
+  );
+
+  const pendingMatches = ((matchesResult.data ?? []) as CurrentUserPendingMatchRow[]).map(
+    (match) => ({
+      id: match.id,
+      player_a_id: match.player_a_id,
+      player_b_id: match.player_b_id,
+      vencedor_id: match.vencedor_id,
+      resultado_a: match.resultado_a,
+      resultado_b: match.resultado_b,
+      status: match.status,
+      criado_por: match.criado_por,
+      aprovado_por: match.aprovado_por,
+      created_at: match.created_at,
+      pontos_variacao_a: match.pontos_variacao_a,
+      pontos_variacao_b: match.pontos_variacao_b,
+      confirmation_deadline_at: deadlineByMatchId.get(match.id) ?? null,
+      pending_kind: pendingKindByMatchId.get(match.id) ?? "score" as const,
+      pending_context: pendingContextByMatchId.get(match.id) ?? "default" as const,
+      pending_context_actor_id: pendingContextActorByMatchId.get(match.id) ?? null,
+      player_a: normalizePendingUserRelation(match.player_a, match.player_a_id),
+      player_b: normalizePendingUserRelation(match.player_b, match.player_b_id),
+    })
+  );
+
+  return {
+    pendingMatches,
+    recentCount: recentCountResult.count ?? 0,
+    deadlineHours,
+  };
+}
+
 export async function getHomeHighlightsAction(): Promise<HomeHighlightsActionResult> {
   const supabase = await createClient();
   const {

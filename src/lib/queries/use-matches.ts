@@ -20,10 +20,13 @@ import {
 import {
   getCurrentUserMatchCountsAction,
   getCurrentUserPendingMatchesAction,
+  getCurrentUserPendingDashboardAction,
   getCurrentUserRecentMatchesAction,
   getHomeHighlightsAction,
   type CurrentUserRecentMatch,
   type CurrentUserPendingMatch,
+  type CurrentUserPendingDashboard,
+  type CurrentUserPendingConfirmationStatus,
 } from "@/app/actions/pending-confirmation";
 import {
   enqueuePendingMatch,
@@ -259,6 +262,67 @@ export function usePendingMatches(userId: string | undefined) {
       }
 
       return getCurrentUserPendingMatchesAction();
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 5,
+    refetchInterval: 1000 * 15,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+}
+
+/**
+ * Hook combinado — substitui usePendingMatches + useMatchCounts + usePendingConfirmationStatus
+ * na página de partidas. Uma única requisição HTTP que retorna:
+ *   - pendingMatches (lista completa de partidas pendentes com metadados SLA)
+ *   - recentCount   (total de partidas recentes para o contador da aba)
+ *   - deadlineHours (configuração de prazo, para exibição da regra)
+ *
+ * Efeitos colaterais (setQueryData) ao buscar:
+ *   - `pending(userId)` — mantém compat com optimistic UI das mutations
+ *   - `pendingStatus(userId)` — mantém badge do app-shell atualizado
+ */
+export function usePendingDashboard(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useQuery({
+    queryKey: queryKeys.matches.pendingDashboard(userId || "anonymous"),
+    queryFn: async (): Promise<CurrentUserPendingDashboard> => {
+      if (!userId) {
+        return { pendingMatches: [], recentCount: 0, deadlineHours: 6 };
+      }
+
+      const dashboard = await getCurrentUserPendingDashboardAction();
+
+      // Popula o cache `pending(userId)` para que as mutations com optimistic UI continuem
+      // funcionando: `optimisticallyRemoveFromPending` lê/escreve nessa key.
+      queryClient.setQueryData<CurrentUserPendingMatch[]>(
+        queryKeys.matches.pending(userId),
+        dashboard.pendingMatches
+      );
+
+      // Popula o cache `pendingStatus(userId)` para o badge do app-shell
+      const pendingActionsCount = dashboard.pendingMatches.filter(
+        (m) => m.criado_por !== userId
+      ).length;
+      const nextDeadlineAt =
+        dashboard.pendingMatches
+          .filter((m) => m.criado_por !== userId)
+          .map((m) => m.confirmation_deadline_at)
+          .filter((d): d is string => !!d)
+          .sort()[0] ?? null;
+
+      queryClient.setQueryData<CurrentUserPendingConfirmationStatus>(
+        queryKeys.matches.pendingStatus(userId),
+        {
+          pendingActionsCount,
+          nextDeadlineAt,
+          deadlineHours: dashboard.deadlineHours,
+        }
+      );
+
+      return dashboard;
     },
     enabled: !!userId,
     staleTime: 1000 * 5,
@@ -505,7 +569,12 @@ export function useConfirmMatch() {
     retry: false,
     onMutate: async ({ matchId, userId }) => {
       const matchesQueryKey = queryKeys.matches.list(userId);
-      await queryClient.cancelQueries({ queryKey: matchesQueryKey });
+      const dashboardQueryKey = queryKeys.matches.pendingDashboard(userId);
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: matchesQueryKey }),
+        queryClient.cancelQueries({ queryKey: dashboardQueryKey }),
+      ]);
 
       const previousMatches =
         queryClient.getQueryData<InfiniteData<MatchesPage>>(matchesQueryKey);
@@ -523,6 +592,15 @@ export function useConfirmMatch() {
           })),
         };
       });
+
+      // Remove da lista de pendentes do dashboard (optimistic)
+      queryClient.setQueryData<CurrentUserPendingDashboard>(
+        dashboardQueryKey,
+        (old) =>
+          old
+            ? { ...old, pendingMatches: old.pendingMatches.filter((m) => m.id !== matchId) }
+            : old
+      );
 
       return { previousMatches, matchesQueryKey };
     },
@@ -550,7 +628,8 @@ type PendingOptimisticContext = {
 
 /**
  * Remove o match da lista de pendências do usuário de forma otimista.
- * Usado pelos 3 hooks de confirmação que transferem a responsabilidade.
+ * Atualiza tanto `pending(userId)` (compat com mutations existentes)
+ * quanto `pendingDashboard(userId)` (novo hook combinado da página de partidas).
  */
 async function optimisticallyRemoveFromPending(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -558,12 +637,28 @@ async function optimisticallyRemoveFromPending(
   userId: string
 ): Promise<PendingOptimisticContext> {
   const pendingQueryKey = queryKeys.matches.pending(userId);
-  await queryClient.cancelQueries({ queryKey: pendingQueryKey });
+  const dashboardQueryKey = queryKeys.matches.pendingDashboard(userId);
+
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: pendingQueryKey }),
+    queryClient.cancelQueries({ queryKey: dashboardQueryKey }),
+  ]);
+
   const previousPending = queryClient.getQueryData<CurrentUserPendingMatch[]>(pendingQueryKey);
+
   queryClient.setQueryData<CurrentUserPendingMatch[]>(
     pendingQueryKey,
     (old) => (old ?? []).filter((m) => m.id !== matchId)
   );
+
+  queryClient.setQueryData<CurrentUserPendingDashboard>(
+    dashboardQueryKey,
+    (old) =>
+      old
+        ? { ...old, pendingMatches: old.pendingMatches.filter((m) => m.id !== matchId) }
+        : old
+  );
+
   return { pendingQueryKey, previousPending };
 }
 

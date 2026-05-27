@@ -26,6 +26,8 @@ export const queryKeys = {
       [...queryKeys.matches.all, "pending-actions", userId] as const,
     pendingStatus: (userId: string) =>
       [...queryKeys.matches.all, "pending-status", userId] as const,
+    pendingDashboard: (userId: string) =>
+      [...queryKeys.matches.all, "pending-dashboard", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
     h2h: (userId?: string, opponentId?: string) =>
       [...queryKeys.matches.all, "h2h", userId, opponentId] as const,
