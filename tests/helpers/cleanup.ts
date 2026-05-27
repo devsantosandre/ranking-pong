@@ -11,8 +11,19 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
 
-/** Prefixos de e-mail que identificam usuários criados pelos testes. */
-export const TEST_EMAIL_PREFIXES = ["qa-rankingpong-", "qa-e2e-"];
+/**
+ * Prefixos de e-mail que identificam usuários criados pelos testes.
+ * Usado na consulta à public.users (filtro SQL LIKE).
+ */
+export const TEST_EMAIL_PREFIXES = ["qa-rankingpong-", "qa-e2e-", "qa-debug-", "qa-"];
+
+/**
+ * Domínio reservado para e-mails de teste.
+ * Todo usuário criado pelos testes usa @example.com — esse domínio jamais
+ * é usado por usuários reais, por isso é um identificador seguro e abrangente
+ * para varredura via auth.users (Admin API listUsers).
+ */
+export const TEST_EMAIL_DOMAIN = "@example.com";
 
 /**
  * Tabelas que precisam ser limpas explicitamente antes da exclusão do usuário
@@ -78,30 +89,58 @@ export async function deleteSingleTestUser(
 /**
  * Localiza e exclui TODOS os usuários de teste identificados pelo prefixo de e-mail.
  * Use no globalSetup/globalTeardown para eliminar resquícios de execuções anteriores.
+ *
+ * Estratégia de busca em duas camadas:
+ *  1. auth.users (via Admin API listUsers) — captura usuários cujo upsert em
+ *     public.users falhou (ex.: crash antes do segundo passo do createE2EUser).
+ *  2. public.users (via tabela) — garante cobertura de usuários ativos normalmente.
+ * Os IDs das duas fontes são mesclados (deduplicados) antes da exclusão.
  */
 export async function purgeAllTestData(): Promise<{ deleted: number; failed: number }> {
   const admin = buildAdminClient();
 
-  // Montar filtro OR para todos os prefixos
-  const orFilter = TEST_EMAIL_PREFIXES.map((p) => `email.like.${p}%`).join(",");
+  // ── Fonte 1: auth.users via Admin API (paginado, max 1000/página) ─────────
+  // Usa TEST_EMAIL_DOMAIN (@example.com) como identificador universal: qualquer
+  // usuário de teste usa esse domínio, independente do prefixo de label.
+  const authIds = new Set<string>();
+  let page = 1;
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) {
+      console.warn(`[cleanup] Falha ao listar auth.users (página ${page}): ${error.message}`);
+      break;
+    }
+    for (const u of data.users ?? []) {
+      if (u.email?.endsWith(TEST_EMAIL_DOMAIN)) {
+        authIds.add(u.id);
+      }
+    }
+    // Para quando a página retornar menos que perPage (última página)
+    if ((data.users ?? []).length < 1000) break;
+    page++;
+  }
 
-  const { data: testUsers, error: listError } = await admin
+  // ── Fonte 2: public.users via tabela (cobre usuários totalmente criados) ──
+  const orFilter = TEST_EMAIL_PREFIXES.map((p) => `email.like.${p}%`).join(",");
+  const { data: publicUsers, error: listError } = await admin
     .from("users")
     .select("id, email")
     .or(orFilter);
 
   if (listError) {
-    console.warn(`[cleanup] Erro ao listar usuários de teste: ${listError.message}`);
+    console.warn(`[cleanup] Erro ao listar public.users de teste: ${listError.message}`);
+  }
+  for (const u of publicUsers ?? []) {
+    authIds.add(u.id);
+  }
+
+  if (authIds.size === 0) {
     return { deleted: 0, failed: 0 };
   }
 
-  if (!testUsers?.length) {
-    return { deleted: 0, failed: 0 };
-  }
+  const userIds = [...authIds];
 
-  const userIds = testUsers.map((u) => u.id);
-
-  // Limpar todas as tabelas sem CASCADE de uma só vez (IN é mais eficiente que N deletes)
+  // Limpar todas as tabelas sem CASCADE de uma só vez
   for (const { table, column } of NON_CASCADE_TABLES) {
     const { error } = await admin.from(table).delete().in(column, userIds);
     if (error) {
