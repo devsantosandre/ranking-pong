@@ -1,11 +1,11 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
 import {
   enforcePendingConfirmationSla,
-  getPendingConfirmationDeadlineHours,
   getOpenPendingConfirmationSnapshots,
 } from "@/lib/matches/confirmation-sla";
 
@@ -354,29 +354,37 @@ export async function getCurrentUserPendingConfirmationStatusAction(): Promise<C
   }
 
   const adminSupabase = createAdminClient();
-  await enforcePendingConfirmationSla({ supabase: adminSupabase });
 
-  const [deadlineHours, pendingCountResult, pendingSnapshotsResult] =
-    await Promise.all([
-      getPendingConfirmationDeadlineHours(adminSupabase),
-      adminSupabase
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["pendente", "edited"])
-        .or(`player_a_id.eq.${user.id},player_b_id.eq.${user.id}`)
-        .neq("criado_por", user.id),
-      getOpenPendingConfirmationSnapshots({
-        responsibleUserId: user.id,
-        supabase: adminSupabase,
-      }),
-    ]);
+  // SLA enforcement em background — não bloqueia a resposta de status
+  after(async () => {
+    try {
+      await enforcePendingConfirmationSla({ supabase: createAdminClient() });
+    } catch (e) {
+      console.error("[after/getPendingConfirmationStatus/sla]", e);
+    }
+  });
+
+  // deadlineHours vem de getOpenPendingConfirmationSnapshots (evita chamada dupla)
+  const [pendingCountResult, pendingSnapshotsResult] = await Promise.all([
+    adminSupabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pendente", "edited"])
+      .or(`player_a_id.eq.${user.id},player_b_id.eq.${user.id}`)
+      .neq("criado_por", user.id),
+    getOpenPendingConfirmationSnapshots({
+      responsibleUserId: user.id,
+      supabase: adminSupabase,
+    }),
+  ]);
 
   if (pendingCountResult.error) {
     throw new Error("Erro ao verificar pendências do jogador");
   }
 
+  const { deadlineHours, items: snapshots } = pendingSnapshotsResult;
   const nextDeadlineAt =
-    pendingSnapshotsResult.items
+    snapshots
       .map((item) => item.currentDeadlineAt)
       .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0] ??
     null;
@@ -401,7 +409,15 @@ export async function getCurrentUserPendingMatchesAction(): Promise<
   }
 
   const adminSupabase = createAdminClient();
-  await enforcePendingConfirmationSla({ supabase: adminSupabase });
+
+  // SLA em background — não bloqueia carregamento das partidas pendentes
+  after(async () => {
+    try {
+      await enforcePendingConfirmationSla({ supabase: createAdminClient() });
+    } catch (e) {
+      console.error("[after/getPendingMatches/sla]", e);
+    }
+  });
 
   const [{ items: snapshots }, matchesResult] = await Promise.all([
     getOpenPendingConfirmationSnapshots({ supabase: adminSupabase }),
@@ -488,7 +504,15 @@ export async function getCurrentUserRecentMatchesAction(
   }
 
   const adminSupabase = createAdminClient();
-  await enforcePendingConfirmationSla({ supabase: adminSupabase });
+
+  // SLA em background — não bloqueia carregamento do histórico
+  after(async () => {
+    try {
+      await enforcePendingConfirmationSla({ supabase: createAdminClient() });
+    } catch (e) {
+      console.error("[after/getRecentMatches/sla]", e);
+    }
+  });
 
   const { data, error } = await adminSupabase
     .from("matches")
@@ -572,7 +596,15 @@ export async function getCurrentUserMatchCountsAction(): Promise<CurrentUserMatc
   }
 
   const adminSupabase = createAdminClient();
-  await enforcePendingConfirmationSla({ supabase: adminSupabase });
+
+  // SLA em background — não bloqueia contadores
+  after(async () => {
+    try {
+      await enforcePendingConfirmationSla({ supabase: createAdminClient() });
+    } catch (e) {
+      console.error("[after/getMatchCounts/sla]", e);
+    }
+  });
 
   const baseFilter = `player_a_id.eq.${user.id},player_b_id.eq.${user.id}`;
   const [pendingResult, recentResult] = await Promise.all([
@@ -612,7 +644,15 @@ export async function getHomeHighlightsAction(): Promise<HomeHighlightsActionRes
   }
 
   const adminSupabase = createAdminClient();
-  await enforcePendingConfirmationSla({ supabase: adminSupabase });
+
+  // SLA em background — não bloqueia carregamento dos highlights
+  after(async () => {
+    try {
+      await enforcePendingConfirmationSla({ supabase: createAdminClient() });
+    } catch (e) {
+      console.error("[after/getHomeHighlights/sla]", e);
+    }
+  });
 
   const weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 

@@ -543,6 +543,30 @@ export function useConfirmMatch() {
   });
 }
 
+type PendingOptimisticContext = {
+  pendingQueryKey: ReturnType<typeof queryKeys.matches.pending>;
+  previousPending?: CurrentUserPendingMatch[];
+};
+
+/**
+ * Remove o match da lista de pendências do usuário de forma otimista.
+ * Usado pelos 3 hooks de confirmação que transferem a responsabilidade.
+ */
+async function optimisticallyRemoveFromPending(
+  queryClient: ReturnType<typeof useQueryClient>,
+  matchId: string,
+  userId: string
+): Promise<PendingOptimisticContext> {
+  const pendingQueryKey = queryKeys.matches.pending(userId);
+  await queryClient.cancelQueries({ queryKey: pendingQueryKey });
+  const previousPending = queryClient.getQueryData<CurrentUserPendingMatch[]>(pendingQueryKey);
+  queryClient.setQueryData<CurrentUserPendingMatch[]>(
+    pendingQueryKey,
+    (old) => (old ?? []).filter((m) => m.id !== matchId)
+  );
+  return { pendingQueryKey, previousPending };
+}
+
 // Hook para contestar partida
 export function useContestMatch() {
   const queryClient = useQueryClient();
@@ -565,6 +589,14 @@ export function useContestMatch() {
     },
     networkMode: "online",
     retry: false,
+    onMutate: async ({ matchId, userId }) => {
+      return optimisticallyRemoveFromPending(queryClient, matchId, userId);
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousPending !== undefined) {
+        queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
@@ -588,6 +620,14 @@ export function useReportMatchDidNotHappen() {
     },
     networkMode: "online",
     retry: false,
+    onMutate: async ({ matchId, userId }) => {
+      return optimisticallyRemoveFromPending(queryClient, matchId, userId);
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousPending !== undefined) {
+        queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
@@ -611,6 +651,14 @@ export function useConfirmMatchDidHappen() {
     },
     networkMode: "online",
     retry: false,
+    onMutate: async ({ matchId, userId }) => {
+      return optimisticallyRemoveFromPending(queryClient, matchId, userId);
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousPending !== undefined) {
+        queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
