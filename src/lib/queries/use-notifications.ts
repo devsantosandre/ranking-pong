@@ -25,8 +25,10 @@ export function usePendingConfirmationStatus(userId?: string) {
     },
     enabled: !!userId,
     staleTime: 1000 * 10,
-    refetchInterval: 1000 * 15,
-    refetchIntervalInBackground: true,
+    // useRealtimePendingSync (AuthenticatedAppRuntime) invalida pendingStatus
+    // instantaneamente via WebSocket. Poll de 120s é só fallback de segurança.
+    refetchInterval: 1000 * 120,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });

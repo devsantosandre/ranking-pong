@@ -326,8 +326,11 @@ export function usePendingDashboard(userId: string | undefined) {
     },
     enabled: !!userId,
     staleTime: 1000 * 5,
-    refetchInterval: 1000 * 15,
-    refetchIntervalInBackground: true,
+    // Realtime (useRealtimePendingSync) já invalida imediatamente quando chega
+    // uma notificação de confirmação. O poll de 120s é apenas fallback em caso
+    // de queda do WebSocket — não é o mecanismo principal de atualização.
+    refetchInterval: 1000 * 120,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
