@@ -107,6 +107,14 @@ export type CancelPendingMatchForNonexistentResult =
  */
 let _deadlineHoursCache: { value: number; expiresAt: number } | null = null;
 
+/**
+ * Throttle para o SLA enforcement: evita execuções redundantes quando múltiplos
+ * after() disparam em sequência (poll do dashboard + poll do status + write actions).
+ * Máximo 1 execução por minuto por processo Node.
+ */
+let _slaLastRunAt = 0;
+const SLA_MIN_INTERVAL_MS = 60_000;
+
 function clampDeadlineHours(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_PENDING_CONFIRMATION_DEADLINE_HOURS;
@@ -876,6 +884,15 @@ export async function enforcePendingConfirmationSla(params?: {
   responsibleUserId?: string;
   supabase?: AdminSupabaseClient;
 }) {
+  // Throttle: no máximo 1 execução por minuto por processo.
+  // Evita trabalho duplicado quando vários after() disparam quase ao mesmo tempo
+  // (ex: poll do dashboard + poll do status no mesmo ciclo de 15s).
+  const now = Date.now();
+  if (now - _slaLastRunAt < SLA_MIN_INTERVAL_MS) {
+    return [];
+  }
+  _slaLastRunAt = now;
+
   const supabase = params?.supabase ?? createAdminClient();
   const nowIso = new Date().toISOString();
   const { deadlineHours, items } = await getOpenPendingConfirmationSnapshots({

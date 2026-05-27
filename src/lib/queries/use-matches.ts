@@ -609,14 +609,20 @@ export function useConfirmMatch() {
       queryClient.setQueryData(context.matchesQueryKey, context.previousMatches);
     },
     onSuccess: () => {
-      // Invalida cache de partidas, usuários e conquistas para atualizar dados
+      // Invalida partidas, usuários e highlights imediatamente
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
       queryClient.invalidateQueries({
         queryKey: [...queryKeys.matches.all, "pending-status"],
       });
+      // Conquistas são calculadas em after() no servidor — aguarda 2s para garantir
+      // que o DB write do after() completou antes de o cliente refazer a query.
+      // Sem esse delay, há race condition: cliente busca antes do after() escrever,
+      // e o AchievementUnlockToastHost só mostra o toast no próximo evento de foco.
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
+      }, 2_000);
     },
   });
 }
