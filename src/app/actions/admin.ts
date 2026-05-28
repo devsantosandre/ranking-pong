@@ -2811,19 +2811,11 @@ export async function adminGetAnalytics(
   const trendStart = getMonthRange(trendMonths[0]).startDate;
   const monthDays = getDaysInMonth(selectedMonth);
 
-  const [
-    matchesResponse,
-    usersResponse,
-    logsResponse,
-    openPendingResponse,
-  ] = await Promise.all([
-    supabase
-      .from("matches")
-      .select(
-        "id, player_a_id, player_b_id, vencedor_id, status, created_at, updated_at, data_partida"
-      )
-      .gte("data_partida", trendStart)
-      .lte("data_partida", selectedRange.endDate),
+  const [matchesRpc, usersResponse, logsResponse, openPendingResponse] = await Promise.all([
+    supabase.rpc("get_analytics_matches", {
+      p_trend_start: trendStart,
+      p_month_end: selectedRange.endDate,
+    }),
     supabase.from("users").select("id, name, full_name, email, created_at, is_active"),
     supabase.from("admin_logs").select("id, action, admin_role, created_at"),
     supabase
@@ -2832,7 +2824,7 @@ export async function adminGetAnalytics(
       .in("status", ["pendente", "edited"]),
   ]);
 
-  if (matchesResponse.error) {
+  if (matchesRpc.error) {
     throw new Error("Erro ao buscar métricas de partidas");
   }
 
@@ -2848,7 +2840,7 @@ export async function adminGetAnalytics(
     throw new Error("Erro ao buscar pendências abertas");
   }
 
-  const matches = (matchesResponse.data ?? []) as AnalyticsMatchRow[];
+  const matches = (matchesRpc.data ?? []) as AnalyticsMatchRow[];
   const users = (usersResponse.data ?? []) as AnalyticsUserRow[];
   const logRows = (logsResponse.data ?? []) as AnalyticsLogRow[];
   const activeAccounts = users.filter((user) => user.is_active !== false).length;
