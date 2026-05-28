@@ -314,7 +314,7 @@ export function usePendingDashboard(userId: string | undefined) {
           .sort()[0] ?? null;
 
       queryClient.setQueryData<CurrentUserPendingConfirmationStatus>(
-        queryKeys.matches.pendingStatus(userId),
+        queryKeys.pendingStatus(userId),
         {
           pendingActionsCount,
           nextDeadlineAt,
@@ -611,20 +611,17 @@ export function useConfirmMatch() {
       if (!context?.previousMatches || !context.matchesQueryKey) return;
       queryClient.setQueryData(context.matchesQueryKey, context.previousMatches);
     },
-    onSuccess: () => {
-      // Invalida partidas, usuários e highlights imediatamente
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      // Invalida apenas as queries afetadas pela confirmação — evita burst de requisições
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.recent(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
       // Conquistas são calculadas em after() no servidor — aguarda 2s para garantir
       // que o DB write do after() completou antes de o cliente refazer a query.
-      // Sem esse delay, há race condition: cliente busca antes do after() escrever,
-      // e o AchievementUnlockToastHost só mostra o toast no próximo evento de foco.
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
       }, 2_000);
     },
   });
@@ -701,12 +698,11 @@ export function useContestMatch() {
         queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.recent(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
     },
   });
 }
@@ -732,12 +728,10 @@ export function useReportMatchDidNotHappen() {
         queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
     },
   });
 }
@@ -763,12 +757,10 @@ export function useConfirmMatchDidHappen() {
         queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.recent(userId) });
     },
   });
 }
@@ -934,12 +926,9 @@ export function useRegisterMatch() {
         queryClient.removeQueries({ queryKey: context.pendingQueryKey });
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dailyLimits.all });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(variables.playerId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dailyLimits.all });
     },
   });
 }

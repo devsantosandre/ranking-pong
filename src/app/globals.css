@@ -142,6 +142,22 @@ textarea,
   -webkit-touch-callout: default;
 }
 
+/* Match highlight glow pulse */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent),
+                0 4px 16px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 60%, transparent),
+                0 6px 28px color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 1.8s ease-in-out infinite;
+}
+
 /* TV Ranking Animations */
 @keyframes tv-highlight {
   0% {

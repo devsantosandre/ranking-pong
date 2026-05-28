@@ -35,17 +35,9 @@ export function useRealtimePendingSync(userId?: string) {
 
           if (row.tipo !== "confirmacao") return;
 
-          // Invalida todas as queries de partidas (inclui pendingDashboard, pending, counts…)
-          void queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-          // Invalida explicitamente o dashboard combinado (fallback — já coberto por matches.all)
+          // Invalida somente o dashboard de pendências do usuário (evita burst de requisições)
           void queryClient.invalidateQueries({
             queryKey: queryKeys.matches.pendingDashboard(userId),
-          });
-          void queryClient.invalidateQueries({
-            queryKey: queryKeys.matches.pendingActions(userId),
-          });
-          void queryClient.invalidateQueries({
-            queryKey: queryKeys.matches.pendingStatus(userId),
           });
           void queryClient.invalidateQueries({
             queryKey: queryKeys.notifications.user(userId),

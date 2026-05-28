@@ -177,7 +177,9 @@ export default function RegistrarJogoPage() {
         // mantêm o usuário na tela com a mensagem.
         onSuccess: () => {
           requestIdRef.current = null;
-          router.push("/partidas");
+          router.push(
+            `/partidas?registered=1&opponent=${encodeURIComponent(opponentName)}&opponentId=${encodeURIComponent(opponentId)}`
+          );
         },
         onError: (err) => {
           setError(err.message || "Erro ao registrar partida. Tente novamente.");

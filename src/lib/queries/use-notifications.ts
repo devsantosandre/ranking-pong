@@ -15,7 +15,7 @@ const EMPTY_PENDING_CONFIRMATION_STATUS: CurrentUserPendingConfirmationStatus = 
 
 export function usePendingConfirmationStatus(userId?: string) {
   return useQuery({
-    queryKey: queryKeys.matches.pendingStatus(userId || "anonymous"),
+    queryKey: queryKeys.pendingStatus(userId || "anonymous"),
     queryFn: async () => {
       if (!userId) {
         return EMPTY_PENDING_CONFIRMATION_STATUS;
