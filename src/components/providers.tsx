@@ -10,6 +10,7 @@ import {
 } from "@/lib/query-client";
 import { getQueryPersister } from "@/lib/query-persistence";
 import { clearClientSessionData } from "@/lib/client-session-cleanup";
+import { productConfig } from "@/lib/product-config";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 
@@ -59,7 +60,7 @@ export function Providers({ children }: { children: ReactNode }) {
     () => ({
       persister,
       maxAge: QUERY_PERSISTENCE_MAX_AGE_MS,
-      buster: "ranking-pong-cache-v1",
+      buster: `${productConfig.storageKeyPrefix}-cache-v1`,
       dehydrateOptions: {
         shouldDehydrateQuery: (query: { queryKey: readonly unknown[]; state: { status: string } }) => {
           if (query.state.status !== "success") return false;

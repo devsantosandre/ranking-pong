@@ -1,5 +1,6 @@
 import webpush, { type PushSubscription } from "web-push";
 import { env, hasAdminConfig } from "@/lib/env";
+import { productConfig } from "@/lib/product-config";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export type PushMessagePayload = {
@@ -56,8 +57,8 @@ function buildPushPayload(payload: PushMessagePayload): string {
     body: payload.body,
     tag: payload.tag,
     url,
-    icon: payload.icon || "/icon-512.png",
-    badge: payload.badge || "/badge-72.png",
+    icon: payload.icon || productConfig.assets.icon512,
+    badge: payload.badge || productConfig.assets.badge72,
     data: {
       ...payload.data,
       url,

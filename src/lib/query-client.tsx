@@ -1,8 +1,9 @@
 "use client";
 
 import { QueryClient, isServer, onlineManager } from "@tanstack/react-query";
+import { productConfig } from "@/lib/product-config";
 
-export const QUERY_PERSISTENCE_KEY = "ranking-pong-query-cache-v1";
+export const QUERY_PERSISTENCE_KEY = `${productConfig.storageKeyPrefix}-query-cache-v1`;
 export const QUERY_PERSISTENCE_MAX_AGE_MS = 1000 * 60 * 60 * 6; // 6 horas
 
 function makeQueryClient() {

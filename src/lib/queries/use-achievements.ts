@@ -254,6 +254,6 @@ export const rarityColors: Record<string, { bg: string; border: string; text: st
   prata: { bg: "bg-slate-100", border: "border-slate-300", text: "text-slate-600" },
   ouro: { bg: "bg-yellow-100", border: "border-yellow-400", text: "text-yellow-700" },
   platina: { bg: "bg-cyan-100", border: "border-cyan-300", text: "text-cyan-700" },
-  diamante: { bg: "bg-purple-100", border: "border-purple-300", text: "text-purple-700" },
+  diamante: { bg: "bg-indigo-100", border: "border-indigo-300", text: "text-indigo-700" },
   especial: { bg: "bg-pink-100", border: "border-pink-300", text: "text-pink-700" },
 };

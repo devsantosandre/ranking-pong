@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { buildBrowserTitle } from "@/lib/app-title";
+import { productConfig } from "@/lib/product-config";
 
 const POST_LOGIN_REDIRECT_KEY = "post_login_redirect_started_at_v1";
 const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
@@ -101,8 +102,8 @@ export default function LoginPage() {
         <div className="text-center">
           <div className="mx-auto mb-4 flex h-48 w-48 items-center justify-center rounded-2xl bg-white/20 shadow-lg overflow-hidden p-4">
             <Image
-              src="/smash-pong-logo.png"
-              alt="Smash Pong App Logo"
+              src={productConfig.assets.logo}
+              alt={`${productConfig.name} Logo`}
               width={152}
               height={152}
               className="object-contain"
@@ -165,7 +166,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-white/50">
-          © {new Date().getFullYear()} Smash Pong App. Todos os direitos reservados.
+          © {new Date().getFullYear()} {productConfig.name}. Todos os direitos reservados.
         </p>
       </div>
     </main>

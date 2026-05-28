@@ -58,14 +58,14 @@ const adminSections = [
     label: "Historico",
     icon: History,
     description: "Ver acoes administrativas",
-    color: "text-purple-600 bg-purple-100",
+    color: "text-primary bg-primary/10",
   },
   {
     href: "/tv",
     label: "Painel TV",
     icon: Tv,
     description: "Abrir placar ao vivo em nova aba",
-    color: "text-fuchsia-600 bg-fuchsia-100",
+    color: "text-cyan-600 bg-cyan-100",
     openInNewTab: true,
   },
 ];

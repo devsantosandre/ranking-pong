@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, Share, Plus, Download } from "lucide-react";
+import { productConfig } from "@/lib/product-config";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -135,7 +136,7 @@ export function InstallPrompt() {
 
           <div className="flex-1 min-w-0 pr-6">
             <h3 className="font-semibold text-white text-base">
-              Instalar Smash Pong App
+              Instalar {productConfig.name}
             </h3>
 
             {isIOS ? (

@@ -63,7 +63,7 @@ const roleCards: Array<{
     summary:
       "Tem tudo do moderador e ainda altera regras, perfis, pontos, status da conta, visibilidade no ranking e configurações.",
     icon: Shield,
-    tone: "border-violet-200 bg-violet-50 text-violet-700",
+    tone: "border-primary/20 bg-primary/5 text-primary",
   },
 ];
 
@@ -187,7 +187,7 @@ const stateCards = [
     title: "Observador",
     subtitle: "Não é perfil",
     icon: EyeOff,
-    tone: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    tone: "border-slate-200 bg-slate-50 text-slate-700",
     description:
       "Vem do ajuste “Ocultar do ranking”. A conta continua ativa e pode entrar no app, mas sai do ranking, some das listas de adversários e não pode registrar partidas.",
   },
@@ -315,8 +315,8 @@ export default function AdminPerfisPage() {
                   </ul>
                 </div>
 
-                <div className="rounded-xl border border-violet-200 bg-white/80 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">
+                <div className="rounded-xl border border-primary/20 bg-white/80 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
                     Só Admin pode
                   </p>
                   <ul className="mt-2 space-y-2 text-sm text-slate-700">

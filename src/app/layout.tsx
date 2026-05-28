@@ -6,6 +6,7 @@ import {
   APP_DEFAULT_BROWSER_TITLE,
   APP_TITLE,
 } from "@/lib/app-title";
+import { productConfig } from "@/lib/product-config";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
@@ -19,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#a421d2",
+  themeColor: productConfig.colors.themeColorPwa,
 };
 
 export const metadata: Metadata = {
@@ -28,10 +29,9 @@ export const metadata: Metadata = {
     template: `${APP_TITLE} · %s`,
   },
   applicationName: APP_TITLE,
-  description:
-    "Aplicativo mobile-first de ranking interno de tênis de mesa com pontuação e notícias em tempo real.",
+  description: productConfig.description,
   icons: {
-    apple: "/apple-touch-icon.png",
+    apple: productConfig.assets.appleTouch,
   },
   appleWebApp: {
     capable: true,
@@ -43,6 +43,27 @@ export const metadata: Metadata = {
   },
 };
 
+// Injeta CSS vars do productConfig no :root para sobrescrever globals.css quando
+// env vars de branding são fornecidas. Defaults do globals.css valem se vars omitidas.
+const tenantCssOverrides = `
+:root {
+  --primary: ${productConfig.colors.primary};
+  --background: ${productConfig.colors.background};
+  --ring: ${productConfig.colors.primary};
+  --chart-1: ${productConfig.colors.primary};
+  --sidebar-primary: ${productConfig.colors.primary};
+  --sidebar-ring: ${productConfig.colors.primary};
+}
+.dark {
+  --primary: ${productConfig.colors.primaryDark};
+  --background: ${productConfig.colors.backgroundDark};
+  --ring: ${productConfig.colors.primaryDark};
+  --chart-1: ${productConfig.colors.primaryDark};
+  --sidebar-primary: ${productConfig.colors.primaryDark};
+  --sidebar-ring: ${productConfig.colors.primaryDark};
+}
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -50,6 +71,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: tenantCssOverrides }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

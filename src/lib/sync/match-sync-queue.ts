@@ -1,4 +1,6 @@
-const DB_NAME = "rankingpong-sync";
+import { productConfig } from "@/lib/product-config";
+
+const DB_NAME = `${productConfig.storageKeyPrefix}-sync`;
 const DB_VERSION = 1;
 const STORE = "pending-matches";
 

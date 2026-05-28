@@ -1,9 +1,10 @@
 "use client";
 
 import { clearPersistedQueryCache } from "@/lib/query-persistence";
+import { productConfig } from "@/lib/product-config";
 
-const ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY = "smash-pong:achievement-toast-queue:v1";
-const ACHIEVEMENT_TOAST_QUEUE_EVENT = "smash-pong:achievement-toast-queue:changed";
+const ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY = `${productConfig.storageKeyPrefix}:achievement-toast-queue:v1`;
+const ACHIEVEMENT_TOAST_QUEUE_EVENT = `${productConfig.storageKeyPrefix}:achievement-toast-queue:changed`;
 const POST_LOGIN_REDIRECT_KEY = "post_login_redirect_started_at_v1";
 
 export function clearClientSessionData() {

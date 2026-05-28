@@ -119,12 +119,13 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("push", (event) => {
+  // Fallback genérico (raro): payload normal vem do servidor com title/icon do tenant.
   const defaultPayload = {
-    title: "Smash Pong App",
+    title: "Notificação",
     body: "Você tem uma pendência para confirmar.",
     url: "/partidas",
-    icon: "/icon-512.png",
-    badge: "/badge-72.png",
+    icon: "/branding/template/icon-512.png",
+    badge: "/branding/template/badge-72.png",
     tag: "pending-match",
     data: {},
   };

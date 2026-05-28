@@ -50,7 +50,7 @@ const roleLabels: Record<string, string> = {
 const roleColors: Record<string, string> = {
   player: "bg-gray-100 text-gray-700",
   moderator: "bg-blue-100 text-blue-700",
-  admin: "bg-purple-100 text-purple-700",
+  admin: "bg-primary/10 text-primary",
 };
 
 const statusFilters = [
@@ -806,7 +806,7 @@ export default function AdminJogadoresPage() {
                             </span>
                           )}
                           {player.hide_from_ranking && (
-                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-600">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                               Observador
                             </span>
                           )}
@@ -1080,7 +1080,7 @@ export default function AdminJogadoresPage() {
                             variant="outline"
                             className={`w-full ${
                               player.hide_from_ranking
-                                ? "text-purple-600 hover:bg-purple-50"
+                                ? "text-slate-600 hover:bg-slate-50"
                                 : "text-blue-600 hover:bg-blue-50"
                             }`}
                             onClick={() => handleToggleHideFromRankingClick(player)}

@@ -9,6 +9,7 @@ import {
   usePendingAchievementToasts,
 } from "@/lib/queries/use-achievements";
 import { getSingleEmoji } from "@/lib/emoji";
+import { productConfig } from "@/lib/product-config";
 
 // ⚠️ PREVIEW MODE - Remover após ajustes
 const PREVIEW_MODE = false;
@@ -42,7 +43,7 @@ const PREVIEW_ACHIEVEMENTS: Achievement[] = [
   {
     id: "preview-3",
     key: "legend",
-    name: "Lenda do Ping Pong",
+    name: "Lenda do Esporte",
     description: "Alcance o rating de 1500 pontos",
     category: "rating",
     rarity: "diamante",
@@ -56,8 +57,8 @@ const PREVIEW_ACHIEVEMENTS: Achievement[] = [
 
 // Raridades que mostram confete
 const CONFETTI_RARITIES = ["diamante", "platina", "especial"];
-const ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY = "smash-pong:achievement-toast-queue:v1";
-const ACHIEVEMENT_TOAST_QUEUE_EVENT = "smash-pong:achievement-toast-queue:changed";
+const ACHIEVEMENT_TOAST_QUEUE_STORAGE_KEY = `${productConfig.storageKeyPrefix}:achievement-toast-queue:v1`;
+const ACHIEVEMENT_TOAST_QUEUE_EVENT = `${productConfig.storageKeyPrefix}:achievement-toast-queue:changed`;
 const ACHIEVEMENT_TOAST_QUEUE_TTL_MS = 1000 * 60 * 30; // 30 min
 
 type AchievementUnlockToastProps = {

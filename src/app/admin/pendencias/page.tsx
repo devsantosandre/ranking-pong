@@ -681,7 +681,7 @@ export default function AdminPendenciasPage() {
                 title="Pendentes"
                 value={formatNumber(data.pendingCount)}
                 description="Jogos aguardando primeira confirmação"
-                tone="border-violet-200 bg-violet-50"
+                tone="border-primary/20 bg-primary/5"
               />
               <SummaryCard
                 title="Contestadas"

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ComponentType, type ReactNode, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { productConfig } from "@/lib/product-config";
 import {
   ArrowLeft,
   BellRing,
@@ -154,7 +155,7 @@ export function AppShell({
             ) : null}
             <div className="flex-1 space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary-foreground/80">
-                Smash Pong App
+                {productConfig.name}
               </p>
               <h1 className="text-xl font-semibold sm:text-2xl">{title}</h1>
               {subtitle ? (

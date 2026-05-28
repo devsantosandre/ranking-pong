@@ -10,6 +10,7 @@ import { useLatestValidatedMatch } from "@/lib/hooks/use-latest-validated-match"
 import { TvRankingList } from "@/components/tv/tv-ranking-list";
 import { LayoutGrid, List, Minus, Plus, Volume2, VolumeX } from "lucide-react";
 import { buildBrowserTitle } from "@/lib/app-title";
+import { productConfig } from "@/lib/product-config";
 
 const TV_SCALE_MIN_STEP = -5;
 const TV_SCALE_MAX_STEP = 3;
@@ -147,7 +148,7 @@ function TvRankingContent() {
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="text-base sm:text-xl lg:text-2xl font-bold text-foreground truncate">
-              Smash Pong App
+              {productConfig.name}
               {demoMode ? (
                 <span className="ml-2 text-xs font-normal text-orange-500 animate-pulse">
                   DEMO

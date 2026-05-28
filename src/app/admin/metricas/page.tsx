@@ -737,7 +737,7 @@ export default function AdminMetricasPage() {
                   description={`${formatPercentage(analytics.summary.participationRate)} da base ativa (${formatNumber(
                     analytics.summary.activeAccounts
                   )})`}
-                  tone="border-violet-200 bg-violet-50"
+                  tone="border-primary/20 bg-primary/5"
                 />
                 <MetricCard
                   title="Média por dia"
