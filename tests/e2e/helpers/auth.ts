@@ -4,13 +4,20 @@ import { deleteSingleTestUser } from "../../helpers/cleanup";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 const PASSWORD = process.env.TEST_USER_PASSWORD || "Qa!Rank1ng#2026";
 
 const admin = createClient(URL, SERVICE, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-export type E2EUser = { id: string; email: string; password: string; name: string };
+export type E2EUser = {
+  id: string;
+  email: string;
+  password: string;
+  name: string;
+  accessToken: string;
+};
 
 export async function createE2EUser(label: string): Promise<E2EUser> {
   const ts = Date.now().toString(36);
@@ -39,7 +46,17 @@ export async function createE2EUser(label: string): Promise<E2EUser> {
     { onConflict: "id" }
   );
 
-  return { id: data.user.id, email, password: PASSWORD, name };
+  // Obtém access_token para chamadas de RPC que exigem sessão autenticada
+  const anonClient = createClient(URL, ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: session } = await anonClient.auth.signInWithPassword({
+    email,
+    password: PASSWORD,
+  });
+  const accessToken = session?.session?.access_token ?? "";
+
+  return { id: data.user.id, email, password: PASSWORD, name, accessToken };
 }
 
 export async function deleteE2EUser(userId: string): Promise<void> {

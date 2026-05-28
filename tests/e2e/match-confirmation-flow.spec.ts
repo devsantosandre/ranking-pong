@@ -21,6 +21,7 @@ import {
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -38,11 +39,17 @@ test.afterAll(async () => {
 
 async function registerMatchViaRpc(params: {
   playerAId: string;
+  playerAToken: string;
   playerBId: string;
   scoreA?: number;
   scoreB?: number;
 }): Promise<string> {
-  const { data, error } = await admin.rpc("register_match_with_notification_v1", {
+  // RPC exige sessão autenticada (auth.uid()) — usa o token do playerA, não service_role
+  const authedClient = createClient(SUPABASE_URL, ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${params.playerAToken}` } },
+  });
+  const { data, error } = await authedClient.rpc("register_match_with_notification_v1", {
     p_player_id: params.playerAId,
     p_opponent_id: params.playerBId,
     p_resultado_a: params.scoreA ?? 3,
@@ -75,6 +82,7 @@ test.describe("Confirmação de partidas — fluxos completos", () => {
     // PlayerA registra partida contra PlayerB
     const matchId = await registerMatchViaRpc({
       playerAId: playerA.id,
+      playerAToken: playerA.accessToken,
       playerBId: playerB.id,
     });
 
@@ -112,6 +120,7 @@ test.describe("Confirmação de partidas — fluxos completos", () => {
 
     const matchId = await registerMatchViaRpc({
       playerAId: playerA.id,
+      playerAToken: playerA.accessToken,
       playerBId: playerB.id,
       scoreA: 3,
       scoreB: 1,
@@ -170,6 +179,7 @@ test.describe("Confirmação de partidas — fluxos completos", () => {
 
     const matchId = await registerMatchViaRpc({
       playerAId: playerA.id,
+      playerAToken: playerA.accessToken,
       playerBId: playerB.id,
     });
 
@@ -182,24 +192,20 @@ test.describe("Confirmação de partidas — fluxos completos", () => {
     }).first();
 
     if (!(await notHappenBtn.isVisible({ timeout: 5_000 }).catch(() => false))) {
-      // Pode estar em um dropdown de ações
-      const moreBtn = page.getByRole("button", { name: /mais opções|⋮|\.\.\./i }).first();
-      if (await moreBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await moreBtn.click();
-        await page.getByRole("menuitem", {
-          name: /não existiu|jogo não aconteceu/i,
-        }).first().click();
-      } else {
-        test.skip(true, "Botão de jogo não existiu não encontrado — verifique o seletor");
-        return;
-      }
-    } else {
-      const start = Date.now();
-      await notHappenBtn.click();
-      const elapsed = Date.now() - start;
-      console.log(`  ⏱  reportMatchDidNotHappenAction UI response: ${elapsed}ms`);
-      expect(elapsed).toBeLessThan(3_000);
+      test.skip(true, "Botão de jogo não existiu não encontrado — verifique o seletor");
+      return;
     }
+
+    await notHappenBtn.click();
+
+    // O botão abre um ConfirmModal com confirmText="Confirmar envio" (não "Confirmar")
+    const modalConfirmBtn = page.getByRole("button", { name: /confirmar envio/i });
+    await expect(modalConfirmBtn).toBeVisible({ timeout: 5_000 });
+    const start = Date.now();
+    await modalConfirmBtn.click();
+    const elapsed = Date.now() - start;
+    console.log(`  ⏱  reportMatchDidNotHappenAction UI response: ${elapsed}ms`);
+    expect(elapsed).toBeLessThan(3_000);
 
     // Partida ainda deve estar em pendente/edited mas com criado_por = playerB
     await expect.poll(
@@ -222,6 +228,7 @@ test.describe("Confirmação de partidas — fluxos completos", () => {
 
     const matchId = await registerMatchViaRpc({
       playerAId: playerA.id,
+      playerAToken: playerA.accessToken,
       playerBId: playerB.id,
     });
 
@@ -287,6 +294,7 @@ test.describe("Confirmação de partidas — fluxos completos", () => {
 
     const matchId = await registerMatchViaRpc({
       playerAId: playerA.id,
+      playerAToken: playerA.accessToken,
       playerBId: playerB.id,
     });
 
