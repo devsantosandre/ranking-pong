@@ -3,7 +3,7 @@ import { checkAndUnlockAchievements, type Achievement } from "@/lib/achievements
 
 type ValidationActorType = "player" | "admin" | "system";
 
-type ValidationRpcRow = {
+export type ValidationRpcRow = {
   match_id: string;
   old_status: "pendente" | "edited";
   player_a_id: string;
@@ -166,6 +166,140 @@ function mapValidatePendingRpcErrorMessage(message: string | undefined): {
   return {
     error: "Erro ao validar a partida pendente",
     reason: "validate_pending_match_rpc_failed",
+  };
+}
+
+/**
+ * Executa APENAS o RPC de validação — caminho crítico, sem conquistas.
+ *
+ * Use em Server Actions com `after()`: o RPC é executado no caminho crítico
+ * e conquistas são verificadas em background via `runAchievementsAfterValidation`.
+ */
+export async function validatePendingMatchRpcOnly(
+  params: ValidatePendingMatchParams
+): Promise<
+  | { success: true; row: ValidationRpcRow }
+  | { success: false; error: string; reason: string }
+> {
+  const supabase = createAdminClient();
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "validate_pending_match_v2",
+    {
+      p_match_id: params.matchId,
+      p_actor_user_id: params.actorUserId ?? null,
+      p_actor_name: params.actorName ?? null,
+      p_actor_type: params.actorType,
+    }
+  );
+
+  if (rpcError) {
+    const mappedError = mapValidatePendingRpcErrorMessage(rpcError.message);
+    return { success: false, error: mappedError.error, reason: mappedError.reason };
+  }
+
+  const validation = parseValidatePendingRpcRow(rpcData);
+  if (!validation) {
+    return {
+      success: false,
+      error: "Erro ao validar a partida pendente",
+      reason: "validate_pending_match_rpc_invalid",
+    };
+  }
+
+  return { success: true, row: validation };
+}
+
+/**
+ * Verifica e desbloqueia conquistas para os dois jogadores após validação.
+ * Deve ser chamado em `after()` — não faz parte do caminho crítico.
+ *
+ * Retorna mapa userId → conquistas desbloqueadas.
+ */
+export async function runAchievementsAfterValidation(
+  row: ValidationRpcRow
+): Promise<Record<string, Achievement[]>> {
+  const supabase = createAdminClient();
+
+  const { data: usersData, error: usersError } = await supabase
+    .from("users")
+    .select("id, full_name, name, email, rating_atual, vitorias, derrotas, jogos_disputados")
+    .in("id", [row.player_a_id, row.player_b_id]);
+
+  if (usersError || !usersData || usersData.length !== 2) {
+    console.warn("[runAchievementsAfterValidation] Falha ao buscar dados dos jogadores:", usersError?.message);
+    return {};
+  }
+
+  const playerAData = usersData.find(
+    (user): user is ValidationCurrentUserRow => user.id === row.player_a_id
+  );
+  const playerBData = usersData.find(
+    (user): user is ValidationCurrentUserRow => user.id === row.player_b_id
+  );
+
+  if (!playerAData || !playerBData) {
+    return {};
+  }
+
+  const winnerId = row.winner_id;
+  const loserId = row.loser_id;
+  const winnerData = winnerId === row.player_a_id ? playerAData : playerBData;
+  const loserData = loserId === row.player_a_id ? playerAData : playerBData;
+
+  const { data: recentWinnerMatches } = await supabase
+    .from("matches")
+    .select("vencedor_id")
+    .or(`player_a_id.eq.${winnerId},player_b_id.eq.${winnerId}`)
+    .eq("status", "validado")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  let winnerStreak = 0;
+  if (recentWinnerMatches) {
+    for (const recentMatch of recentWinnerMatches) {
+      if (recentMatch.vencedor_id === winnerId) {
+        winnerStreak += 1;
+      } else {
+        break;
+      }
+    }
+  }
+
+  const winnerContext = {
+    userId: winnerId,
+    matchId: row.match_id,
+    vitorias: winnerData.vitorias ?? 0,
+    derrotas: winnerData.derrotas ?? 0,
+    jogos: winnerData.jogos_disputados ?? 0,
+    rating: winnerData.rating_atual ?? row.winner_rating_after,
+    streak: winnerStreak,
+    isWinner: true,
+    opponentRating: row.loser_rating_before,
+    resultado: row.score_label,
+  };
+
+  const loserContext = {
+    userId: loserId,
+    matchId: row.match_id,
+    vitorias: loserData.vitorias ?? 0,
+    derrotas: loserData.derrotas ?? 0,
+    jogos: loserData.jogos_disputados ?? 0,
+    rating: loserData.rating_atual ?? row.loser_rating_after,
+    streak: 0,
+    isWinner: false,
+    opponentRating: row.winner_rating_before,
+    resultado: row.score_label,
+  };
+
+  const [winnerAchievementsResult, loserAchievementsResult] = await Promise.allSettled([
+    checkAndUnlockAchievements(winnerContext),
+    checkAndUnlockAchievements(loserContext),
+  ]);
+
+  return {
+    [winnerId]: winnerAchievementsResult.status === "fulfilled" ? winnerAchievementsResult.value : [],
+    [loserId]: loserAchievementsResult.status === "fulfilled" ? loserAchievementsResult.value : [],
   };
 }
 

@@ -15,17 +15,25 @@ import {
   confirmMatchAction,
   contestMatchAction,
   confirmMatchDidHappenAction,
-  registerMatchAction,
   reportMatchDidNotHappenAction,
 } from "@/app/actions/matches";
 import {
   getCurrentUserMatchCountsAction,
   getCurrentUserPendingMatchesAction,
+  getCurrentUserPendingDashboardAction,
   getCurrentUserRecentMatchesAction,
   getHomeHighlightsAction,
   type CurrentUserRecentMatch,
   type CurrentUserPendingMatch,
+  type CurrentUserPendingDashboard,
+  type CurrentUserPendingConfirmationStatus,
 } from "@/app/actions/pending-confirmation";
+import {
+  enqueuePendingMatch,
+  removePendingMatch,
+  tryRegisterBackgroundSync,
+} from "@/lib/sync/match-sync-queue";
+import { postRegisterMatch } from "@/lib/sync/register-match-client";
 
 const PAGE_SIZE = 20;
 
@@ -146,20 +154,6 @@ export type HomeHighlights = {
   weeklyActivityLeader: HomeWeeklyActivityHighlight | null;
 };
 
-const NETWORK_ERROR_PATTERNS = [
-  "failed to fetch",
-  "network",
-  "connection",
-  "timeout",
-  "temporarily unavailable",
-];
-
-function isLikelyNetworkError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return NETWORK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
-}
-
 function normalizeRelationUser(user: UserRelation, fallbackId: string): UserInfo {
   const normalized = Array.isArray(user) ? (user[0] ?? null) : user;
 
@@ -273,6 +267,70 @@ export function usePendingMatches(userId: string | undefined) {
     staleTime: 1000 * 5,
     refetchInterval: 1000 * 15,
     refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+}
+
+/**
+ * Hook combinado — substitui usePendingMatches + useMatchCounts + usePendingConfirmationStatus
+ * na página de partidas. Uma única requisição HTTP que retorna:
+ *   - pendingMatches (lista completa de partidas pendentes com metadados SLA)
+ *   - recentCount   (total de partidas recentes para o contador da aba)
+ *   - deadlineHours (configuração de prazo, para exibição da regra)
+ *
+ * Efeitos colaterais (setQueryData) ao buscar:
+ *   - `pending(userId)` — mantém compat com optimistic UI das mutations
+ *   - `pendingStatus(userId)` — mantém badge do app-shell atualizado
+ */
+export function usePendingDashboard(userId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useQuery({
+    queryKey: queryKeys.matches.pendingDashboard(userId || "anonymous"),
+    queryFn: async (): Promise<CurrentUserPendingDashboard> => {
+      if (!userId) {
+        return { pendingMatches: [], recentCount: 0, deadlineHours: 6 };
+      }
+
+      const dashboard = await getCurrentUserPendingDashboardAction();
+
+      // Popula o cache `pending(userId)` para que as mutations com optimistic UI continuem
+      // funcionando: `optimisticallyRemoveFromPending` lê/escreve nessa key.
+      queryClient.setQueryData<CurrentUserPendingMatch[]>(
+        queryKeys.matches.pending(userId),
+        dashboard.pendingMatches
+      );
+
+      // Popula o cache `pendingStatus(userId)` para o badge do app-shell
+      const pendingActionsCount = dashboard.pendingMatches.filter(
+        (m) => m.criado_por !== userId
+      ).length;
+      const nextDeadlineAt =
+        dashboard.pendingMatches
+          .filter((m) => m.criado_por !== userId)
+          .map((m) => m.confirmation_deadline_at)
+          .filter((d): d is string => !!d)
+          .sort()[0] ?? null;
+
+      queryClient.setQueryData<CurrentUserPendingConfirmationStatus>(
+        queryKeys.pendingStatus(userId),
+        {
+          pendingActionsCount,
+          nextDeadlineAt,
+          deadlineHours: dashboard.deadlineHours,
+        }
+      );
+
+      return dashboard;
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 5,
+    // Realtime (useRealtimePendingSync) já invalida imediatamente quando chega
+    // uma notificação de confirmação. O poll de 120s é apenas fallback em caso
+    // de queda do WebSocket — não é o mecanismo principal de atualização.
+    refetchInterval: 1000 * 120,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
@@ -514,7 +572,12 @@ export function useConfirmMatch() {
     retry: false,
     onMutate: async ({ matchId, userId }) => {
       const matchesQueryKey = queryKeys.matches.list(userId);
-      await queryClient.cancelQueries({ queryKey: matchesQueryKey });
+      const dashboardQueryKey = queryKeys.matches.pendingDashboard(userId);
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: matchesQueryKey }),
+        queryClient.cancelQueries({ queryKey: dashboardQueryKey }),
+      ]);
 
       const previousMatches =
         queryClient.getQueryData<InfiniteData<MatchesPage>>(matchesQueryKey);
@@ -533,23 +596,76 @@ export function useConfirmMatch() {
         };
       });
 
+      // Remove da lista de pendentes do dashboard (optimistic)
+      queryClient.setQueryData<CurrentUserPendingDashboard>(
+        dashboardQueryKey,
+        (old) =>
+          old
+            ? { ...old, pendingMatches: old.pendingMatches.filter((m) => m.id !== matchId) }
+            : old
+      );
+
       return { previousMatches, matchesQueryKey };
     },
     onError: (_error, _variables, context) => {
       if (!context?.previousMatches || !context.matchesQueryKey) return;
       queryClient.setQueryData(context.matchesQueryKey, context.previousMatches);
     },
-    onSuccess: () => {
-      // Invalida cache de partidas, usuários e conquistas para atualizar dados
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      // Invalida apenas as queries afetadas pela confirmação — evita burst de requisições
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.recent(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
+      // Conquistas são calculadas em after() no servidor — aguarda 2s para garantir
+      // que o DB write do after() completou antes de o cliente refazer a query.
+      setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.achievements.all });
+      }, 2_000);
     },
   });
+}
+
+type PendingOptimisticContext = {
+  pendingQueryKey: ReturnType<typeof queryKeys.matches.pending>;
+  previousPending?: CurrentUserPendingMatch[];
+};
+
+/**
+ * Remove o match da lista de pendências do usuário de forma otimista.
+ * Atualiza tanto `pending(userId)` (compat com mutations existentes)
+ * quanto `pendingDashboard(userId)` (novo hook combinado da página de partidas).
+ */
+async function optimisticallyRemoveFromPending(
+  queryClient: ReturnType<typeof useQueryClient>,
+  matchId: string,
+  userId: string
+): Promise<PendingOptimisticContext> {
+  const pendingQueryKey = queryKeys.matches.pending(userId);
+  const dashboardQueryKey = queryKeys.matches.pendingDashboard(userId);
+
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: pendingQueryKey }),
+    queryClient.cancelQueries({ queryKey: dashboardQueryKey }),
+  ]);
+
+  const previousPending = queryClient.getQueryData<CurrentUserPendingMatch[]>(pendingQueryKey);
+
+  queryClient.setQueryData<CurrentUserPendingMatch[]>(
+    pendingQueryKey,
+    (old) => (old ?? []).filter((m) => m.id !== matchId)
+  );
+
+  queryClient.setQueryData<CurrentUserPendingDashboard>(
+    dashboardQueryKey,
+    (old) =>
+      old
+        ? { ...old, pendingMatches: old.pendingMatches.filter((m) => m.id !== matchId) }
+        : old
+  );
+
+  return { pendingQueryKey, previousPending };
 }
 
 // Hook para contestar partida
@@ -574,12 +690,19 @@ export function useContestMatch() {
     },
     networkMode: "online",
     retry: false,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onMutate: async ({ matchId, userId }) => {
+      return optimisticallyRemoveFromPending(queryClient, matchId, userId);
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousPending !== undefined) {
+        queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
+      }
+    },
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.recent(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
     },
   });
 }
@@ -597,12 +720,18 @@ export function useReportMatchDidNotHappen() {
     },
     networkMode: "online",
     retry: false,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onMutate: async ({ matchId, userId }) => {
+      return optimisticallyRemoveFromPending(queryClient, matchId, userId);
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousPending !== undefined) {
+        queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
+      }
+    },
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
     },
   });
 }
@@ -620,42 +749,186 @@ export function useConfirmMatchDidHappen() {
     },
     networkMode: "online",
     retry: false,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.homeHighlights() });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
-      });
+    onMutate: async ({ matchId, userId }) => {
+      return optimisticallyRemoveFromPending(queryClient, matchId, userId);
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousPending !== undefined) {
+        queryClient.setQueryData(ctx.pendingQueryKey, ctx.previousPending);
+      }
+    },
+    onSuccess: (_data, variables) => {
+      const { userId } = variables;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.recent(userId) });
     },
   });
 }
 
-// Hook para registrar nova partida
+export type OptimisticOpponent = {
+  id: string;
+  name: string | null;
+  full_name: string | null;
+  email: string | null;
+};
+
+export type RegisterMatchInput = {
+  playerId: string;
+  opponentId: string;
+  outcome: string;
+  requestId: string;
+  optimisticOpponent?: OptimisticOpponent | null;
+  optimisticSelf?: OptimisticOpponent | null;
+};
+
+type RegisterMatchMutationContext = {
+  pendingQueryKey: ReturnType<typeof queryKeys.matches.pending>;
+  previousPending?: CurrentUserPendingMatch[];
+};
+
+function buildOptimisticPendingMatch(
+  input: RegisterMatchInput
+): CurrentUserPendingMatch | null {
+  const [aStr, bStr] = input.outcome.split("x");
+  const a = Number.parseInt(aStr, 10);
+  const b = Number.parseInt(bStr, 10);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+  const winnerId = a > b ? input.playerId : input.opponentId;
+  const nowIso = new Date().toISOString();
+
+  const opponent: OptimisticOpponent = input.optimisticOpponent ?? {
+    id: input.opponentId,
+    name: null,
+    full_name: null,
+    email: null,
+  };
+
+  const self: OptimisticOpponent = input.optimisticSelf ?? {
+    id: input.playerId,
+    name: null,
+    full_name: null,
+    email: null,
+  };
+
+  return {
+    id: `optimistic-${input.requestId}`,
+    player_a_id: input.playerId,
+    player_b_id: input.opponentId,
+    vencedor_id: winnerId,
+    resultado_a: a,
+    resultado_b: b,
+    status: "pendente",
+    criado_por: input.playerId,
+    aprovado_por: null,
+    created_at: nowIso,
+    pontos_variacao_a: null,
+    pontos_variacao_b: null,
+    confirmation_deadline_at: null,
+    pending_kind: "score",
+    pending_context: "default",
+    pending_context_actor_id: null,
+    player_a: {
+      id: self.id,
+      name: self.name,
+      full_name: self.full_name,
+      email: self.email,
+    },
+    player_b: {
+      id: opponent.id,
+      name: opponent.name,
+      full_name: opponent.full_name,
+      email: opponent.email,
+    },
+  };
+}
+
+// Hook para registrar nova partida — usa API Route + Background Sync + Optimistic UI
 export function useRegisterMatch() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async (input: {
-      playerId: string;
-      opponentId: string;
-      outcome: string;
-      requestId: string;
-    }) => {
-      const result = await registerMatchAction(input);
-      if (!result.success) {
-        throw new Error(result.error || "Erro ao registrar partida");
-      }
-      return result;
-    },
-    networkMode: "online",
-    retry: (failureCount, error) => isLikelyNetworkError(error) && failureCount < 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 8000),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dailyLimits.all });
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.matches.all, "pending-status"],
+  return useMutation<
+    { success: true; matchId: string; wasInserted: boolean; queued: boolean },
+    Error,
+    RegisterMatchInput,
+    RegisterMatchMutationContext
+  >({
+    mutationFn: async (input) => {
+      // Persiste no IndexedDB ANTES de tentar enviar — sobrevive a fechamento
+      await enqueuePendingMatch({
+        requestId: input.requestId,
+        playerId: input.playerId,
+        opponentId: input.opponentId,
+        outcome: input.outcome,
+        enqueuedAt: Date.now(),
       });
+
+      // Registra Background Sync para retomar mesmo se o app fechar
+      void tryRegisterBackgroundSync();
+
+      const result = await postRegisterMatch({
+        playerId: input.playerId,
+        opponentId: input.opponentId,
+        outcome: input.outcome,
+        requestId: input.requestId,
+      });
+
+      if (result.success) {
+        await removePendingMatch(input.requestId);
+        return {
+          success: true,
+          matchId: result.matchId,
+          wasInserted: result.wasInserted,
+          queued: false,
+        };
+      }
+
+      // status 0 = falha de rede real (offline, DNS, fetch abortado)
+      // → mantém na fila e sinaliza queued para o caller navegar com toast offline
+      if (result.status === 0) {
+        return {
+          success: true,
+          matchId: `queued-${input.requestId}`,
+          wasInserted: false,
+          queued: true,
+        };
+      }
+
+      // Qualquer outro erro (4xx negócio ou 5xx servidor) bloqueia a navegação
+      // O usuário precisa ver o motivo e decidir o que fazer
+      await removePendingMatch(input.requestId);
+      throw new Error(result.error);
+    },
+    networkMode: "always",
+    retry: false,
+    onMutate: async (input) => {
+      const pendingQueryKey = queryKeys.matches.pending(input.playerId);
+      await queryClient.cancelQueries({ queryKey: pendingQueryKey });
+
+      const previousPending =
+        queryClient.getQueryData<CurrentUserPendingMatch[]>(pendingQueryKey);
+
+      const optimisticMatch = buildOptimisticPendingMatch(input);
+      if (optimisticMatch) {
+        queryClient.setQueryData<CurrentUserPendingMatch[]>(
+          pendingQueryKey,
+          (oldData) => [optimisticMatch, ...(oldData ?? [])]
+        );
+      }
+
+      return { pendingQueryKey, previousPending };
+    },
+    onError: (_error, _variables, context) => {
+      if (!context) return;
+      if (context.previousPending !== undefined) {
+        queryClient.setQueryData(context.pendingQueryKey, context.previousPending);
+      } else {
+        queryClient.removeQueries({ queryKey: context.pendingQueryKey });
+      }
+    },
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.matches.pendingDashboard(variables.playerId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dailyLimits.all });
     },
   });
 }

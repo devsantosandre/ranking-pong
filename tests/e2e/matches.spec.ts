@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createE2EUser, deleteE2EUser, loginViaUI, type E2EUser } from "./helpers/auth";
+import { createE2EUser, deleteE2EUser, loginViaUI, loginByCookieReady, type E2EUser } from "./helpers/auth";
 
 const created: E2EUser[] = [];
 
@@ -36,21 +36,15 @@ test.describe("Partidas — navegação e registo via UI", () => {
     ).toBeVisible({ timeout: 20_000 });
   });
 
-  test("registro de partida com placar inválido (0x0) mostra erro", async ({ page }) => {
+  test("botão de registro fica desabilitado sem placar selecionado", async ({ page }) => {
     const user = await createE2EUser("reg-invalid");
     created.push(user);
 
-    await loginViaUI(page, user.email, user.password);
-    await page.goto("/registrar-jogo");
+    await loginByCookieReady(page, user.email, user.password, "/registrar-jogo");
 
-    // Tenta submeter sem preencher — botão de enviar deve aparecer
-    const submitBtn = page.getByRole("button", { name: /registrar|salvar|enviar|confirmar/i });
-    if (await submitBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await submitBtn.click();
-      // Esperamos validação do formulário (HTML5 ou mensagem custom)
-      // Apenas verifica que não navegou para outra rota
-      await page.waitForTimeout(1_500);
-      expect(page.url()).toMatch(/registrar-jogo|partidas/);
-    }
+    // O formulário previne submit via botão desabilitado (não via erro pós-envio)
+    const submitBtn = page.getByRole("button", { name: /registrar partida/i });
+    await expect(submitBtn).toBeVisible({ timeout: 10_000 });
+    await expect(submitBtn).toBeDisabled();
   });
 });

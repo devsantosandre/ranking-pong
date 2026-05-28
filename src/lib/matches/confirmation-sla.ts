@@ -100,6 +100,21 @@ export type CancelPendingMatchForNonexistentResult =
       reason: string;
     };
 
+/**
+ * Cache de módulo para getDeadlineHours.
+ * O valor raramente muda (configuração de admin) — TTL de 5 minutos é seguro.
+ * Evita múltiplas queries à tabela settings na mesma cadeia de chamadas.
+ */
+let _deadlineHoursCache: { value: number; expiresAt: number } | null = null;
+
+/**
+ * Throttle para o SLA enforcement: evita execuções redundantes quando múltiplos
+ * after() disparam em sequência (poll do dashboard + poll do status + write actions).
+ * Máximo 1 execução por minuto por processo Node.
+ */
+let _slaLastRunAt = 0;
+const SLA_MIN_INTERVAL_MS = 60_000;
+
 function clampDeadlineHours(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_PENDING_CONFIRMATION_DEADLINE_HOURS;
@@ -114,13 +129,28 @@ function clampDeadlineHours(value: number | null | undefined): number {
 async function getDeadlineHours(
   supabase: AdminSupabaseClient
 ): Promise<number> {
+  const now = Date.now();
+  if (_deadlineHoursCache && now < _deadlineHoursCache.expiresAt) {
+    return _deadlineHoursCache.value;
+  }
+
   const { data } = await supabase
     .from("settings")
     .select("value")
     .eq("key", "pending_confirmation_deadline_hours")
     .single<{ value: string | null }>();
 
-  return clampDeadlineHours(data?.value ? Number.parseInt(data.value, 10) : null);
+  const value = clampDeadlineHours(data?.value ? Number.parseInt(data.value, 10) : null);
+  _deadlineHoursCache = { value, expiresAt: now + 5 * 60_000 };
+  return value;
+}
+
+/**
+ * Invalida o cache de deadline hours (chamado quando a configuração é alterada).
+ * Exportada para uso em testes e no painel admin.
+ */
+export function invalidateDeadlineHoursCache(): void {
+  _deadlineHoursCache = null;
 }
 
 function getPendingResponsibleUserId(match: {
@@ -546,6 +576,73 @@ export async function getOpenPendingConfirmationSnapshots(params?: {
   };
 }
 
+/**
+ * Retorna o estado de confirmação (pendingKind / pendingContext) de UM match específico.
+ *
+ * Substitui `getOpenPendingConfirmationSnapshots()` quando o caller só precisa do
+ * estado de uma partida — evita carregar TODOS os matches pendentes e todas as
+ * notificações desde o mais antigo.
+ *
+ * Custo: 1 query (notifications filtrado por match_id) vs 2 queries da função original.
+ */
+export async function getMatchPendingKindAndContext(
+  matchId: string,
+  supabase: AdminSupabaseClient = createAdminClient()
+): Promise<{
+  pendingKind: "score" | "nonexistent";
+  pendingContext: "default" | "nonexistent_rejected";
+  pendingContextActorId: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("created_at, payload")
+    .eq("tipo", "confirmacao")
+    .filter("payload->>match_id", "eq", matchId)
+    .order("created_at", { ascending: true })
+    .returns<PendingConfirmationNotificationRow[]>();
+
+  if (error) {
+    throw new Error("Erro ao carregar estado da partida");
+  }
+
+  // Sem notificações → estado padrão (score, default)
+  // Match recém-criado cuja notificação ainda não foi inserida é tratado como score/default
+  if (!data?.length) {
+    return { pendingKind: "score", pendingContext: "default", pendingContextActorId: null };
+  }
+
+  let pendingKind: "score" | "nonexistent" = "score";
+  let nonexistentRejectedActorId: string | null = null;
+
+  for (const row of data) {
+    const payload = parsePendingNotificationPayload(row.payload);
+    if (!payload) continue;
+
+    if (payload.event === "nonexistent_rejected") {
+      nonexistentRejectedActorId = payload.actor_id;
+    }
+
+    if (
+      payload.event === "pending_created" ||
+      payload.event === "pending_transferred" ||
+      payload.event === "nonexistent_claimed" ||
+      payload.event === "nonexistent_rejected"
+    ) {
+      pendingKind = getPendingKindFromEvent(payload.event);
+    }
+  }
+
+  // pendingContext é "nonexistent_rejected" quando houve uma rejeição E o pendingKind
+  // atual NÃO é "nonexistent" (ou seja, a reivindicação não foi refeita depois)
+  const isNonexistentRejected = nonexistentRejectedActorId !== null && pendingKind !== "nonexistent";
+  const pendingContext: "default" | "nonexistent_rejected" = isNonexistentRejected
+    ? "nonexistent_rejected"
+    : "default";
+  const pendingContextActorId = isNonexistentRejected ? nonexistentRejectedActorId : null;
+
+  return { pendingKind, pendingContext, pendingContextActorId };
+}
+
 async function insertSystemAutoValidationLogs(
   supabase: AdminSupabaseClient,
   rows: AutoValidatedMatchLogEntry[],
@@ -643,6 +740,15 @@ export async function cancelPendingMatchForNonexistent(params: {
   actorName?: string | null;
   actorType: "player" | "system";
   supabase?: AdminSupabaseClient;
+  /**
+   * Estado pré-carregado pelo caller — evita chamada redundante a
+   * getOpenPendingConfirmationSnapshots() quando o caller já tem essa informação.
+   * Se fornecido, a busca interna é pulada.
+   */
+  preloadedSnapshot?: {
+    pendingKind: "score" | "nonexistent";
+    responsibleUserId: string | null;
+  };
 }): Promise<CancelPendingMatchForNonexistentResult> {
   const supabase = params.supabase ?? createAdminClient();
   const fail = (
@@ -654,10 +760,27 @@ export async function cancelPendingMatchForNonexistent(params: {
     reason,
   });
 
-  const { items } = await getOpenPendingConfirmationSnapshots({ supabase });
-  const pendingSnapshot = items.find((item) => item.matchId === params.matchId);
+  // Usa snapshot pré-carregado ou busca no banco
+  let snapshotKind: "score" | "nonexistent";
+  let snapshotResponsibleUserId: string | null;
 
-  if (!pendingSnapshot || pendingSnapshot.pendingKind !== "nonexistent") {
+  if (params.preloadedSnapshot) {
+    snapshotKind = params.preloadedSnapshot.pendingKind;
+    snapshotResponsibleUserId = params.preloadedSnapshot.responsibleUserId;
+  } else {
+    const { items } = await getOpenPendingConfirmationSnapshots({ supabase });
+    const found = items.find((item) => item.matchId === params.matchId);
+    if (!found) {
+      return fail(
+        "Esta partida não está aguardando confirmação de jogo inexistente",
+        "pending_not_nonexistent"
+      );
+    }
+    snapshotKind = found.pendingKind;
+    snapshotResponsibleUserId = found.responsibleUserId;
+  }
+
+  if (snapshotKind !== "nonexistent") {
     return fail(
       "Esta partida não está aguardando confirmação de jogo inexistente",
       "pending_not_nonexistent"
@@ -666,7 +789,7 @@ export async function cancelPendingMatchForNonexistent(params: {
 
   if (
     params.actorType === "player" &&
-    (!params.actorUserId || pendingSnapshot.responsibleUserId !== params.actorUserId)
+    (!params.actorUserId || snapshotResponsibleUserId !== params.actorUserId)
   ) {
     return fail(
       "Esta partida não está aguardando sua confirmação de cancelamento",
@@ -761,6 +884,15 @@ export async function enforcePendingConfirmationSla(params?: {
   responsibleUserId?: string;
   supabase?: AdminSupabaseClient;
 }) {
+  // Throttle: no máximo 1 execução por minuto por processo.
+  // Evita trabalho duplicado quando vários after() disparam quase ao mesmo tempo
+  // (ex: poll do dashboard + poll do status no mesmo ciclo de 15s).
+  const now = Date.now();
+  if (now - _slaLastRunAt < SLA_MIN_INTERVAL_MS) {
+    return [];
+  }
+  _slaLastRunAt = now;
+
   const supabase = params?.supabase ?? createAdminClient();
   const nowIso = new Date().toISOString();
   const { deadlineHours, items } = await getOpenPendingConfirmationSnapshots({
@@ -780,12 +912,17 @@ export async function enforcePendingConfirmationSla(params?: {
 
   for (const row of overdueRows) {
     if (row.pendingKind === "nonexistent") {
+      // Passa o snapshot pré-carregado para evitar nova chamada a getOpenPendingSnapshots
       const result = await cancelPendingMatchForNonexistent({
         matchId: row.matchId,
         actorUserId: null,
         actorName: "Cancelamento automático",
         actorType: "system",
         supabase,
+        preloadedSnapshot: {
+          pendingKind: row.pendingKind,
+          responsibleUserId: row.responsibleUserId,
+        },
       });
 
       if (result.success) {

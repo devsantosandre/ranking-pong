@@ -24,8 +24,8 @@ export const queryKeys = {
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
       [...queryKeys.matches.all, "pending-actions", userId] as const,
-    pendingStatus: (userId: string) =>
-      [...queryKeys.matches.all, "pending-status", userId] as const,
+    pendingDashboard: (userId: string) =>
+      [...queryKeys.matches.all, "pending-dashboard", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
     h2h: (userId?: string, opponentId?: string) =>
       [...queryKeys.matches.all, "h2h", userId, opponentId] as const,
@@ -57,6 +57,10 @@ export const queryKeys = {
     check: (userId: string, opponentId: string, date: string) =>
       [...queryKeys.dailyLimits.all, userId, opponentId, date] as const,
   },
+
+  // Badge de pendências do header — chave separada de matches.* para não ser
+  // varrida pelo invalidateQueries(matches.all) do Realtime
+  pendingStatus: (userId: string) => ["pending-status", userId] as const,
 
   // Settings
   settings: ["settings"] as const,

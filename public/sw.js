@@ -1,9 +1,110 @@
+const SYNC_DB_NAME = "rankingpong-sync";
+const SYNC_DB_VERSION = 1;
+const SYNC_STORE = "pending-matches";
+const REGISTER_MATCH_SYNC_TAG = "register-match";
+
 self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
+});
+
+function openSyncDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SYNC_DB_NAME, SYNC_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(SYNC_STORE)) {
+        db.createObjectStore(SYNC_STORE, { keyPath: "requestId" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function runSyncTx(mode, fn) {
+  return openSyncDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(SYNC_STORE, mode);
+        const store = tx.objectStore(SYNC_STORE);
+        const request = fn(store);
+        request.onsuccess = () => {
+          resolve(request.result);
+          db.close();
+        };
+        request.onerror = () => {
+          reject(request.error);
+          db.close();
+        };
+      })
+  );
+}
+
+function getAllPending() {
+  return runSyncTx("readonly", (store) => store.getAll());
+}
+
+function deletePending(requestId) {
+  return runSyncTx("readwrite", (store) => store.delete(requestId));
+}
+
+async function flushPendingMatches() {
+  let pending = [];
+  try {
+    pending = await getAllPending();
+  } catch (error) {
+    console.error("sw_sync_read_failed", error);
+    return;
+  }
+
+  for (const payload of pending) {
+    try {
+      const response = await fetch("/api/matches/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          playerId: payload.playerId,
+          opponentId: payload.opponentId,
+          outcome: payload.outcome,
+          requestId: payload.requestId,
+        }),
+      });
+
+      if (response.ok) {
+        await deletePending(payload.requestId);
+        continue;
+      }
+
+      // 4xx: erro de negócio — não adianta retentar
+      if (response.status >= 400 && response.status < 500) {
+        await deletePending(payload.requestId);
+        continue;
+      }
+
+      // 5xx: deixa na fila — browser tentará novamente depois
+      throw new Error(`server_error_${response.status}`);
+    } catch (error) {
+      // Erro de rede ou 5xx: propaga para que o sync seja retentado
+      throw error;
+    }
+  }
+}
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === REGISTER_MATCH_SYNC_TAG) {
+    event.waitUntil(flushPendingMatches());
+  }
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "flush-pending-matches") {
+    event.waitUntil(flushPendingMatches().catch(() => undefined));
+  }
 });
 
 self.addEventListener("fetch", (event) => {

@@ -1,58 +1,22 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import type { Achievement } from "@/lib/achievements";
 import { sendPushToUsers } from "@/lib/push";
 import type { PendingNotificationPayloadV1 } from "@/lib/types/notifications";
-import { validatePendingMatchByActor } from "@/lib/matches/validate-pending-match";
+import {
+  validatePendingMatchRpcOnly,
+  runAchievementsAfterValidation,
+} from "@/lib/matches/validate-pending-match";
 import {
   cancelPendingMatchForNonexistent,
   enforcePendingConfirmationSla,
-  getOpenPendingConfirmationSnapshots,
-  transferMatchConfirmationResponsibility,
+  getMatchPendingKindAndContext,
 } from "@/lib/matches/confirmation-sla";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
-const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "America/Sao_Paulo";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-type RegisterMatchRpcRow = {
-  match_id: string;
-  opponent_id: string;
-  actor_name: string | null;
-  was_inserted: boolean;
-};
-
-function createMatchActionTelemetry() {
-  return {
-    step(...args: unknown[]) {
-      void args;
-    },
-    finish(...args: unknown[]) {
-      void args;
-    },
-  };
-}
-
-function createConfirmMatchTelemetry() {
-  return createMatchActionTelemetry();
-}
-
-function createContestMatchTelemetry() {
-  return createMatchActionTelemetry();
-}
-
-function createReportMatchDidNotHappenTelemetry() {
-  return createMatchActionTelemetry();
-}
-
-function createConfirmMatchDidHappenTelemetry() {
-  return createMatchActionTelemetry();
-}
-
-function createRegisterMatchTelemetry() {
-  return createMatchActionTelemetry();
-}
 
 // Validar formato do score (ex: "3x1", "2x3")
 function parseScore(outcome: string): { a: number; b: number } | null {
@@ -72,70 +36,6 @@ function parseScore(outcome: string): { a: number; b: number } | null {
   return { a, b };
 }
 
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value);
-}
-
-function parseRegisterMatchRpcRow(data: unknown): RegisterMatchRpcRow | null {
-  const row = Array.isArray(data) ? data[0] : data;
-
-  if (!row || typeof row !== "object") return null;
-
-  const candidate = row as Partial<RegisterMatchRpcRow>;
-  if (
-    typeof candidate.match_id !== "string" ||
-    typeof candidate.opponent_id !== "string" ||
-    typeof candidate.was_inserted !== "boolean"
-  ) {
-    return null;
-  }
-
-  return {
-    match_id: candidate.match_id,
-    opponent_id: candidate.opponent_id,
-    actor_name: typeof candidate.actor_name === "string" ? candidate.actor_name : null,
-    was_inserted: candidate.was_inserted,
-  };
-}
-
-function mapRegisterMatchRpcErrorMessage(message: string | undefined): string {
-  const normalized = (message || "").toLowerCase();
-
-  if (normalized.includes("not_authenticated")) {
-    return "Usuário não autenticado";
-  }
-
-  if (normalized.includes("actor_mismatch")) {
-    return "Sessão inválida para registrar a partida";
-  }
-
-  if (normalized.includes("same_player")) {
-    return "Você não pode jogar contra si mesmo";
-  }
-
-  if (normalized.includes("invalid_score")) {
-    return "Formato de placar inválido. Use o formato NxN (ex: 3x1)";
-  }
-
-  if (normalized.includes("daily_limit_reached")) {
-    return "Limite diário de jogos contra este adversário atingido";
-  }
-
-  if (normalized.includes("invalid_input")) {
-    return "Dados inválidos para registrar a partida";
-  }
-
-  if (normalized.includes("duplicate key value violates unique constraint")) {
-    return "Solicitação duplicada detectada. Atualize a tela e tente novamente.";
-  }
-
-  if (normalized.includes("invalid_k_factor")) {
-    return "Configuração de fator K inválida. Avise o administrador.";
-  }
-
-  return "Erro ao registrar partida";
-}
-
 async function getActorName(
   supabase: ServerSupabaseClient,
   userId: string
@@ -152,7 +52,7 @@ async function getActorName(
 }
 
 async function emitPendingNotification(
-  supabase: ServerSupabaseClient,
+  supabase: ServerSupabaseClient | ReturnType<typeof createAdminClient>,
   userId: string,
   payload: PendingNotificationPayloadV1
 ) {
@@ -185,132 +85,168 @@ async function getAuthenticatedUserId(
   return user?.id ?? null;
 }
 
+/**
+ * Confirmar partida pendente.
+ *
+ * Caminho crítico: auth (1) + getMatchPendingKindAndContext (1) + RPC (1) = 3 ops
+ * after(): conquistas + push + notificação + SLA enforcement
+ */
 export async function confirmMatchAction(
   matchId: string,
   requestedUserId: string
 ): Promise<{ success: boolean; error?: string; unlockedAchievements?: Achievement[] }> {
   const supabase = await createClient();
-  const telemetry = createConfirmMatchTelemetry();
-  const fail = (errorMessage: string, reason: string) => {
-    telemetry.finish("error", reason);
-    return { success: false, error: errorMessage };
-  };
+  const adminSupabase = createAdminClient();
+
+  const fail = (errorMessage: string) => ({ success: false, error: errorMessage });
+
   const authenticatedUserId = await getAuthenticatedUserId(supabase);
-
-  if (!authenticatedUserId) {
-    return fail("Usuário não autenticado", "not_authenticated");
-  }
-
-  if (requestedUserId !== authenticatedUserId) {
-    return fail("Sessão inválida para confirmar a partida", "actor_mismatch");
-  }
+  if (!authenticatedUserId) return fail("Usuário não autenticado");
+  if (requestedUserId !== authenticatedUserId) return fail("Sessão inválida para confirmar a partida");
 
   const userId = authenticatedUserId;
-  await enforcePendingConfirmationSla({
-    responsibleUserId: userId,
-  });
-  const actorName = await getActorName(supabase, userId);
-  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
-    responsibleUserId: userId,
-  });
-  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
 
-  if (pendingSnapshot?.pendingKind === "nonexistent") {
+  // 1 query: estado desta partida específica (substitui getOpenPendingConfirmationSnapshots)
+  const matchState = await getMatchPendingKindAndContext(matchId, adminSupabase);
+
+  if (matchState.pendingKind === "nonexistent") {
+    // Cancela a partida — passa snapshot pré-carregado para evitar query redundante
     const cancellationResult = await cancelPendingMatchForNonexistent({
       matchId,
       actorUserId: userId,
-      actorName,
+      actorName: null, // será buscado em after() se necessário para notif
       actorType: "player",
+      supabase: adminSupabase,
+      preloadedSnapshot: {
+        pendingKind: "nonexistent",
+        responsibleUserId: userId,
+      },
     });
 
     if (!cancellationResult.success) {
-      return fail(cancellationResult.error, cancellationResult.reason);
+      return fail(cancellationResult.error);
     }
 
-    telemetry.finish("success_cancelled");
-    return {
-      success: true,
-      unlockedAchievements: [],
-    };
+    // SLA em background — não bloqueia resposta
+    after(async () => {
+      try {
+        await enforcePendingConfirmationSla({ supabase: adminSupabase });
+      } catch (e) {
+        console.error("[after/confirmMatch/nonexistent/sla]", e);
+      }
+    });
+
+    return { success: true, unlockedAchievements: [] };
   }
 
-  const result = await validatePendingMatchByActor({
+  // Fluxo normal: 1 RPC atômico
+  const result = await validatePendingMatchRpcOnly({
     matchId,
     actorUserId: userId,
-    actorName,
+    actorName: null, // não necessário para o RPC em si
     actorType: "player",
   });
 
   if (!result.success) {
-    return fail(result.error, result.reason);
+    return fail(result.error);
   }
 
-  telemetry.finish("success");
+  const validationRow = result.row;
+
+  // Tudo que não afeta a resposta vai para after()
+  after(async () => {
+    try {
+      const adminClient = createAdminClient();
+
+      // Conquistas (queries adicionais: users + matches recent)
+      const achievementsByUserId = await runAchievementsAfterValidation(validationRow);
+      void achievementsByUserId; // conquistas são exibidas no próximo refresh
+
+      // Notificação de resolução para os dois jogadores
+      const recipients = Array.from(
+        new Set([validationRow.player_a_id, validationRow.player_b_id])
+      );
+      const actorName = validationRow.player_a_id === userId
+        ? validationRow.player_a_name
+        : validationRow.player_b_name;
+
+      await Promise.all(
+        recipients.map((recipientId) =>
+          emitPendingNotification(adminClient, recipientId, {
+            event: "pending_resolved",
+            match_id: matchId,
+            status: "validado",
+            actor_id: userId,
+            actor_name: actorName,
+            created_by: userId,
+          })
+        )
+      );
+
+      // Push para o adversário
+      const opponentId = userId === validationRow.player_a_id
+        ? validationRow.player_b_id
+        : validationRow.player_a_id;
+
+      await sendPushToUsers([opponentId], {
+        title: "Partida confirmada",
+        body: `${actorName || "Seu adversário"} confirmou a partida. Resultado: ${validationRow.score_label}.`,
+        url: "/partidas",
+        tag: `pending-match-${matchId}`,
+        data: { matchId, event: "pending_resolved" },
+      });
+
+      // SLA enforcement em background
+      await enforcePendingConfirmationSla({ supabase: adminClient });
+    } catch (e) {
+      console.error("[after/confirmMatch]", e);
+    }
+  });
+
   return {
     success: true,
-    unlockedAchievements: result.unlockedAchievementsByUserId[userId] ?? [],
+    unlockedAchievements: [], // conquistas aparecem no próximo refresh via invalidação de cache
   };
 }
 
+/**
+ * Contestar placar de uma partida pendente.
+ *
+ * Caminho crítico: auth (1) + fetch match (1) + update match (1) = 3 ops
+ * after(): actorName + notificação + push + SLA
+ */
 export async function contestMatchAction(
   matchId: string,
   requestedUserId: string,
   newOutcome: string
 ): Promise<{ success: boolean; error?: string }> {
-  const telemetry = createContestMatchTelemetry();
-  const fail = (errorMessage: string, reason: string) => {
-    telemetry.finish("error", reason);
-    return { success: false, error: errorMessage };
-  };
-
-  // Validar formato do score
   const score = parseScore(newOutcome);
   if (!score) {
-    return fail("Formato de placar inválido. Use o formato NxN (ex: 3x1)", "invalid_score");
+    return { success: false, error: "Formato de placar inválido. Use o formato NxN (ex: 3x1)" };
   }
 
   const supabase = await createClient();
   const authenticatedUserId = await getAuthenticatedUserId(supabase);
 
-  if (!authenticatedUserId) {
-    return fail("Usuário não autenticado", "not_authenticated");
-  }
-
-  if (requestedUserId !== authenticatedUserId) {
-    return fail("Sessão inválida para contestar a partida", "actor_mismatch");
-  }
+  if (!authenticatedUserId) return { success: false, error: "Usuário não autenticado" };
+  if (requestedUserId !== authenticatedUserId) return { success: false, error: "Sessão inválida para contestar a partida" };
 
   const userId = authenticatedUserId;
-  await enforcePendingConfirmationSla({
-    responsibleUserId: userId,
-  });
 
-  // Buscar a partida para determinar o vencedor e verificar status
+  // Busca a partida para verificar status e determinar vencedor
   const { data: match, error: matchError } = await supabase
     .from("matches")
-    .select(
-      "player_a_id, player_b_id, status, resultado_a, resultado_b, vencedor_id, criado_por"
-    )
+    .select("player_a_id, player_b_id, status, resultado_a, resultado_b, vencedor_id, criado_por")
     .eq("id", matchId)
     .single();
-  telemetry.step("fetch_match");
 
-  if (matchError || !match) {
-    return fail("Partida não encontrada", "match_not_found");
-  }
+  if (matchError || !match) return { success: false, error: "Partida não encontrada" };
 
-  // Não permitir contestar partida já validada ou cancelada
   if (match.status === "validado") {
-    return fail(
-      "Não é possível contestar uma partida já validada",
-      "match_already_validated"
-    );
+    return { success: false, error: "Não é possível contestar uma partida já validada" };
   }
   if (match.status === "cancelado") {
-    return fail(
-      "Não é possível contestar uma partida cancelada",
-      "match_already_canceled"
-    );
+    return { success: false, error: "Não é possível contestar uma partida cancelada" };
   }
 
   const waitingUserId =
@@ -321,15 +257,13 @@ export async function contestMatchAction(
         : null;
 
   if (!waitingUserId || waitingUserId !== userId) {
-    return fail(
-      "Esta partida não está aguardando sua contestação",
-      "actor_not_waiting_user"
-    );
+    return { success: false, error: "Esta partida não está aguardando sua contestação" };
   }
 
   const vencedorId = score.a > score.b ? match.player_a_id : match.player_b_id;
+  const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
 
-  const { data: updatedRows, error } = await supabase
+  const { data: updatedRows, error: updateError } = await supabase
     .from("matches")
     .update({
       resultado_a: score.a,
@@ -341,125 +275,91 @@ export async function contestMatchAction(
     .eq("id", matchId)
     .neq("criado_por", userId)
     .in("status", ["pendente", "edited"])
-    .select("id"); // Só atualiza se status for válido
-  telemetry.step("update_match");
+    .select("id");
 
-  if (error) {
-    return fail("Erro ao contestar partida", "update_match_failed");
-  }
+  if (updateError) return { success: false, error: "Erro ao contestar partida" };
 
   if (!updatedRows || updatedRows.length === 0) {
-    return fail(
-      "Esta partida já foi processada por outro usuário",
-      "match_already_processed"
-    );
+    return { success: false, error: "Esta partida já foi processada por outro usuário" };
   }
 
-  const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
+  // Notificação + push + SLA em background
+  after(async () => {
+    try {
+      const adminClient = createAdminClient();
+      const actorName = await getActorName(supabase, userId);
 
-  try {
-    await transferMatchConfirmationResponsibility({
-      matchId,
-      responsibleUserId: recipientId,
-    });
-  } catch (transferError) {
-    await supabase
-      .from("matches")
-      .update({
-        resultado_a: match.resultado_a,
-        resultado_b: match.resultado_b,
-        vencedor_id: match.vencedor_id,
-        status: match.status,
-        criado_por: match.criado_por,
-      })
-      .eq("id", matchId);
+      const transferPayload: PendingNotificationPayloadV1 = {
+        event: "pending_transferred",
+        match_id: matchId,
+        status: "edited",
+        actor_id: userId,
+        actor_name: actorName,
+        created_by: userId,
+      };
 
-    return fail(
-      transferError instanceof Error
-        ? transferError.message
-        : "Erro ao atualizar a responsabilidade da pendência",
-      "pending_confirmation_transfer_failed"
-    );
-  }
+      await emitPendingNotification(adminClient, recipientId, transferPayload);
 
-  const actorName = await getActorName(supabase, userId);
-  const transferPayload: PendingNotificationPayloadV1 = {
-    event: "pending_transferred",
-    match_id: matchId,
-    status: "edited",
-    actor_id: userId,
-    actor_name: actorName,
-    created_by: userId,
-  };
+      await sendPushToUsers([recipientId], {
+        title: "Partida contestada",
+        body: `${actorName || "Seu adversário"} contestou o placar para ${score.a}x${score.b}. Revise e confirme.`,
+        url: "/partidas",
+        tag: `pending-match-${matchId}`,
+        data: { matchId, event: "pending_transferred" },
+      });
 
-  await emitPendingNotification(supabase, recipientId, transferPayload);
-  telemetry.step("emit_transfer_notification");
-
-  await sendPushToUsers([recipientId], {
-    title: "Partida contestada",
-    body: `${actorName || "Seu adversário"} contestou o placar para ${score.a}x${score.b}. Revise e confirme.`,
-    url: "/partidas",
-    tag: `pending-match-${matchId}`,
-    data: {
-      matchId,
-      event: "pending_transferred",
-    },
+      await enforcePendingConfirmationSla({ supabase: adminClient });
+    } catch (e) {
+      console.error("[after/contestMatch]", e);
+    }
   });
-  telemetry.step("emit_transfer_push");
-  telemetry.finish("success");
 
   return { success: true };
 }
 
+/**
+ * Reportar que uma partida não aconteceu.
+ *
+ * Caminho crítico: auth (1) + [fetch match + estado notif] paralelo (2) + update (1) = 4 ops
+ * after(): actorName + notificação + push + SLA
+ */
 export async function reportMatchDidNotHappenAction(
   matchId: string,
   requestedUserId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const telemetry = createReportMatchDidNotHappenTelemetry();
-  const fail = (errorMessage: string, reason: string) => {
-    telemetry.finish("error", reason);
-    return { success: false, error: errorMessage };
-  };
   const supabase = await createClient();
   const authenticatedUserId = await getAuthenticatedUserId(supabase);
 
-  if (!authenticatedUserId) {
-    return fail("Usuário não autenticado", "not_authenticated");
-  }
-
-  if (requestedUserId !== authenticatedUserId) {
-    return fail("Sessão inválida para revisar a partida", "actor_mismatch");
-  }
+  if (!authenticatedUserId) return { success: false, error: "Usuário não autenticado" };
+  if (requestedUserId !== authenticatedUserId) return { success: false, error: "Sessão inválida para revisar a partida" };
 
   const userId = authenticatedUserId;
-  await enforcePendingConfirmationSla({
-    responsibleUserId: userId,
-  });
+  const adminSupabase = createAdminClient();
 
-  const { data: match, error: matchError } = await supabase
-    .from("matches")
-    .select("player_a_id, player_b_id, status, criado_por")
-    .eq("id", matchId)
-    .single();
-  telemetry.step("fetch_match");
+  // Busca paralela: dados da partida + estado de confirmação (1 query cada)
+  const [matchResult, matchState] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("player_a_id, player_b_id, status, criado_por")
+      .eq("id", matchId)
+      .single(),
+    getMatchPendingKindAndContext(matchId, adminSupabase),
+  ]);
 
-  if (matchError || !match) {
-    return fail("Partida não encontrada", "match_not_found");
+  if (matchResult.error || !matchResult.data) {
+    return { success: false, error: "Partida não encontrada" };
   }
+
+  const match = matchResult.data;
 
   if (match.status === "validado") {
-    return fail(
-      "Não é possível marcar uma partida já confirmada como inexistente",
-      "match_already_validated"
-    );
+    return { success: false, error: "Não é possível marcar uma partida já confirmada como inexistente" };
   }
-
   if (match.status === "cancelado") {
-    return fail("Esta partida já foi cancelada", "match_already_canceled");
+    return { success: false, error: "Esta partida já foi cancelada" };
   }
-
   if (match.status !== "pendente" && match.status !== "edited") {
-    return fail("Esta partida não está pendente", "match_not_pending");
+    return { success: false, error: "Esta partida não está pendente" };
   }
 
   const waitingUserId =
@@ -470,313 +370,155 @@ export async function reportMatchDidNotHappenAction(
         : null;
 
   if (!waitingUserId || waitingUserId !== userId) {
-    return fail(
-      "Esta partida não está aguardando sua resposta",
-      "actor_not_waiting_user"
-    );
+    return { success: false, error: "Esta partida não está aguardando sua resposta" };
   }
 
-  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
-    responsibleUserId: userId,
-  });
-  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
-
-  if (pendingSnapshot?.pendingContext === "nonexistent_rejected") {
-    return fail(
-      "O adversário já informou que este jogo existiu. Confirme ou conteste o placar.",
-      "nonexistent_already_rejected"
-    );
-  }
-
-  const { data: updatedRows, error: updateError } = await supabase
-    .from("matches")
-    .update({
-      status: "edited",
-      criado_por: userId,
-    })
-    .eq("id", matchId)
-    .neq("criado_por", userId)
-    .in("status", ["pendente", "edited"])
-    .select("id");
-  telemetry.step("update_match");
-
-  if (updateError) {
-    return fail("Erro ao marcar jogo como inexistente", "update_match_failed");
-  }
-
-  if (!updatedRows || updatedRows.length === 0) {
-    return fail(
-      "Esta partida já foi processada por outro usuário",
-      "match_already_processed"
-    );
+  if (matchState.pendingContext === "nonexistent_rejected") {
+    return {
+      success: false,
+      error: "O adversário já informou que este jogo existiu. Confirme ou conteste o placar.",
+    };
   }
 
   const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
 
-  try {
-    await transferMatchConfirmationResponsibility({
-      matchId,
-      responsibleUserId: recipientId,
-    });
-  } catch (transferError) {
-    await supabase
-      .from("matches")
-      .update({
-        status: match.status,
-        criado_por: match.criado_por,
-      })
-      .eq("id", matchId);
+  const { data: updatedRows, error: updateError } = await supabase
+    .from("matches")
+    .update({ status: "edited", criado_por: userId })
+    .eq("id", matchId)
+    .neq("criado_por", userId)
+    .in("status", ["pendente", "edited"])
+    .select("id");
 
-    return fail(
-      transferError instanceof Error
-        ? transferError.message
-        : "Erro ao atualizar a responsabilidade da pendência",
-      "pending_confirmation_transfer_failed"
-    );
+  if (updateError) return { success: false, error: "Erro ao marcar jogo como inexistente" };
+
+  if (!updatedRows || updatedRows.length === 0) {
+    return { success: false, error: "Esta partida já foi processada por outro usuário" };
   }
 
-  const actorName = await getActorName(supabase, userId);
-  const payload: PendingNotificationPayloadV1 = {
-    event: "nonexistent_claimed",
-    match_id: matchId,
-    status: "edited",
-    actor_id: userId,
-    actor_name: actorName,
-    created_by: userId,
-  };
+  after(async () => {
+    try {
+      const adminClient = createAdminClient();
+      const actorName = await getActorName(supabase, userId);
 
-  await emitPendingNotification(supabase, recipientId, payload);
-  telemetry.step("emit_nonexistent_notification");
+      const payload: PendingNotificationPayloadV1 = {
+        event: "nonexistent_claimed",
+        match_id: matchId,
+        status: "edited",
+        actor_id: userId,
+        actor_name: actorName,
+        created_by: userId,
+      };
 
-  await sendPushToUsers([recipientId], {
-    title: "Jogo marcado como inexistente",
-    body: `${actorName || "Seu adversário"} informou que esse jogo não aconteceu. Revise a pendência.`,
-    url: "/partidas",
-    tag: `pending-match-${matchId}`,
-    data: {
-      matchId,
-      event: "nonexistent_claimed",
-    },
+      await emitPendingNotification(adminClient, recipientId, payload);
+
+      await sendPushToUsers([recipientId], {
+        title: "Jogo marcado como inexistente",
+        body: `${actorName || "Seu adversário"} informou que esse jogo não aconteceu. Revise a pendência.`,
+        url: "/partidas",
+        tag: `pending-match-${matchId}`,
+        data: { matchId, event: "nonexistent_claimed" },
+      });
+
+      await enforcePendingConfirmationSla({ supabase: adminClient });
+    } catch (e) {
+      console.error("[after/reportMatchDidNotHappen]", e);
+    }
   });
-  telemetry.step("emit_nonexistent_push");
-  telemetry.finish("success");
 
   return { success: true };
 }
 
+/**
+ * Confirmar que o jogo realmente existiu (rejeitar claim de inexistência).
+ *
+ * Caminho crítico: auth (1) + [estado notif + fetch match] paralelo (2) + update (1) = 4 ops
+ * after(): actorName + notificação + push + SLA
+ */
 export async function confirmMatchDidHappenAction(
   matchId: string,
   requestedUserId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const telemetry = createConfirmMatchDidHappenTelemetry();
-  const fail = (errorMessage: string, reason: string) => {
-    telemetry.finish("error", reason);
-    return { success: false, error: errorMessage };
-  };
   const supabase = await createClient();
   const authenticatedUserId = await getAuthenticatedUserId(supabase);
 
-  if (!authenticatedUserId) {
-    return fail("Usuário não autenticado", "not_authenticated");
-  }
-
-  if (requestedUserId !== authenticatedUserId) {
-    return fail("Sessão inválida para revisar a partida", "actor_mismatch");
-  }
+  if (!authenticatedUserId) return { success: false, error: "Usuário não autenticado" };
+  if (requestedUserId !== authenticatedUserId) return { success: false, error: "Sessão inválida para revisar a partida" };
 
   const userId = authenticatedUserId;
-  await enforcePendingConfirmationSla({
-    responsibleUserId: userId,
-  });
+  const adminSupabase = createAdminClient();
 
-  const { items: pendingSnapshots } = await getOpenPendingConfirmationSnapshots({
-    responsibleUserId: userId,
-  });
-  const pendingSnapshot = pendingSnapshots.find((item) => item.matchId === matchId);
+  // Busca paralela: estado de confirmação + dados da partida
+  const [matchState, matchResult] = await Promise.all([
+    getMatchPendingKindAndContext(matchId, adminSupabase),
+    supabase
+      .from("matches")
+      .select("player_a_id, player_b_id, status, criado_por")
+      .eq("id", matchId)
+      .single(),
+  ]);
 
-  if (!pendingSnapshot || pendingSnapshot.pendingKind !== "nonexistent") {
-    return fail(
-      "Esta partida não está aguardando sua resposta sobre jogo inexistente",
-      "pending_not_nonexistent"
-    );
+  if (!matchState || matchState.pendingKind !== "nonexistent") {
+    return {
+      success: false,
+      error: "Esta partida não está aguardando sua resposta sobre jogo inexistente",
+    };
   }
 
-  const { data: match, error: matchError } = await supabase
-    .from("matches")
-    .select("player_a_id, player_b_id, status, criado_por")
-    .eq("id", matchId)
-    .single();
-  telemetry.step("fetch_match");
-
-  if (matchError || !match) {
-    return fail("Partida não encontrada", "match_not_found");
+  if (matchResult.error || !matchResult.data) {
+    return { success: false, error: "Partida não encontrada" };
   }
 
-  if (match.status === "validado") {
-    return fail("Esta partida já foi confirmada", "match_already_validated");
-  }
+  const match = matchResult.data;
 
-  if (match.status === "cancelado") {
-    return fail("Esta partida já foi cancelada", "match_already_canceled");
-  }
+  if (match.status === "validado") return { success: false, error: "Esta partida já foi confirmada" };
+  if (match.status === "cancelado") return { success: false, error: "Esta partida já foi cancelada" };
 
   const recipientId = userId === match.player_a_id ? match.player_b_id : match.player_a_id;
 
   const { data: updatedRows, error: updateError } = await supabase
     .from("matches")
-    .update({
-      status: "edited",
-      criado_por: userId,
-    })
+    .update({ status: "edited", criado_por: userId })
     .eq("id", matchId)
     .neq("criado_por", userId)
     .in("status", ["pendente", "edited"])
     .select("id");
-  telemetry.step("update_match");
 
-  if (updateError) {
-    return fail("Erro ao informar que o jogo existiu", "update_match_failed");
-  }
+  if (updateError) return { success: false, error: "Erro ao informar que o jogo existiu" };
 
   if (!updatedRows || updatedRows.length === 0) {
-    return fail(
-      "Esta partida já foi processada por outro usuário",
-      "match_already_processed"
-    );
+    return { success: false, error: "Esta partida já foi processada por outro usuário" };
   }
 
-  try {
-    await transferMatchConfirmationResponsibility({
-      matchId,
-      responsibleUserId: recipientId,
-    });
-  } catch (transferError) {
-    await supabase
-      .from("matches")
-      .update({
-        status: match.status,
-        criado_por: match.criado_por,
-      })
-      .eq("id", matchId);
+  after(async () => {
+    try {
+      const adminClient = createAdminClient();
+      const actorName = await getActorName(supabase, userId);
 
-    return fail(
-      transferError instanceof Error
-        ? transferError.message
-        : "Erro ao atualizar a responsabilidade da pendência",
-      "pending_confirmation_transfer_failed"
-    );
-  }
+      const payload: PendingNotificationPayloadV1 = {
+        event: "nonexistent_rejected",
+        match_id: matchId,
+        status: "edited",
+        actor_id: userId,
+        actor_name: actorName,
+        created_by: userId,
+      };
 
-  const actorName = await getActorName(supabase, userId);
-  const payload: PendingNotificationPayloadV1 = {
-    event: "nonexistent_rejected",
-    match_id: matchId,
-    status: "edited",
-    actor_id: userId,
-    actor_name: actorName,
-    created_by: userId,
-  };
+      await emitPendingNotification(adminClient, recipientId, payload);
 
-  await emitPendingNotification(supabase, recipientId, payload);
-  telemetry.step("emit_nonexistent_rejected_notification");
+      await sendPushToUsers([recipientId], {
+        title: "Jogo confirmado como existente",
+        body: `${actorName || "Seu adversário"} informou que esse jogo aconteceu. Confirme o placar ou conteste.`,
+        url: "/partidas",
+        tag: `pending-match-${matchId}`,
+        data: { matchId, event: "nonexistent_rejected" },
+      });
 
-  await sendPushToUsers([recipientId], {
-    title: "Jogo confirmado como existente",
-    body: `${actorName || "Seu adversário"} informou que esse jogo aconteceu. Confirme o placar ou conteste.`,
-    url: "/partidas",
-    tag: `pending-match-${matchId}`,
-    data: {
-      matchId,
-      event: "nonexistent_rejected",
-    },
+      await enforcePendingConfirmationSla({ supabase: adminClient });
+    } catch (e) {
+      console.error("[after/confirmMatchDidHappen]", e);
+    }
   });
-  telemetry.step("emit_nonexistent_rejected_push");
-  telemetry.finish("success");
 
   return { success: true };
-}
-
-export async function registerMatchAction(input: {
-  playerId: string;
-  opponentId: string;
-  outcome: string;
-  requestId: string;
-}): Promise<{ success: boolean; error?: string; matchId?: string }> {
-  const telemetry = createRegisterMatchTelemetry();
-  const fail = (errorMessage: string, reason: string) => {
-    telemetry.finish("error", reason);
-    return { success: false, error: errorMessage };
-  };
-
-  // Validar formato do score
-  const score = parseScore(input.outcome);
-  if (!score) {
-    return fail("Formato de placar inválido. Use o formato NxN (ex: 3x1)", "invalid_score");
-  }
-
-  // Validar que não é o mesmo jogador
-  if (input.playerId === input.opponentId) {
-    return fail("Você não pode jogar contra si mesmo", "same_player");
-  }
-
-  if (!isUuid(input.requestId)) {
-    return fail("Identificador de envio inválido. Tente novamente.", "invalid_request_id");
-  }
-
-  const supabase = await createClient();
-  const authenticatedUserId = await getAuthenticatedUserId(supabase);
-
-  if (!authenticatedUserId) {
-    return fail("Usuário não autenticado", "not_authenticated");
-  }
-
-  if (input.playerId !== authenticatedUserId) {
-    return fail("Sessão inválida para registrar a partida", "actor_mismatch");
-  }
-
-  await enforcePendingConfirmationSla({
-    responsibleUserId: input.playerId,
-  });
-
-  const { data: rpcData, error: rpcError } = await supabase.rpc(
-    "register_match_with_notification_v1",
-    {
-      p_player_id: input.playerId,
-      p_opponent_id: input.opponentId,
-      p_resultado_a: score.a,
-      p_resultado_b: score.b,
-      p_request_id: input.requestId,
-      p_timezone: BUSINESS_TIMEZONE,
-    }
-  );
-  telemetry.step("register_match_rpc");
-
-  if (rpcError) {
-    return fail(
-      mapRegisterMatchRpcErrorMessage(rpcError.message),
-      `register_match_rpc_failed:${rpcError.code || "unknown"}`
-    );
-  }
-
-  const rpcRow = parseRegisterMatchRpcRow(rpcData);
-  if (!rpcRow) {
-    return fail("Erro ao registrar partida", "register_match_rpc_invalid_payload");
-  }
-
-  if (rpcRow.was_inserted) {
-    await sendPushToUsers([rpcRow.opponent_id], {
-      title: "Nova partida para confirmar",
-      body: `${rpcRow.actor_name || "Seu adversário"} registrou ${score.a}x${score.b}. Toque para revisar.`,
-      url: "/partidas",
-      tag: `pending-match-${rpcRow.match_id}`,
-      data: {
-        matchId: rpcRow.match_id,
-        event: "pending_created",
-      },
-    });
-  }
-  telemetry.step("emit_pending_push");
-  telemetry.finish("success");
-
-  return { success: true, matchId: rpcRow.match_id };
 }

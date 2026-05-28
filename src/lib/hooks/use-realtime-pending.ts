@@ -35,12 +35,9 @@ export function useRealtimePendingSync(userId?: string) {
 
           if (row.tipo !== "confirmacao") return;
 
-          void queryClient.invalidateQueries({ queryKey: queryKeys.matches.all });
+          // Invalida somente o dashboard de pendências do usuário (evita burst de requisições)
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.matches.pendingActions(userId),
-          });
-          void queryClient.invalidateQueries({
-            queryKey: queryKeys.matches.pendingStatus(userId),
+            queryKey: queryKeys.matches.pendingDashboard(userId),
           });
           void queryClient.invalidateQueries({
             queryKey: queryKeys.notifications.user(userId),

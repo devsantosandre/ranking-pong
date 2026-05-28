@@ -2,16 +2,14 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
-import { useState, useMemo } from "react";
-import { AlertCircle, Clock3, Loader2 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { AlertCircle, CheckCircle, Clock3, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  usePendingMatches,
+  usePendingDashboard,
   useRecentMatches,
-  useMatchCounts,
   useConfirmMatch,
   useContestMatch,
-  usePendingConfirmationStatus,
   useConfirmMatchDidHappen,
   useReportMatchDidNotHappen,
   type MatchWithUsers,
@@ -156,6 +154,7 @@ function getDeadlineHighlight(deadlineAt: string | null) {
 
 export default function PartidasPage() {
   const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"recentes" | "pendentes">("pendentes");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -167,17 +166,21 @@ export default function PartidasPage() {
     matchId: "",
   });
   const [reportDidNotHappenError, setReportDidNotHappenError] = useState<string | null>(null);
+  const [confirmFeedback, setConfirmFeedback] = useState<string | null>(null);
+  const confirmFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [registrationBannerDismissed, setRegistrationBannerDismissed] = useState(false);
 
   // Achievement toast hook
   const { showAchievements } = useAchievementToast();
 
-  // React Query hooks
+  // React Query hooks — usePendingDashboard substitui 3 chamadas separadas:
+  //   usePendingMatches + useMatchCounts + usePendingConfirmationStatus
   const {
-    data: pendingData,
-    isLoading: pendingLoading,
-    error: pendingError,
+    data: dashboardData,
+    isLoading: dashboardLoading,
+    error: dashboardError,
     refetch: refetchPending,
-  } = usePendingMatches(user?.id);
+  } = usePendingDashboard(user?.id);
   const {
     data: recentData,
     isLoading: recentLoading,
@@ -187,12 +190,32 @@ export default function PartidasPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useRecentMatches(user?.id);
-  const { data: matchCounts } = useMatchCounts(user?.id);
-  const { data: pendingStatus } = usePendingConfirmationStatus(user?.id);
   const confirmMutation = useConfirmMatch();
   const contestMutation = useContestMatch();
   const confirmDidHappenMutation = useConfirmMatchDidHappen();
   const reportDidNotHappenMutation = useReportMatchDidNotHappen();
+  const [registeredOpponent] = useState<string | null>(() =>
+    searchParams.get("registered") === "1"
+      ? decodeURIComponent(searchParams.get("opponent") ?? "")
+      : null
+  );
+  const [registeredOpponentId] = useState<string | null>(() =>
+    searchParams.get("registered") === "1"
+      ? decodeURIComponent(searchParams.get("opponentId") ?? "")
+      : null
+  );
+  const showRegistrationBanner = !!registeredOpponent && !registrationBannerDismissed;
+
+  useEffect(() => {
+    if (registeredOpponent) {
+      router.replace("/partidas");
+    }
+    return () => {
+      if (confirmFeedbackTimerRef.current) clearTimeout(confirmFeedbackTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const previewAlertEnabled = searchParams.get("previewAlert") === "1";
   const visibleActionError =
     actionError ||
@@ -200,14 +223,27 @@ export default function PartidasPage() {
       ? "Exemplo de erro ao confirmar partida. Tente novamente."
       : null);
 
-  const pendentes = pendingData ?? [];
+  const pendentes = dashboardData?.pendingMatches ?? [];
   const recentes = useMemo(() => {
     return recentData?.pages.flatMap((page) => page.matches) ?? [];
   }, [recentData]);
 
+  const highlightedMatchId = useMemo(() => {
+    if (!showRegistrationBanner || !registeredOpponentId) return null;
+    const candidates = pendentes.filter(
+      (m) => m.player_a_id === registeredOpponentId || m.player_b_id === registeredOpponentId
+    );
+    if (candidates.length === 0) return null;
+    const newest = candidates.reduce((a, b) => (a.created_at > b.created_at ? a : b));
+    // Só destaca se a partida foi criada nos últimos 5 minutos — garante que é a recém-registrada
+    const ageMs = Date.now() - new Date(newest.created_at).getTime();
+    if (ageMs > 2 * 60 * 1000) return null;
+    return newest.id;
+  }, [showRegistrationBanner, registeredOpponentId, pendentes]);
+
   const totalPendentes = pendentes.length;
-  const totalRecentes = matchCounts?.recentes ?? recentes.length;
-  const deadlineHours = pendingStatus?.deadlineHours ?? 6;
+  const totalRecentes = dashboardData?.recentCount ?? recentes.length;
+  const deadlineHours = dashboardData?.deadlineHours ?? 6;
   const loadingMatchId =
     confirmMutation.isPending
       ? confirmMutation.variables?.matchId
@@ -229,17 +265,29 @@ export default function PartidasPage() {
             ? "reportDidNotHappen"
             : null;
 
+  const showFeedback = (message: string) => {
+    if (confirmFeedbackTimerRef.current) clearTimeout(confirmFeedbackTimerRef.current);
+    setConfirmFeedback(message);
+    confirmFeedbackTimerRef.current = setTimeout(() => setConfirmFeedback(null), 5000);
+  };
+
   const handleConfirm = (matchId: string) => {
     if (!user) return;
     setActionError(null);
+    const isCancelingNonexistent =
+      pendentes.find((m) => m.id === matchId)?.pending_kind === "nonexistent";
     confirmMutation.mutate(
       { matchId, userId: user.id },
       {
         onSuccess: (result) => {
-          // Mostrar toast de conquistas desbloqueadas
           if (result.unlockedAchievements && result.unlockedAchievements.length > 0) {
             showAchievements(result.unlockedAchievements);
           }
+          showFeedback(
+            isCancelingNonexistent
+              ? "Partida cancelada! Foi para o seu histórico."
+              : "Partida confirmada! Foi para o seu histórico."
+          );
         },
         onError: (err) => {
           const message =
@@ -258,7 +306,10 @@ export default function PartidasPage() {
     contestMutation.mutate(
       { matchId, userId: user.id, newOutcome },
       {
-        onSuccess: () => setEditingId(null),
+        onSuccess: () => {
+          setEditingId(null);
+          showFeedback("Placar contestado! Aguardando o adversário responder.");
+        },
         onError: (err) => {
           const message =
             err instanceof Error ? err.message : "Erro ao contestar partida. Tente novamente.";
@@ -285,6 +336,9 @@ export default function PartidasPage() {
     confirmDidHappenMutation.mutate(
       { matchId, userId: user.id },
       {
+        onSuccess: () => {
+          showFeedback("Confirmado! O jogo existiu. Agora confirme ou conteste o placar.");
+        },
         onError: (err) => {
           const message =
             err instanceof Error
@@ -309,6 +363,7 @@ export default function PartidasPage() {
         matchId: reportDidNotHappenModal.matchId,
         userId: user.id,
       });
+      showFeedback("Solicitação enviada! Aguardando o adversário confirmar o cancelamento.");
       return true;
     } catch (err) {
       const message =
@@ -340,7 +395,7 @@ export default function PartidasPage() {
   };
 
   // Loading enquanto auth ou dados carregam
-  if (authLoading || pendingLoading || recentLoading) {
+  if (authLoading || dashboardLoading || recentLoading) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
         <div className="space-y-4">
@@ -371,7 +426,7 @@ export default function PartidasPage() {
   }
 
   // Erro
-  if (pendingError || recentError) {
+  if (dashboardError || recentError) {
     return (
       <AppShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
         <p className="py-8 text-center text-sm text-red-500">
@@ -408,6 +463,49 @@ export default function PartidasPage() {
           </button>
         </div>
 
+        {showRegistrationBanner && (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          >
+            <p className="flex items-start gap-2 font-medium">
+              <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Partida registrada! Aguardando{" "}
+                <span className="font-semibold">{registeredOpponent}</span> confirmar.
+              </span>
+            </p>
+            <button
+              onClick={() => setRegistrationBannerDismissed(true)}
+              className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+            >
+              OK
+            </button>
+          </div>
+        )}
+
+        {confirmFeedback && (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          >
+            <p className="flex items-center gap-2 font-medium">
+              <CheckCircle className="h-4 w-4 shrink-0" />
+              {confirmFeedback}
+            </p>
+            <button
+              onClick={() => {
+                if (confirmFeedbackTimerRef.current)
+                  clearTimeout(confirmFeedbackTimerRef.current);
+                setConfirmFeedback(null);
+              }}
+              className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+            >
+              OK
+            </button>
+          </div>
+        )}
+
         {visibleActionError && (
           <div
             role="alert"
@@ -431,19 +529,6 @@ export default function PartidasPage() {
             </button>
           </div>
         )}
-
-        <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3">
-          <p className="text-sm font-semibold text-foreground">Prazo para confirmar</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Quem recebeu a pendência tem até {deadlineHours}h para confirmar ou
-            contestar. Se alguém informar que o jogo não existiu, o outro jogador tem o
-            mesmo prazo para confirmar o cancelamento.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Quando o prazo expira, o sistema confirma placares pendentes ou cancela
-            automaticamente jogos marcados como inexistentes.
-          </p>
-        </div>
 
         {/* Lista de partidas */}
         <div className="space-y-3">
@@ -469,6 +554,7 @@ export default function PartidasPage() {
                 draftOutcome={draftOutcome}
                 loadingMatchId={loadingMatchId}
                 loadingAction={loadingAction}
+                highlighted={match.id === highlightedMatchId}
                 onConfirm={handleConfirm}
                 onContest={handleContest}
                 onConfirmDidHappen={handleConfirmDidHappen}
@@ -533,6 +619,7 @@ function PendingMatchCard({
   draftOutcome,
   loadingMatchId,
   loadingAction,
+  highlighted = false,
   onConfirm,
   onContest,
   onConfirmDidHappen,
@@ -549,6 +636,7 @@ function PendingMatchCard({
   draftOutcome: Record<string, string>;
   loadingMatchId: string | null | undefined;
   loadingAction: PendingMatchLoadingAction;
+  highlighted?: boolean;
   onConfirm: (id: string) => void;
   onContest: (id: string, outcome: string) => void;
   onConfirmDidHappen: (id: string) => void;
@@ -606,7 +694,13 @@ function PendingMatchCard({
       : "grid gap-2 sm:grid-cols-3";
 
   return (
-    <article className="space-y-3 rounded-2xl border border-border bg-muted/60 p-3 shadow-sm">
+    <article
+      className={`space-y-3 rounded-2xl border p-3 transition-all duration-500 ${
+        highlighted
+          ? "border-primary/60 bg-primary/10 animate-glow-pulse"
+          : "border-border bg-muted/60 shadow-sm"
+      }`}
+    >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
         <div className="min-w-0">
           <p

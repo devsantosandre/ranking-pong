@@ -125,7 +125,7 @@ export function AppShell({
         queryKey: queryKeys.matches.pendingActions(user.id),
       });
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.matches.pendingStatus(user.id),
+        queryKey: queryKeys.pendingStatus(user.id),
       });
     }
   };
