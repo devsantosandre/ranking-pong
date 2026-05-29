@@ -36,6 +36,7 @@ com sua marca, cores e logo.
 | `NEXT_PUBLIC_ICON_MASKABLE_PATH`      | `/branding/template/icon-512-maskable.png` | PWA Android adaptive          |
 | `NEXT_PUBLIC_BADGE_72_PATH`           | `/branding/template/badge-72.png` | Badge push monocromático               |
 | `NEXT_PUBLIC_APPLE_TOUCH_PATH`        | `/branding/template/apple-touch-icon.png` | iOS home screen                |
+| `NEXT_PUBLIC_FAVICON_PATH`            | `/branding/template/favicon.ico` | Aba do navegador                       |
 | `NEXT_PUBLIC_STORAGE_PREFIX`          | `ranking-app`                 | Prefixo de chaves em storage/IndexedDB     |
 
 ## Como configurar um deploy existente

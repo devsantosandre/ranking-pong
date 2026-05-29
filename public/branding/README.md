@@ -11,7 +11,7 @@ public/branding/
 └── template/    ← placeholders genéricos (HML e novos clientes)
 ```
 
-Cada subpasta deve conter **6 arquivos com os mesmos nomes**:
+Cada subpasta deve conter **7 arquivos com os mesmos nomes**:
 
 | Arquivo                  | Uso                          | Tamanho/Formato      |
 |--------------------------|------------------------------|----------------------|
@@ -21,6 +21,7 @@ Cada subpasta deve conter **6 arquivos com os mesmos nomes**:
 | `icon-512-maskable.png`  | PWA Android adaptive         | 512×512, padding 10% |
 | `badge-72.png`           | Badge push monocromático     | 72×72, branco/preto  |
 | `apple-touch-icon.png`   | iOS home screen              | 180×180, fundo opaco |
+| `favicon.ico`            | Aba do navegador             | multi-size (16/32/48/64) |
 
 ## Como apontar um deploy para um branding
 
@@ -33,6 +34,7 @@ NEXT_PUBLIC_ICON_512_PATH=/branding/<marca>/icon-512.png
 NEXT_PUBLIC_ICON_MASKABLE_PATH=/branding/<marca>/icon-512-maskable.png
 NEXT_PUBLIC_BADGE_72_PATH=/branding/<marca>/badge-72.png
 NEXT_PUBLIC_APPLE_TOUCH_PATH=/branding/<marca>/apple-touch-icon.png
+NEXT_PUBLIC_FAVICON_PATH=/branding/<marca>/favicon.ico
 ```
 
 Se nenhuma var for setada, o default em `src/lib/product-config.ts` aponta para

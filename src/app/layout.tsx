@@ -31,6 +31,7 @@ export const metadata: Metadata = {
   applicationName: APP_TITLE,
   description: productConfig.description,
   icons: {
+    icon: productConfig.assets.favicon,
     apple: productConfig.assets.appleTouch,
   },
   appleWebApp: {

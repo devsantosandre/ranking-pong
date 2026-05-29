@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Logo principal sem fundo (transparente) para uso na tela de login -->
+  <!-- Podio: 3 barras verticais -->
+  <rect x="120" y="296" width="76" height="120" rx="8" ry="8" fill="#2563eb" opacity="0.85"/>
+  <rect x="218" y="200" width="76" height="216" rx="8" ry="8" fill="#2563eb"/>
+  <rect x="316" y="248" width="76" height="168" rx="8" ry="8" fill="#2563eb" opacity="0.85"/>
+
+  <!-- Coroa amarela -->
+  <path d="M 218 188 L 240 152 L 256 176 L 272 152 L 294 188 Z" fill="#fbbf24"/>
+
+  <!-- Base -->
+  <rect x="96" y="416" width="320" height="24" rx="6" ry="6" fill="#2563eb" opacity="0.7"/>
+</svg>

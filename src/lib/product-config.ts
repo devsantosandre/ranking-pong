@@ -39,6 +39,9 @@ export const productConfig = {
     appleTouch:
       process.env.NEXT_PUBLIC_APPLE_TOUCH_PATH ||
       "/branding/template/apple-touch-icon.png",
+    favicon:
+      process.env.NEXT_PUBLIC_FAVICON_PATH ||
+      "/branding/template/favicon.ico",
   },
 
   storageKeyPrefix:
