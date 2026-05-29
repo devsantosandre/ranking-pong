@@ -71,9 +71,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <style dangerouslySetInnerHTML={{ __html: tenantCssOverrides }} />
+        {/* Extensoes do navegador (Dark Reader, Polymer-like) podem injetar
+            estilos no <head> antes da hidratacao do React. suppressHydrationWarning
+            evita o warning desse style especifico. */}
+        <style
+          id="tenant-theme-overrides"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: tenantCssOverrides }}
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
