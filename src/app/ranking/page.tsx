@@ -1,13 +1,15 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { ChevronRight, Search, X } from "lucide-react";
+import { ChevronRight, Search, X, Clock } from "lucide-react";
 import { memo, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   useHeadToHeadStats,
   usePlayerValidatedMatches,
   useRankingAll,
   useTotalValidatedMatches,
+  useActiveSeason,
+  useSeasonStandings,
   type PlayerValidatedMatch,
 } from "@/lib/queries";
 import { PlayerListSkeleton } from "@/components/skeletons";
@@ -20,6 +22,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   getPlayerStyle,
   getDivisionStyle,
@@ -27,6 +30,8 @@ import {
   getDivisionName,
   isTopThree,
 } from "@/lib/divisions";
+
+// ─── helpers ────────────────────────────────────────────────────────────────
 
 function getDisplayName(user: {
   full_name: string | null;
@@ -46,21 +51,145 @@ function formatSheetDate(dateStr: string) {
   });
 }
 
+function formatCountdown(endsAt: string): string {
+  const diffMs = new Date(endsAt).getTime() - Date.now();
+  if (diffMs <= 0) return "encerrando…";
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  if (days > 1) return `${days} dias`;
+  if (days === 1) return "1 dia";
+  if (hours > 1) return `${hours} horas`;
+  return "menos de 1 hora";
+}
+
+function getSeasonProgress(startsAt: string, endsAt: string): number {
+  const start = new Date(startsAt).getTime();
+  const end = new Date(endsAt).getTime();
+  const now = Date.now();
+  if (end <= start) return 100;
+  return Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
+}
+
+// ─── componente de card de jogador (reutilizado nas duas abas) ───────────────
+
+type RankingPlayerCardProps = {
+  position: number;
+  displayName: string;
+  wins: number;
+  losses: number;
+  metric: number;
+  metricLabel: string;
+  canOpenH2H: boolean;
+  onClick: () => void;
+  showDivisionSeparator: boolean;
+};
+
+const RankingPlayerCard = memo(function RankingPlayerCard({
+  position,
+  displayName,
+  wins,
+  losses,
+  metric,
+  metricLabel,
+  canOpenH2H,
+  onClick,
+  showDivisionSeparator,
+}: RankingPlayerCardProps) {
+  const playerStyle = getPlayerStyle(position);
+  const divisionStyle = getDivisionStyle(position);
+  const divisionNumber = getDivisionNumber(position);
+  const divisionName = getDivisionName(position);
+  const isTop3 = isTopThree(position);
+
+  return (
+    <div>
+      {showDivisionSeparator && (
+        <div className="flex items-center gap-2 py-2">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-xs font-semibold text-muted-foreground">
+            {divisionStyle.emoji} {divisionName}
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => canOpenH2H && onClick()}
+        disabled={!canOpenH2H}
+        className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${
+          canOpenH2H ? "cursor-pointer active:scale-[0.995]" : "cursor-default"
+        } ${playerStyle.border} ${playerStyle.bg}`}
+      >
+        {/* Badge com posição */}
+        <div
+          className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} ${isTop3 ? "shadow-lg shadow-orange-500/50" : "shadow-md"}`}
+        >
+          {isTop3 && (
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
+          )}
+          <span
+            className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow-md" : "text-muted-foreground"}`}
+          >
+            {position}º
+          </span>
+        </div>
+
+        {/* Info do jogador */}
+        <div className="min-w-0">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <p className={`min-w-0 break-words text-sm font-semibold leading-tight ${playerStyle.text}`}>
+              {displayName}
+            </p>
+            {isTop3 && (
+              <span
+                className={`inline-flex w-fit shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm ${playerStyle.badge}`}
+              >
+                🔥 TOP {position}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium">{position}º</span>
+            {" · "}
+            <span className="text-green-600 font-semibold">{wins}V</span>
+            {" / "}
+            <span className="text-red-500 font-semibold">{losses}D</span>
+          </p>
+        </div>
+
+        {/* Pontuação */}
+        <div className="min-w-[4.5rem] shrink-0 text-right">
+          <p className={`text-lg font-bold tabular-nums ${playerStyle.text}`}>
+            {metric}
+          </p>
+          <p className="text-[11px] text-muted-foreground">{metricLabel}</p>
+          {canOpenH2H && (
+            <span className="mt-1 inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              H2H
+              <ChevronRight className="h-3 w-3" />
+            </span>
+          )}
+        </div>
+      </button>
+    </div>
+  );
+});
+
+// ─── página principal ────────────────────────────────────────────────────────
+
 export default function RankingPage() {
   const { user } = useAuth();
   const [searchInput, setSearchInput] = useState("");
+  const [activeTab, setActiveTab] = useState<"temporada" | "geral">("temporada");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const sheetScrollRef = useRef<HTMLDivElement | null>(null);
   const historySentinelRef = useRef<HTMLDivElement | null>(null);
   const normalizedSearch = searchInput.trim().toLowerCase();
   const isSearching = normalizedSearch.length >= 2;
 
-  // Query para listagem completa (sem paginação)
-  const {
-    data: rankingData,
-    isLoading,
-    error,
-  } = useRankingAll(user?.id);
+  // ── dados geral ──────────────────────────────────────────────────────────
+  const { data: rankingData, isLoading: geralLoading, error: geralError } = useRankingAll(user?.id);
   const {
     data: totalValidatedMatches,
     isLoading: totalMatchesLoading,
@@ -68,23 +197,50 @@ export default function RankingPage() {
     isError: totalMatchesError,
   } = useTotalValidatedMatches();
 
-  const allPlayers = useMemo(() => {
-    return (rankingData ?? []).map((player, index) => ({
-      ...player,
-      position: index + 1,
-      displayName: player.full_name || player.name || player.email?.split("@")[0] || "Jogador",
-    }));
-  }, [rankingData]);
+  // ── dados temporada ──────────────────────────────────────────────────────
+  const { data: activeSeason, isLoading: seasonLoading } = useActiveSeason();
+  const { data: seasonStandings, isLoading: standingsLoading } = useSeasonStandings(activeSeason?.id);
 
-  const players = useMemo(() => {
-    if (normalizedSearch.length < 2) {
-      return allPlayers;
-    }
-    return allPlayers.filter((user) => user.displayName.toLowerCase().includes(normalizedSearch));
-  }, [allPlayers, normalizedSearch]);
+  // ── lista geral ───────────────────────────────────────────────────────────
+  const allPlayers = useMemo(
+    () =>
+      (rankingData ?? []).map((player, index) => ({
+        ...player,
+        position: index + 1,
+        displayName: getDisplayName(player),
+      })),
+    [rankingData]
+  );
 
+  const players = useMemo(
+    () =>
+      isSearching
+        ? allPlayers.filter((p) => p.displayName.toLowerCase().includes(normalizedSearch))
+        : allPlayers,
+    [allPlayers, isSearching, normalizedSearch]
+  );
+
+  // ── lista temporada ───────────────────────────────────────────────────────
+  const allSeasonPlayers = useMemo(
+    () =>
+      (seasonStandings ?? []).map((entry) => ({
+        ...entry,
+        displayName: getDisplayName(entry),
+      })),
+    [seasonStandings]
+  );
+
+  const seasonPlayers = useMemo(
+    () =>
+      isSearching
+        ? allSeasonPlayers.filter((p) => p.displayName.toLowerCase().includes(normalizedSearch))
+        : allSeasonPlayers,
+    [allSeasonPlayers, isSearching, normalizedSearch]
+  );
+
+  // ── jogador selecionado (H2H) ────────────────────────────────────────────
   const selectedPlayer = useMemo(
-    () => allPlayers.find((player) => player.id === selectedPlayerId) ?? null,
+    () => allPlayers.find((p) => p.id === selectedPlayerId) ?? null,
     [allPlayers, selectedPlayerId]
   );
 
@@ -104,52 +260,37 @@ export default function RankingPage() {
     hasNextPage: hasNextPlayerMatchesPage,
     isFetchingNextPage: isFetchingNextPlayerMatchesPage,
   } = usePlayerValidatedMatches(selectedPlayer?.id);
-  const selectedPlayerMatches = useMemo(() => {
-    return selectedPlayerMatchesData?.pages.flatMap((page) => page.matches) ?? [];
-  }, [selectedPlayerMatchesData]);
-  const selectedPlayerMatchesTotal = useMemo(() => {
-    return selectedPlayerMatchesData?.pages[0]?.totalCount ?? selectedPlayerMatches.length;
-  }, [selectedPlayerMatches.length, selectedPlayerMatchesData]);
+  const selectedPlayerMatches = useMemo(
+    () => selectedPlayerMatchesData?.pages.flatMap((p) => p.matches) ?? [],
+    [selectedPlayerMatchesData]
+  );
+  const selectedPlayerMatchesTotal = useMemo(
+    () => selectedPlayerMatchesData?.pages[0]?.totalCount ?? selectedPlayerMatches.length,
+    [selectedPlayerMatchesData, selectedPlayerMatches.length]
+  );
 
   useEffect(() => {
-    if (!selectedPlayerId || !hasNextPlayerMatchesPage || isFetchingNextPlayerMatchesPage) {
-      return;
-    }
-
+    if (!selectedPlayerId || !hasNextPlayerMatchesPage || isFetchingNextPlayerMatchesPage) return;
     const root = sheetScrollRef.current;
     const sentinel = historySentinelRef.current;
     if (!root || !sentinel) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const firstEntry = entries[0];
-        if (!firstEntry?.isIntersecting) return;
-        if (isFetchingNextPlayerMatchesPage || !hasNextPlayerMatchesPage) return;
+        const first = entries[0];
+        if (!first?.isIntersecting || isFetchingNextPlayerMatchesPage || !hasNextPlayerMatchesPage) return;
         void fetchNextPlayerMatchesPage();
       },
-      {
-        root,
-        rootMargin: "180px 0px",
-        threshold: 0.01,
-      }
+      { root, rootMargin: "180px 0px", threshold: 0.01 }
     );
-
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [
-    fetchNextPlayerMatchesPage,
-    hasNextPlayerMatchesPage,
-    isFetchingNextPlayerMatchesPage,
-    selectedPlayerId,
-    selectedPlayerMatches.length,
-  ]);
+  }, [fetchNextPlayerMatchesPage, hasNextPlayerMatchesPage, isFetchingNextPlayerMatchesPage, selectedPlayerId, selectedPlayerMatches.length]);
 
-  // Handler para input
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
   }, []);
 
-  // Limpar busca
   const handleClearSearch = useCallback(() => {
     setSearchInput("");
   }, []);
@@ -159,194 +300,153 @@ export default function RankingPage() {
   }, []);
 
   const handleSheetOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      setSelectedPlayerId(null);
-    }
+    if (!open) setSelectedPlayerId(null);
   }, []);
 
-  if (isLoading) {
-    return (
-      <AppShell title="Ranking" subtitle="Classificação dos jogadores" showBack>
-        <div className="space-y-4">
-          <SearchInput
-            value={searchInput}
-            onChange={handleSearchChange}
-            onClear={handleClearSearch}
-            disabled
-          />
-          <PlayerListSkeleton count={8} />
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (error) {
-    return (
-      <AppShell title="Ranking" subtitle="Classificação dos jogadores" showBack>
-        <div className="space-y-4">
-          <SearchInput
-            value={searchInput}
-            onChange={handleSearchChange}
-            onClear={handleClearSearch}
-          />
-          <p className="py-8 text-center text-sm text-red-500">
-            Erro ao carregar ranking. Tente novamente.
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
+  // ── render ────────────────────────────────────────────────────────────────
 
   return (
     <AppShell title="Ranking" subtitle="Classificação dos jogadores" showBack>
       <div className="space-y-4">
-        <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-center">
-          <p className="text-xs font-semibold text-muted-foreground">
-            {totalMatchesLoading || totalMatchesFetching || totalValidatedMatches === undefined
-              ? "Carregando total de jogos..."
-              : totalMatchesError
-                ? "Atualizando total de jogos..."
-                : `${totalValidatedMatches.toLocaleString("pt-BR")} jogos validados`}
-          </p>
-        </div>
-
         <SearchInput
           value={searchInput}
           onChange={handleSearchChange}
           onClear={handleClearSearch}
         />
 
-        {/* Indicador de busca */}
         {isSearching && (
           <p className="text-xs text-muted-foreground text-center">
-            {`${players.length} resultado(s) para "${searchInput.trim()}"`}
+            {activeTab === "temporada"
+              ? `${seasonPlayers.length} resultado(s) para "${searchInput.trim()}"`
+              : `${players.length} resultado(s) para "${searchInput.trim()}"`}
           </p>
         )}
 
-        {/* Lista de jogadores */}
-        <div className="space-y-3">
-          {players.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {isSearching
-                ? "Nenhum jogador encontrado"
-                : "Nenhum jogador no ranking"
-              }
-            </p>
-          ) : (
-            <>
-              {players.map((player, index) => {
-                const playerStyle = getPlayerStyle(player.position);
-                const divisionStyle = getDivisionStyle(player.position);
-                const divisionNumber = getDivisionNumber(player.position);
-                const divisionName = getDivisionName(player.position);
-                const isTop3 = isTopThree(player.position);
-                const canOpenH2H = Boolean(user && player.id !== user.id);
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "temporada" | "geral")}
+          className="w-full"
+        >
+          <TabsList className="w-full">
+            <TabsTrigger value="temporada" className="flex-1">
+              Temporada
+            </TabsTrigger>
+            <TabsTrigger value="geral" className="flex-1">
+              Geral
+            </TabsTrigger>
+          </TabsList>
 
-                // Mostra separador de divisão
-                const isFirstPlayer = index === 0;
-                const prevPlayer = index > 0 ? players[index - 1] : null;
-                const prevDivision = prevPlayer ? getDivisionNumber(prevPlayer.position) : null;
-                const showDivisionSeparator = isFirstPlayer || prevDivision !== divisionNumber;
+          {/* ── ABA TEMPORADA ─────────────────────────────────────────────── */}
+          <TabsContent value="temporada" className="space-y-3 mt-3">
+            {seasonLoading ? (
+              <PlayerListSkeleton count={5} />
+            ) : !activeSeason ? (
+              <div className="rounded-xl border border-border bg-muted/40 px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">Nenhuma temporada ativa no momento.</p>
+              </div>
+            ) : (
+              <>
+                {/* Banner da temporada */}
+                <SeasonBanner season={activeSeason} />
 
-                return (
-                  <div key={player.id}>
-                    {/* Separador de divisão */}
-                    {showDivisionSeparator && (
-                      <div className="flex items-center gap-2 py-2">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-xs font-semibold text-muted-foreground">
-                          {divisionStyle.emoji} {divisionName}
-                        </span>
-                        <div className="h-px flex-1 bg-border" />
-                      </div>
-                    )}
+                {/* Lista de classificação */}
+                {standingsLoading ? (
+                  <PlayerListSkeleton count={5} />
+                ) : seasonPlayers.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    {isSearching
+                      ? "Nenhum jogador encontrado"
+                      : "Nenhum jogo nesta temporada ainda."}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {seasonPlayers.map((player, index) => {
+                      const prevPlayer = index > 0 ? seasonPlayers[index - 1] : null;
+                      const divNum = getDivisionNumber(player.position);
+                      const prevDivNum = prevPlayer ? getDivisionNumber(prevPlayer.position) : null;
+                      const showSep = index === 0 || prevDivNum !== divNum;
 
-                    <button
-                      type="button"
-                      onClick={() => canOpenH2H && handleOpenH2H(player.id)}
-                      disabled={!canOpenH2H}
-                      className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${
-                        canOpenH2H ? "cursor-pointer active:scale-[0.995]" : "cursor-default"
-                      } ${playerStyle.border} ${playerStyle.bg}`}
-                    >
-                      {/* Badge com posição */}
-                      <div
-                        className={`relative flex h-10 w-10 items-center justify-center rounded-full ${playerStyle.badge} ${isTop3 ? "shadow-lg shadow-orange-500/50" : "shadow-md"}`}
-                      >
-                        {isTop3 && (
-                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
-                        )}
-                        <span
-                          className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow-md" : "text-muted-foreground"}`}
-                        >
-                          {player.position}º
-                        </span>
-                      </div>
-
-                      {/* Info do jogador */}
-                      <div className="min-w-0">
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                          <p
-                            className={`min-w-0 break-words text-sm font-semibold leading-tight ${playerStyle.text}`}
-                          >
-                            {player.displayName}
-                          </p>
-                          {isTop3 && (
-                            <span
-                              className={`inline-flex w-fit shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm ${playerStyle.badge}`}
-                            >
-                              🔥 TOP {player.position}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          <span className="font-medium">{player.position}º</span>
-                          {" · "}
-                          <span className="text-green-600 font-semibold">
-                            {player.vitorias || 0}V
-                          </span>
-                          {" / "}
-                          <span className="text-red-500 font-semibold">
-                            {player.derrotas || 0}D
-                          </span>
-                        </p>
-                      </div>
-
-                      {/* Pontuação */}
-                      <div className="min-w-[4.5rem] shrink-0 text-right">
-                        <p className={`text-lg font-bold tabular-nums ${playerStyle.text}`}>
-                          {player.rating_atual ?? 250}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">pontos</p>
-                        {canOpenH2H && (
-                          <span className="mt-1 inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                            H2H
-                            <ChevronRight className="h-3 w-3" />
-                          </span>
-                        )}
-                      </div>
-                    </button>
+                      return (
+                        <RankingPlayerCard
+                          key={player.id}
+                          position={player.position}
+                          displayName={player.displayName}
+                          wins={player.wins}
+                          losses={player.losses}
+                          metric={player.points}
+                          metricLabel="pts temp."
+                          canOpenH2H={Boolean(user && player.id !== user.id)}
+                          onClick={() => handleOpenH2H(player.id)}
+                          showDivisionSeparator={showSep}
+                        />
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </>
-          )}
-        </div>
+                )}
+              </>
+            )}
+          </TabsContent>
+
+          {/* ── ABA GERAL ─────────────────────────────────────────────────── */}
+          <TabsContent value="geral" className="space-y-3 mt-3">
+            <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-center">
+              <p className="text-xs font-semibold text-muted-foreground">
+                {totalMatchesLoading || totalMatchesFetching || totalValidatedMatches === undefined
+                  ? "Carregando total de jogos…"
+                  : totalMatchesError
+                    ? "Atualizando total de jogos…"
+                    : `${totalValidatedMatches.toLocaleString("pt-BR")} jogos validados`}
+              </p>
+            </div>
+
+            {geralLoading ? (
+              <PlayerListSkeleton count={8} />
+            ) : geralError ? (
+              <p className="py-8 text-center text-sm text-red-500">
+                Erro ao carregar ranking. Tente novamente.
+              </p>
+            ) : players.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {isSearching ? "Nenhum jogador encontrado" : "Nenhum jogador no ranking"}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {players.map((player, index) => {
+                  const prevPlayer = index > 0 ? players[index - 1] : null;
+                  const divNum = getDivisionNumber(player.position);
+                  const prevDivNum = prevPlayer ? getDivisionNumber(prevPlayer.position) : null;
+                  const showSep = index === 0 || prevDivNum !== divNum;
+
+                  return (
+                    <RankingPlayerCard
+                      key={player.id}
+                      position={player.position}
+                      displayName={player.displayName}
+                      wins={player.vitorias ?? 0}
+                      losses={player.derrotas ?? 0}
+                      metric={player.rating_atual ?? 250}
+                      metricLabel="pontos"
+                      canOpenH2H={Boolean(user && player.id !== user.id)}
+                      onClick={() => handleOpenH2H(player.id)}
+                      showDivisionSeparator={showSep}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
-      <Sheet
-        open={Boolean(selectedPlayerId)}
-        onOpenChange={handleSheetOpenChange}
-      >
+      {/* ── Sheet H2H (inalterado) ─────────────────────────────────────────── */}
+      <Sheet open={Boolean(selectedPlayerId)} onOpenChange={handleSheetOpenChange}>
         <SheetContent
           side="bottom"
           className="right-auto bottom-2 left-1/2 flex max-h-[85vh] w-[calc(100%-0.75rem)] max-w-2xl -translate-x-1/2 flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-card p-0 shadow-2xl"
         >
           <SheetHeader className="space-y-2 border-b border-border px-4 pb-4 pt-4 pr-14 sm:px-5">
             <SheetTitle>H2H</SheetTitle>
-            <SheetDescription>
-              Seu H2H e histórico do jogador selecionado
-            </SheetDescription>
+            <SheetDescription>Seu H2H e histórico do jogador selecionado</SheetDescription>
           </SheetHeader>
 
           <div
@@ -385,7 +485,7 @@ export default function RankingPage() {
               </p>
             ) : h2hLoading ? (
               <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-                Carregando H2H...
+                Carregando H2H…
               </p>
             ) : h2hError ? (
               <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -395,25 +495,23 @@ export default function RankingPage() {
               <>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-                      <p className="text-2xl font-bold text-emerald-700 sm:text-3xl">{h2hStats.wins}</p>
-                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Você ganhou</p>
+                    <p className="text-2xl font-bold text-emerald-700 sm:text-3xl">{h2hStats.wins}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Você ganhou</p>
                   </article>
                   <article className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
-                      <p className="text-2xl font-bold text-red-600 sm:text-3xl">{h2hStats.losses}</p>
-                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-red-600/80">Você perdeu</p>
+                    <p className="text-2xl font-bold text-red-600 sm:text-3xl">{h2hStats.losses}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-red-600/80">Você perdeu</p>
                   </article>
                   <article className="col-span-2 rounded-xl border border-border bg-card p-4 text-center sm:col-span-1">
-                      <p className="text-2xl font-bold text-primary sm:text-3xl">{h2hStats.total}</p>
-                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80">Total</p>
+                    <p className="text-2xl font-bold text-primary sm:text-3xl">{h2hStats.total}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80">Total</p>
                   </article>
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-border bg-card p-4">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <p className="text-sm font-semibold text-muted-foreground">Aproveitamento</p>
-                    <p className="text-3xl font-bold text-foreground">
-                      {h2hStats.winRate}%
-                    </p>
+                    <p className="text-3xl font-bold text-foreground">{h2hStats.winRate}%</p>
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-muted">
                     <div
@@ -422,7 +520,8 @@ export default function RankingPage() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {h2hStats.wins} vitória{h2hStats.wins === 1 ? "" : "s"} em {h2hStats.total} confronto{h2hStats.total > 1 ? "s" : ""}
+                    {h2hStats.wins} vitória{h2hStats.wins === 1 ? "" : "s"} em{" "}
+                    {h2hStats.total} confronto{h2hStats.total > 1 ? "s" : ""}
                   </p>
                   <p className="text-xs font-medium text-muted-foreground">
                     {h2hStats.wins > h2hStats.losses
@@ -454,7 +553,7 @@ export default function RankingPage() {
 
                 {selectedPlayerMatchesLoading ? (
                   <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-                    Carregando partidas...
+                    Carregando partidas…
                   </p>
                 ) : selectedPlayerMatchesError ? (
                   <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
@@ -477,7 +576,7 @@ export default function RankingPage() {
 
                     {isFetchingNextPlayerMatchesPage && (
                       <p className="rounded-xl border border-border bg-muted/40 p-3 text-center text-xs font-medium text-muted-foreground">
-                        Carregando mais partidas...
+                        Carregando mais partidas…
                       </p>
                     )}
 
@@ -501,6 +600,47 @@ export default function RankingPage() {
     </AppShell>
   );
 }
+
+// ─── banner da temporada ────────────────────────────────────────────────────
+
+function SeasonBanner({ season }: { season: { name: string; starts_at: string; ends_at: string } }) {
+  const countdown = formatCountdown(season.ends_at);
+  const progress = getSeasonProgress(season.starts_at, season.ends_at);
+  const isEnding = countdown === "encerrando…";
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Temporada ativa
+          </p>
+          <p className="text-sm font-bold text-foreground truncate">{season.name}</p>
+        </div>
+        <div
+          className={`flex items-center gap-1 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            isEnding
+              ? "bg-orange-100 text-orange-700"
+              : "bg-primary/10 text-primary"
+          }`}
+        >
+          <Clock className="h-3 w-3" />
+          {countdown}
+        </div>
+      </div>
+
+      {/* Barra de progresso */}
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary/60 transition-all duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── histórico de partidas (Sheet) ──────────────────────────────────────────
 
 const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
   match,
@@ -554,9 +694,7 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
               Você
             </span>
           )}
-          <span
-            className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${resultClassName}`}
-          >
+          <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${resultClassName}`}>
             {resultLabel}
           </span>
         </div>
@@ -595,7 +733,8 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
   );
 });
 
-// Componente do input de busca
+// ─── input de busca ──────────────────────────────────────────────────────────
+
 function SearchInput({
   value,
   onChange,
@@ -612,17 +751,13 @@ function SearchInput({
       <Search className="h-4 w-4 text-muted-foreground" />
       <input
         className="h-10 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-        placeholder="Buscar jogador..."
+        placeholder="Buscar jogador…"
         value={value}
         onChange={onChange}
         disabled={disabled}
       />
       {value && (
-        <button
-          onClick={onClear}
-          className="p-1 hover:bg-muted rounded-full"
-          type="button"
-        >
+        <button onClick={onClear} className="p-1 hover:bg-muted rounded-full" type="button">
           <X className="h-4 w-4 text-muted-foreground" />
         </button>
       )}

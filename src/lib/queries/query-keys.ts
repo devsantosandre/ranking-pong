@@ -62,6 +62,15 @@ export const queryKeys = {
   // varrida pelo invalidateQueries(matches.all) do Realtime
   pendingStatus: (userId: string) => ["pending-status", userId] as const,
 
+  // Seasons
+  seasons: {
+    all: ["seasons"] as const,
+    active: () => [...queryKeys.seasons.all, "active"] as const,
+    standings: (id: string) => [...queryKeys.seasons.all, "standings", id] as const,
+    list: () => [...queryKeys.seasons.all, "list"] as const,
+    detail: (id: string) => [...queryKeys.seasons.all, "detail", id] as const,
+  },
+
   // Settings
   settings: ["settings"] as const,
 

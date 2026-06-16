@@ -18,6 +18,10 @@
 - Tailwind CSS v4 with utility-first styling; keep class lists ordered by layout → spacing → color/state.
 - Respect existing enums/status names from Supabase (`match_status`, `resultado_tipo`, etc.) and keep DTO shapes consistent with `src/lib/queries`.
 
+## Design & UI Consistency
+- New screens/features must match the existing visual language. Follow `docs/DESIGN_CONSISTENCIA.md` (reuse `AppShell`, theme tokens, `src/lib/divisions.ts`, `ui/` primitives; always cover loading/empty/error states).
+- Rule of thumb: reuse existing components before creating new ones.
+
 ## Testing Guidelines
 - No automated tests are set up yet; when adding them, co-locate feature tests as `*.test.ts(x)` and prefer Vitest + React Testing Library for components and hooks.
 - For manual verification: run `npm run dev`, log in, and exercise flows for ranking, partidas (create/confirm/edited states), registrar-jogo wizard, notícias feed, and perfil updates.
