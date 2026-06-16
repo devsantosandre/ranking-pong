@@ -394,6 +394,41 @@ export function useToggleMatchReaction(userId?: string) {
   });
 }
 
+// ── Notícias de temporada (news_posts tipo='temporada') ──────────────────────
+
+export type SeasonNewsPost = {
+  id: string;
+  newsType: "temporada";
+  title: string;
+  resumo: string | null;
+  createdAt: string;
+};
+
+export function useSeasonNewsPosts(enabled: boolean = true) {
+  const supabase = useMemo(() => createClient(), []);
+  return useQuery({
+    queryKey: queryKeys.seasonNews,
+    queryFn: async (): Promise<SeasonNewsPost[]> => {
+      const { data, error } = await supabase
+        .from("news_posts")
+        .select("id, title, resumo, published_at")
+        .eq("tipo", "temporada")
+        .order("published_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? []).map((row: { id: string; title: string; resumo: string | null; published_at: string }) => ({
+        id: row.id,
+        newsType: "temporada" as const,
+        title: row.title,
+        resumo: row.resumo ?? null,
+        createdAt: row.published_at,
+      }));
+    },
+    enabled,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 // Hook para buscar notícias com paginação (baseado em partidas validadas)
 export function useNews(userId?: string, enabled: boolean = true) {
   const supabase = useMemo(() => createClient(), []);

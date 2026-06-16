@@ -23,7 +23,10 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Megaphone,
 } from "lucide-react";
+
+// ── tipos e constantes ────────────────────────────────────────────────────────
 
 type SeasonStatus = "upcoming" | "active" | "closed";
 
@@ -49,6 +52,16 @@ const RECURRENCE_LABELS: Record<string, string> = {
 
 function toInputDate(iso: string) {
   return iso.slice(0, 16);
+}
+
+function formatDateDisplay(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function addPeriod(
@@ -86,10 +99,12 @@ const EMPTY_FORM: FormState = {
   recurrence: "monthly",
 };
 
-type ConfirmAction =
+type ConfirmLifecycleAction =
   | { type: "close"; season: ClosedSeason }
   | { type: "reopen"; season: ClosedSeason }
   | null;
+
+// ── formulário ────────────────────────────────────────────────────────────────
 
 function SeasonForm({
   initial,
@@ -211,17 +226,39 @@ function SeasonForm({
           disabled={loading}
           className="flex-1"
         >
-          {loading ? (
-            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-          )}
-          Salvar
+          Revisar →
         </Button>
       </div>
     </div>
   );
 }
+
+// ── resumo no modal ───────────────────────────────────────────────────────────
+
+function SeasonDataSummary({ data }: { data: FormState }) {
+  return (
+    <div className="mb-4 rounded-xl bg-muted/40 p-3 text-sm space-y-1.5">
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Nome</span>
+        <span className="font-medium text-right max-w-[180px] truncate">{data.name}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Início</span>
+        <span className="font-medium">{formatDateDisplay(data.starts_at)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Término</span>
+        <span className="font-medium">{formatDateDisplay(data.ends_at)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Recorrência</span>
+        <span className="font-medium">{RECURRENCE_LABELS[data.recurrence] ?? data.recurrence}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 function getPlayerName(player: {
   full_name: string | null;
@@ -231,6 +268,8 @@ function getPlayerName(player: {
   return player.full_name || player.name || player.email?.split("@")[0] || "—";
 }
 
+// ── página principal ──────────────────────────────────────────────────────────
+
 export default function AdminTemporadasPage() {
   const queryClient = useQueryClient();
   const { data: seasons, isLoading, refetch } = useAllSeasons();
@@ -239,8 +278,24 @@ export default function AdminTemporadasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [feedback, setFeedback] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+
+  // Modal de confirmação para criar
+  const [createConfirm, setCreateConfirm] = useState<{
+    isOpen: boolean;
+    data: FormState | null;
+    notify: boolean;
+  }>({ isOpen: false, data: null, notify: false });
+
+  // Modal de confirmação para editar
+  const [editConfirm, setEditConfirm] = useState<{
+    isOpen: boolean;
+    seasonId: string | null;
+    data: FormState | null;
+  }>({ isOpen: false, seasonId: null, data: null });
+
+  // Modal de confirmação para encerrar / reabrir
+  const [lifecycleConfirm, setLifecycleConfirm] = useState<ConfirmLifecycleAction>(null);
 
   const showFeedback = (type: "ok" | "err", msg: string) => {
     setFeedback({ type, msg });
@@ -249,36 +304,61 @@ export default function AdminTemporadasPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.seasons.all });
+    queryClient.invalidateQueries({ queryKey: queryKeys.seasonNews });
     refetch();
   };
 
-  const handleCreate = async (data: FormState) => {
+  // ── criar ─────────────────────────────────────────────────────────────────
+
+  const handleCreateFormSubmit = (data: FormState) => {
+    setCreateConfirm({ isOpen: true, data, notify: false });
+  };
+
+  const handleCreateConfirm = async () => {
+    if (!createConfirm.data) return;
     setActionLoading(true);
-    const result = await adminCreateSeason({
-      name: data.name,
-      starts_at: new Date(data.starts_at).toISOString(),
-      ends_at: new Date(data.ends_at).toISOString(),
-      recurrence: data.recurrence,
-    });
+    const result = await adminCreateSeason(
+      {
+        name: createConfirm.data.name,
+        starts_at: new Date(createConfirm.data.starts_at).toISOString(),
+        ends_at: new Date(createConfirm.data.ends_at).toISOString(),
+        recurrence: createConfirm.data.recurrence,
+      },
+      { notify: createConfirm.notify }
+    );
     setActionLoading(false);
+    setCreateConfirm({ isOpen: false, data: null, notify: false });
     if (result.success) {
       setShowCreateForm(false);
-      showFeedback("ok", "Temporada criada com sucesso!");
+      showFeedback(
+        "ok",
+        createConfirm.notify
+          ? "Temporada criada e anúncio publicado no feed!"
+          : "Temporada criada com sucesso!"
+      );
       invalidate();
     } else {
       showFeedback("err", result.error);
     }
   };
 
-  const handleEdit = async (seasonId: string, data: FormState) => {
+  // ── editar ────────────────────────────────────────────────────────────────
+
+  const handleEditFormSubmit = (seasonId: string, data: FormState) => {
+    setEditConfirm({ isOpen: true, seasonId, data });
+  };
+
+  const handleEditConfirm = async () => {
+    if (!editConfirm.seasonId || !editConfirm.data) return;
     setActionLoading(true);
-    const result = await adminEditSeason(seasonId, {
-      name: data.name,
-      starts_at: new Date(data.starts_at).toISOString(),
-      ends_at: new Date(data.ends_at).toISOString(),
-      recurrence: data.recurrence,
+    const result = await adminEditSeason(editConfirm.seasonId, {
+      name: editConfirm.data.name,
+      starts_at: new Date(editConfirm.data.starts_at).toISOString(),
+      ends_at: new Date(editConfirm.data.ends_at).toISOString(),
+      recurrence: editConfirm.data.recurrence,
     });
     setActionLoading(false);
+    setEditConfirm({ isOpen: false, seasonId: null, data: null });
     if (result.success) {
       setEditingId(null);
       showFeedback("ok", "Temporada atualizada!");
@@ -288,23 +368,25 @@ export default function AdminTemporadasPage() {
     }
   };
 
-  const handleConfirm = async () => {
-    if (!confirmAction) return;
+  // ── encerrar / reabrir ────────────────────────────────────────────────────
+
+  const handleLifecycleConfirm = async () => {
+    if (!lifecycleConfirm) return;
     setActionLoading(true);
     let result;
-    if (confirmAction.type === "close") {
-      result = await adminCloseSeasonNow(confirmAction.season.id);
+    if (lifecycleConfirm.type === "close") {
+      result = await adminCloseSeasonNow(lifecycleConfirm.season.id);
     } else {
-      result = await adminReopenSeason(confirmAction.season.id);
+      result = await adminReopenSeason(lifecycleConfirm.season.id);
     }
     setActionLoading(false);
-    setConfirmAction(null);
+    setLifecycleConfirm(null);
     if (result.success) {
       showFeedback(
         "ok",
-        confirmAction.type === "close"
-          ? "Temporada encerrada!"
-          : "Temporada reaberta!"
+        lifecycleConfirm.type === "close"
+          ? "Temporada encerrada! O campeão foi anunciado no feed."
+          : "Temporada reaberta! Anúncio publicado no feed."
       );
       invalidate();
     } else {
@@ -355,7 +437,7 @@ export default function AdminTemporadasPage() {
             </p>
             <SeasonForm
               initial={{ ...EMPTY_FORM, starts_at: nowIso }}
-              onSubmit={handleCreate}
+              onSubmit={handleCreateFormSubmit}
               onCancel={() => setShowCreateForm(false)}
               loading={actionLoading}
             />
@@ -425,7 +507,7 @@ export default function AdminTemporadasPage() {
                             ends_at: toInputDate(season.ends_at),
                             recurrence: season.recurrence,
                           }}
-                          onSubmit={(data) => handleEdit(season.id, data)}
+                          onSubmit={(data) => handleEditFormSubmit(season.id, data)}
                           onCancel={() => setEditingId(null)}
                           loading={actionLoading}
                         />
@@ -474,7 +556,7 @@ export default function AdminTemporadasPage() {
                                 variant="outline"
                                 className="border-red-200 text-red-600 hover:bg-red-50"
                                 onClick={() =>
-                                  setConfirmAction({ type: "close", season })
+                                  setLifecycleConfirm({ type: "close", season })
                                 }
                               >
                                 <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
@@ -488,7 +570,7 @@ export default function AdminTemporadasPage() {
                                 variant="outline"
                                 className="border-blue-200 text-blue-600 hover:bg-blue-50"
                                 onClick={() =>
-                                  setConfirmAction({ type: "reopen", season })
+                                  setLifecycleConfirm({ type: "reopen", season })
                                 }
                               >
                                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
@@ -507,26 +589,74 @@ export default function AdminTemporadasPage() {
         )}
       </div>
 
-      {/* Modal de confirmação */}
+      {/* ── Modal: confirmar CRIAÇÃO ─────────────────────────────────────────── */}
       <ConfirmModal
-        isOpen={!!confirmAction}
-        onClose={() => setConfirmAction(null)}
-        onConfirm={handleConfirm}
+        isOpen={createConfirm.isOpen}
+        onClose={() => setCreateConfirm({ isOpen: false, data: null, notify: false })}
+        onConfirm={handleCreateConfirm}
+        title="Confirmar criação"
+        description="Revise os dados antes de salvar:"
+        confirmText="Criar temporada"
+        cancelText="Voltar e editar"
+        variant="default"
+        loading={actionLoading}
+      >
+        {createConfirm.data && (
+          <>
+            <SeasonDataSummary data={createConfirm.data} />
+            <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={createConfirm.notify}
+                onChange={(e) =>
+                  setCreateConfirm((p) => ({ ...p, notify: e.target.checked }))
+                }
+              />
+              <span className="flex items-center gap-1.5 text-sm">
+                <Megaphone className="h-3.5 w-3.5 text-primary" />
+                Publicar anúncio no feed de notícias
+              </span>
+            </label>
+          </>
+        )}
+      </ConfirmModal>
+
+      {/* ── Modal: confirmar EDIÇÃO ──────────────────────────────────────────── */}
+      <ConfirmModal
+        isOpen={editConfirm.isOpen}
+        onClose={() => setEditConfirm({ isOpen: false, seasonId: null, data: null })}
+        onConfirm={handleEditConfirm}
+        title="Confirmar alteração"
+        description="Revise os novos dados antes de salvar. Edições não geram notícia no feed."
+        confirmText="Salvar alteração"
+        cancelText="Voltar e editar"
+        variant="warning"
+        loading={actionLoading}
+      >
+        {editConfirm.data && <SeasonDataSummary data={editConfirm.data} />}
+      </ConfirmModal>
+
+      {/* ── Modal: ENCERRAR / REABRIR ────────────────────────────────────────── */}
+      <ConfirmModal
+        isOpen={!!lifecycleConfirm}
+        onClose={() => setLifecycleConfirm(null)}
+        onConfirm={handleLifecycleConfirm}
         title={
-          confirmAction?.type === "close"
+          lifecycleConfirm?.type === "close"
             ? "Encerrar temporada?"
             : "Reabrir temporada?"
         }
         description={
-          confirmAction?.type === "close"
-            ? `Isso calculará o placar final, determinará o campeão de "${confirmAction?.season.name}" e publicará uma notícia. Esta ação pode ser revertida com "Reabrir".`
-            : `Isso reabre "${confirmAction?.season.name}", apaga o campeão e remove a notícia de encerramento. Só use se cometeu um erro.`
+          lifecycleConfirm?.type === "close"
+            ? `Isso calculará o placar final, declarará o campeão de "${lifecycleConfirm?.season.name}" e publicará automaticamente o anúncio no feed de notícias. Esta ação pode ser revertida com "Reabrir".`
+            : `Isso reabre "${lifecycleConfirm?.season.name}", apaga o campeão e publica um anúncio de reabertura no feed. Use somente se cometeu um erro.`
         }
         confirmText={
-          confirmAction?.type === "close" ? "Encerrar agora" : "Confirmar reabertura"
+          lifecycleConfirm?.type === "close" ? "Encerrar agora" : "Confirmar reabertura"
         }
         cancelText="Cancelar"
-        variant={confirmAction?.type === "close" ? "warning" : "warning"}
+        variant="warning"
         loading={actionLoading}
       />
     </AppShell>

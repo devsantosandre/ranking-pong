@@ -119,12 +119,10 @@ export async function adminCloseSeasonNow(
 
 // ── Admin: criar temporada ────────────────────────────────────────────────────
 
-export async function adminCreateSeason(input: {
-  name: string;
-  starts_at: string;
-  ends_at: string;
-  recurrence: string;
-}): Promise<SeasonAdminResult> {
+export async function adminCreateSeason(
+  input: { name: string; starts_at: string; ends_at: string; recurrence: string },
+  opts: { notify: boolean } = { notify: false }
+): Promise<SeasonAdminResult> {
   try {
     await requireModerator();
     const actor = await getCurrentUser();
@@ -136,29 +134,53 @@ export async function adminCreateSeason(input: {
       .replace(/[̀-ͯ]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
+    const fullSlug = `${slug}-${Date.now()}`;
 
-    const { error } = await supabase.from("seasons").insert({
-      name: input.name.trim(),
-      slug: `${slug}-${Date.now()}`,
-      starts_at: input.starts_at,
-      ends_at: input.ends_at,
-      recurrence: input.recurrence,
-      status: "upcoming",
-      created_by: actor?.id ?? null,
-    });
+    const { data: inserted, error } = await supabase
+      .from("seasons")
+      .insert({
+        name: input.name.trim(),
+        slug: fullSlug,
+        starts_at: input.starts_at,
+        ends_at: input.ends_at,
+        recurrence: input.recurrence,
+        status: "upcoming",
+        created_by: actor?.id ?? null,
+      })
+      .select("id")
+      .single();
 
     if (error) return { success: false, error: error.message };
+
+    if (opts.notify) {
+      const startDate = new Date(input.starts_at).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "long",
+      });
+      const endDate = new Date(input.ends_at).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "long",
+      });
+      await supabase.from("news_posts").insert({
+        title: `Nova temporada: ${input.name.trim()}`,
+        slug: `nova-temporada-${fullSlug}`,
+        resumo: `A ${input.name.trim()} começa em ${startDate} e vai até ${endDate}. Bora jogar!`,
+        tipo: "temporada",
+        published_at: new Date().toISOString(),
+        created_by: actor?.id ?? null,
+      });
+    }
 
     await supabase.from("admin_logs").insert({
       admin_id: actor?.id ?? null,
       admin_role: actor?.role ?? "admin",
       action: "season_created",
-      action_description: `Temporada "${input.name}" criada.`,
+      action_description: `Temporada "${input.name}" criada.${opts.notify ? " Anúncio publicado no feed." : ""}`,
       target_type: "season",
-      target_id: null,
+      target_id: inserted?.id ?? null,
       target_name: input.name,
       old_value: null,
-      new_value: { name: input.name, starts_at: input.starts_at, ends_at: input.ends_at },
+      new_value: { name: input.name, starts_at: input.starts_at, ends_at: input.ends_at, notified: opts.notify },
       reason: null,
     });
 
@@ -256,9 +278,18 @@ export async function adminReopenSeason(
       .update({ position: null })
       .eq("season_id", seasonId);
 
-    // Remover notícia de encerramento
-    const newsSlug = `campeao-${season.slug ?? seasonId}`;
-    await supabase.from("news_posts").delete().eq("slug", newsSlug);
+    // Remover notícia de encerramento e publicar notícia de reabertura
+    const champSlug = `campeao-${season.slug ?? seasonId}`;
+    await supabase.from("news_posts").delete().eq("slug", champSlug);
+
+    await supabase.from("news_posts").insert({
+      title: `${season.name} foi reaberta`,
+      slug: `reaberta-${season.slug ?? seasonId}-${Date.now()}`,
+      resumo: `As posições e o ranking da ${season.name} foram reiniciados. O campeonato está aberto novamente!`,
+      tipo: "temporada",
+      published_at: new Date().toISOString(),
+      created_by: actor?.id ?? null,
+    });
 
     await supabase.from("admin_logs").insert({
       admin_id: actor?.id ?? null,

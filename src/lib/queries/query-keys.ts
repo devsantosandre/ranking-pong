@@ -77,6 +77,9 @@ export const queryKeys = {
   // Settings
   settings: ["settings"] as const,
 
+  // Notícias de temporada (news_posts tipo='temporada')
+  seasonNews: ["season-news"] as const,
+
   // Achievements
   achievements: {
     all: ["achievements"] as const,
