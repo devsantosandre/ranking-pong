@@ -127,7 +127,7 @@ export default function TemporadasPage() {
   const { data: closedSeasons, isLoading } = useClosedSeasons();
 
   return (
-    <AppShell title="Temporadas" subtitle="Hall da Fama">
+    <AppShell title="Temporadas" subtitle="Hall da Fama" showBack>
       <div className="space-y-6">
         <ActiveSeasonCard />
 

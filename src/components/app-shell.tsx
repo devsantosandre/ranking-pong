@@ -11,7 +11,6 @@ import {
   Home,
   Info,
   ListChecks,
-  LogOut,
   MoreHorizontal,
   Newspaper,
   Trophy,
@@ -21,7 +20,6 @@ import { useAuth } from "@/lib/auth-store";
 import { usePushSubscription } from "@/lib/hooks/use-push-subscription";
 import { queryKeys, usePendingConfirmationStatus } from "@/lib/queries";
 import { buildBrowserTitle } from "@/lib/app-title";
-import { clearClientSessionData } from "@/lib/client-session-cleanup";
 
 type NavItem = {
   href: string;
@@ -38,6 +36,12 @@ const navItems: NavItem[] = [
   { href: "/ranking",  label: "Ranking",  icon: Trophy },
   { href: "/mais",     label: "Mais",     icon: MoreHorizontal },
 ];
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return (parts[0]?.[0] ?? "?").toUpperCase();
+  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
+}
 
 // Rotas que vivem dentro do menu "/mais" — o item Mais fica ativo nelas.
 const maisChildRoutes = ["/mais", "/temporadas", "/perfil", "/admin", "/regras", "/tv"];
@@ -70,7 +74,7 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const {
     canShowSoftAsk,
     dismissSoftAsk,
@@ -98,13 +102,6 @@ export function AppShell({
     () => navItems.find((item) => isActiveRoute(pathname, item.href))?.href,
     [pathname]
   );
-
-  const handleLogout = async () => {
-    queryClient.clear();
-    clearClientSessionData();
-    await logout();
-    router.replace("/login");
-  };
 
   const handlePendingCtaClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (pathname !== "/partidas") return;
@@ -158,18 +155,13 @@ export function AppShell({
               ) : null}
             </div>
             {!loading && user ? (
-              <div className="flex items-center gap-2">
-                <span className="max-w-[80px] truncate rounded-full bg-primary-foreground/20 px-3 py-1 text-[11px] font-semibold text-primary-foreground">
-                  {user.name}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/10 text-primary-foreground transition hover:bg-primary-foreground/20"
-                  aria-label="Sair"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
+              <Link
+                href="/perfil"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-foreground/20 text-sm font-bold text-primary-foreground transition hover:bg-primary-foreground/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
+                aria-label="Perfil"
+              >
+                {getInitials(user.name)}
+              </Link>
             ) : !loading ? (
               <Link
                 href="/login"
