@@ -7,6 +7,7 @@ import { queryKeys } from "@/lib/queries";
 import {
   adminCloseSeasonNow,
   adminReopenSeason,
+  adminActivateSeason,
   adminCreateSeason,
   adminEditSeason,
 } from "@/app/actions/seasons";
@@ -18,6 +19,7 @@ import {
   Loader2,
   Plus,
   PenLine,
+  Play,
   CheckCircle2,
   RefreshCw,
   X,
@@ -102,6 +104,7 @@ const EMPTY_FORM: FormState = {
 type ConfirmLifecycleAction =
   | { type: "close"; season: ClosedSeason }
   | { type: "reopen"; season: ClosedSeason }
+  | { type: "activate"; season: ClosedSeason }
   | null;
 
 // ── formulário ────────────────────────────────────────────────────────────────
@@ -376,16 +379,21 @@ export default function AdminTemporadasPage() {
     let result;
     if (lifecycleConfirm.type === "close") {
       result = await adminCloseSeasonNow(lifecycleConfirm.season.id);
+    } else if (lifecycleConfirm.type === "activate") {
+      result = await adminActivateSeason(lifecycleConfirm.season.id);
     } else {
       result = await adminReopenSeason(lifecycleConfirm.season.id);
     }
+    const actionType = lifecycleConfirm.type;
     setActionLoading(false);
     setLifecycleConfirm(null);
     if (result.success) {
       showFeedback(
         "ok",
-        lifecycleConfirm.type === "close"
+        actionType === "close"
           ? "Temporada encerrada! O campeão foi anunciado no feed."
+          : actionType === "activate"
+          ? "Temporada ativada com sucesso!"
           : "Temporada reaberta! Anúncio publicado no feed."
       );
       invalidate();
@@ -539,6 +547,20 @@ export default function AdminTemporadasPage() {
                           </div>
 
                           <div className="flex flex-wrap gap-2">
+                            {status === "upcoming" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-green-200 text-green-700 hover:bg-green-50"
+                                onClick={() =>
+                                  setLifecycleConfirm({ type: "activate", season })
+                                }
+                              >
+                                <Play className="mr-1.5 h-3.5 w-3.5" />
+                                Ativar
+                              </Button>
+                            )}
+
                             {(status === "upcoming" || status === "active") && (
                               <Button
                                 size="sm"
@@ -637,23 +659,31 @@ export default function AdminTemporadasPage() {
         {editConfirm.data && <SeasonDataSummary data={editConfirm.data} />}
       </ConfirmModal>
 
-      {/* ── Modal: ENCERRAR / REABRIR ────────────────────────────────────────── */}
+      {/* ── Modal: ATIVAR / ENCERRAR / REABRIR ──────────────────────────────── */}
       <ConfirmModal
         isOpen={!!lifecycleConfirm}
         onClose={() => setLifecycleConfirm(null)}
         onConfirm={handleLifecycleConfirm}
         title={
-          lifecycleConfirm?.type === "close"
+          lifecycleConfirm?.type === "activate"
+            ? "Ativar temporada?"
+            : lifecycleConfirm?.type === "close"
             ? "Encerrar temporada?"
             : "Reabrir temporada?"
         }
         description={
-          lifecycleConfirm?.type === "close"
+          lifecycleConfirm?.type === "activate"
+            ? `Isso inicia "${lifecycleConfirm?.season.name}" agora. Apenas uma temporada pode estar ativa por vez — se houver outra ativa, a ativação será bloqueada.`
+            : lifecycleConfirm?.type === "close"
             ? `Isso calculará o placar final, declarará o campeão de "${lifecycleConfirm?.season.name}" e publicará automaticamente o anúncio no feed de notícias. Esta ação pode ser revertida com "Reabrir".`
             : `Isso reabre "${lifecycleConfirm?.season.name}", apaga o campeão e publica um anúncio de reabertura no feed. Use somente se cometeu um erro.`
         }
         confirmText={
-          lifecycleConfirm?.type === "close" ? "Encerrar agora" : "Confirmar reabertura"
+          lifecycleConfirm?.type === "activate"
+            ? "Ativar agora"
+            : lifecycleConfirm?.type === "close"
+            ? "Encerrar agora"
+            : "Confirmar reabertura"
         }
         cancelText="Cancelar"
         variant="warning"

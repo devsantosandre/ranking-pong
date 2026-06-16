@@ -240,6 +240,68 @@ export async function adminEditSeason(
   }
 }
 
+// ── Admin: ativar ─────────────────────────────────────────────────────────────
+
+export async function adminActivateSeason(
+  seasonId: string
+): Promise<SeasonAdminResult> {
+  try {
+    await requireModerator();
+    const actor = await getCurrentUser();
+    const supabase = createAdminClient();
+
+    const { data: season, error: fetchError } = await supabase
+      .from("seasons")
+      .select("id, name, status")
+      .eq("id", seasonId)
+      .single();
+
+    if (fetchError || !season) return { success: false, error: "Temporada não encontrada." };
+    if (season.status !== "upcoming")
+      return { success: false, error: "Só é possível ativar temporadas agendadas." };
+
+    const { data: active } = await supabase
+      .from("seasons")
+      .select("id, name")
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+
+    if (active)
+      return {
+        success: false,
+        error: `Já existe uma temporada ativa: "${active.name}". Encerre-a antes de ativar outra.`,
+      };
+
+    const { error: updateError } = await supabase
+      .from("seasons")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("id", seasonId);
+
+    if (updateError) return { success: false, error: updateError.message };
+
+    await supabase.from("admin_logs").insert({
+      admin_id: actor?.id ?? null,
+      admin_role: actor?.role ?? "admin",
+      action: "season_activated",
+      action_description: `Temporada "${season.name}" ativada manualmente.`,
+      target_type: "season",
+      target_id: seasonId,
+      target_name: season.name,
+      old_value: { status: "upcoming" },
+      new_value: { status: "active" },
+      reason: null,
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Erro ao ativar temporada.",
+    };
+  }
+}
+
 // ── Admin: reabrir ────────────────────────────────────────────────────────────
 
 export async function adminReopenSeason(
