@@ -2,8 +2,11 @@
 
 import { AppShell } from "@/components/app-shell";
 import { useActiveSeason, useClosedSeasons, useSeasonStandings } from "@/lib/queries";
-import { Loader2, Trophy, Medal, Clock } from "lucide-react";
+import { useAuth } from "@/lib/auth-store";
+import { Loader2, Trophy, Medal, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import type { SeasonStandingEntry } from "@/lib/queries";
 
 function formatDateRange(startsAt: string, endsAt: string): string {
   const fmt = (d: string) =>
@@ -38,6 +41,91 @@ function getPlayerName(player: {
   return player.full_name || player.name || player.email?.split("@")[0] || "Jogador";
 }
 
+function positionLabel(pos: number): string {
+  if (pos === 1) return "🥇";
+  if (pos === 2) return "🥈";
+  if (pos === 3) return "🥉";
+  return `${pos}º`;
+}
+
+function ClosedSeasonStandings({
+  seasonId,
+  currentUserId,
+}: {
+  seasonId: string;
+  currentUserId?: string;
+}) {
+  const { data: standings, isLoading } = useSeasonStandings(seasonId);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-4">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!standings || standings.length === 0) {
+    return (
+      <p className="py-3 text-center text-xs text-muted-foreground">
+        Nenhum participante registrado nesta temporada.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1 pt-2">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Classificação final
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          {standings.length} participante{standings.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+      {standings.map((entry: SeasonStandingEntry) => {
+        const isMe = entry.id === currentUserId;
+        return (
+          <div
+            key={entry.id}
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+              isMe
+                ? "bg-primary/10 ring-1 ring-primary/20"
+                : "bg-muted/40"
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="w-7 shrink-0 text-center text-sm">
+                {positionLabel(entry.position)}
+              </span>
+              <span
+                className={`truncate text-sm ${
+                  isMe ? "font-semibold text-primary" : "font-medium text-foreground"
+                }`}
+              >
+                {getPlayerName(entry)}
+              </span>
+              {isMe && (
+                <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  você
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-3 text-xs">
+              <span className="text-muted-foreground">
+                {entry.wins}V {entry.losses}D
+              </span>
+              <span className={`font-bold tabular-nums ${isMe ? "text-primary" : "text-foreground"}`}>
+                {entry.points} pts
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ActiveSeasonCard() {
   const { data: activeSeason, isLoading } = useActiveSeason();
   const { data: standings, isLoading: standingsLoading } = useSeasonStandings(
@@ -60,7 +148,7 @@ function ActiveSeasonCard() {
 
   return (
     <article className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Medal className="h-4 w-4 text-primary" />
           <p className="text-sm font-bold text-primary">{activeSeason.name}</p>
@@ -96,13 +184,9 @@ function ActiveSeasonCard() {
               >
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <span>{medals[idx]}</span>
-                  <span className="truncate max-w-[160px]">
-                    {getPlayerName(entry)}
-                  </span>
+                  <span className="max-w-[160px] truncate">{getPlayerName(entry)}</span>
                 </span>
-                <span className="text-sm font-bold text-primary">
-                  {entry.points} pts
-                </span>
+                <span className="text-sm font-bold text-primary">{entry.points} pts</span>
               </div>
             );
           })}
@@ -125,6 +209,20 @@ function ActiveSeasonCard() {
 
 export default function TemporadasPage() {
   const { data: closedSeasons, isLoading } = useClosedSeasons();
+  const { user } = useAuth();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   return (
     <AppShell title="Temporadas" subtitle="Hall da Fama" showBack>
@@ -132,9 +230,7 @@ export default function TemporadasPage() {
         <ActiveSeasonCard />
 
         <div className="space-y-3">
-          <p className="px-1 text-sm font-semibold text-foreground">
-            Hall da Fama
-          </p>
+          <p className="px-1 text-sm font-semibold text-foreground">Hall da Fama</p>
 
           {isLoading ? (
             <div className="flex justify-center py-8">
@@ -154,59 +250,94 @@ export default function TemporadasPage() {
             closedSeasons.map((season, idx) => {
               const champion = season.champion;
               const championName = champion ? getPlayerName(champion) : null;
+              const isFirst = idx === 0;
+              const isExpanded = expandedIds.has(season.id);
 
               return (
                 <article
                   key={season.id}
-                  className={`rounded-2xl border p-4 shadow-sm ${
-                    idx === 0
+                  className={`rounded-2xl border shadow-sm ${
+                    isFirst
                       ? "border-yellow-300 bg-yellow-50"
                       : "border-border bg-card"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
-                          idx === 0
-                            ? "bg-yellow-200"
-                            : "bg-muted"
-                        }`}
-                      >
-                        {idx === 0 ? "🏆" : "🥈"}
-                      </div>
-                      <div className="min-w-0">
+                  {/* Cabeçalho — sempre visível */}
+                  <div className="flex items-start gap-3 p-4">
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
+                        isFirst ? "bg-yellow-200" : "bg-muted"
+                      }`}
+                    >
+                      {isFirst ? "🏆" : "🏅"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
                         <p
                           className={`font-bold ${
-                            idx === 0 ? "text-yellow-800" : "text-foreground"
+                            isFirst ? "text-yellow-800" : "text-foreground"
                           }`}
                         >
                           {season.name}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDateRange(season.starts_at, season.ends_at)}
-                        </p>
-                        {championName ? (
-                          <p
-                            className={`mt-1 text-sm font-semibold ${
-                              idx === 0 ? "text-yellow-700" : "text-primary"
-                            }`}
-                          >
-                            🥇 {championName}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-xs text-muted-foreground italic">
-                            Sem campeão registrado
-                          </p>
-                        )}
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          encerrada
+                        </span>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDateRange(season.starts_at, season.ends_at)}
+                      </p>
+                      {championName ? (
+                        <p
+                          className={`mt-1 text-sm font-semibold ${
+                            isFirst ? "text-yellow-700" : "text-primary"
+                          }`}
+                        >
+                          🥇 {championName}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs italic text-muted-foreground">
+                          Sem campeão registrado
+                        </p>
+                      )}
                     </div>
-                    {season.closed_at && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        encerrada
-                      </span>
-                    )}
                   </div>
+
+                  {/* Botão expandir */}
+                  <button
+                    onClick={() => toggleExpanded(season.id)}
+                    className={`flex w-full items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-semibold transition ${
+                      isFirst
+                        ? "border-yellow-200 text-yellow-700 hover:bg-yellow-100"
+                        : "border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                    }`}
+                  >
+                    {isExpanded ? (
+                      <>
+                        <ChevronUp className="h-3.5 w-3.5" />
+                        Ocultar classificação
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3.5 w-3.5" />
+                        Ver classificação completa
+                      </>
+                    )}
+                  </button>
+
+                  {/* Standings expandidos */}
+                  {isExpanded && (
+                    <div
+                      className={`border-t px-4 pb-4 ${
+                        isFirst ? "border-yellow-200" : "border-border"
+                      }`}
+                    >
+                      <ClosedSeasonStandings
+                        seasonId={season.id}
+                        currentUserId={user?.id}
+                      />
+                    </div>
+                  )}
                 </article>
               );
             })
