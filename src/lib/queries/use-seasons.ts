@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
+import { getSeasonOverviewAction } from "@/app/actions/seasons";
 import { queryKeys } from "./query-keys";
 
 export type Season = {
@@ -51,22 +52,10 @@ type StandingsRow = {
 };
 
 export function useActiveSeason() {
-  const supabase = createClient();
-
   return useQuery({
     queryKey: queryKeys.seasons.active(),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("seasons")
-        .select("id, name, slug, starts_at, ends_at, status, recurrence, champion_user_id, closed_at, created_at")
-        .eq("status", "active")
-        .order("starts_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data as Season | null;
-    },
+    // Chama server action para também disparar enforceSeasonLifecycle() em after()
+    queryFn: getSeasonOverviewAction,
     staleTime: 1000 * 30,
   });
 }
