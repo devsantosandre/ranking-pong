@@ -519,21 +519,23 @@ export function useTotalValidatedMatches() {
 
 export function useHeadToHeadStats(
   userId: string | undefined,
-  opponentId: string | undefined
+  opponentId: string | undefined,
+  seasonId?: string | null
 ) {
   const supabase = createClient();
 
   return useQuery({
-    queryKey: queryKeys.matches.h2h(userId, opponentId),
+    queryKey: queryKeys.matches.h2h(userId, opponentId, seasonId),
     queryFn: async (): Promise<HeadToHeadStats> => {
       if (!userId || !opponentId || userId === opponentId) {
         return { wins: 0, losses: 0, total: 0, winRate: 0 };
       }
 
       const { data, error } = await supabase
-        .rpc("get_head_to_head_stats_v1", {
+        .rpc("get_head_to_head_stats_v2", {
           p_user_id: userId,
           p_opponent_id: opponentId,
+          p_season_id: seasonId ?? undefined,
         });
 
       if (error) throw error;

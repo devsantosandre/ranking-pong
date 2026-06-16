@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { ChevronRight, Search, X, Clock } from "lucide-react";
+import { ChevronRight, Search, X, Clock, Trophy } from "lucide-react";
 import { memo, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   useHeadToHeadStats,
@@ -176,6 +176,38 @@ const RankingPlayerCard = memo(function RankingPlayerCard({
   );
 });
 
+// ─── mini-card de posição na temporada (usado no H2H) ────────────────────────
+
+const SeasonStandingMini = memo(function SeasonStandingMini({
+  label,
+  loading,
+  standing,
+}: {
+  label: string;
+  loading: boolean;
+  standing: { position: number; points: number; wins: number; losses: number } | null;
+}) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-white/70 p-3 text-center">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-amber-700/80">
+        {label}
+      </p>
+      {loading ? (
+        <p className="mt-2 text-xs text-muted-foreground">Carregando…</p>
+      ) : standing ? (
+        <>
+          <p className="mt-1 text-2xl font-bold text-amber-900">{standing.position}º</p>
+          <p className="text-xs text-amber-800">
+            {standing.points} pts · {standing.wins}V {standing.losses}D
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">Ainda não pontuou</p>
+      )}
+    </div>
+  );
+});
+
 // ─── página principal ────────────────────────────────────────────────────────
 
 export default function RankingPage() {
@@ -251,6 +283,25 @@ export default function RankingPage() {
   } = useHeadToHeadStats(
     user?.id,
     selectedPlayer && selectedPlayer.id !== user?.id ? selectedPlayer.id : undefined
+  );
+
+  // ── temporada no H2H ───────────────────────────────────────────────────────
+  // (A) posição/pontos de cada um na temporada — reaproveita seasonStandings já carregado
+  const mySeasonStanding = useMemo(
+    () => (seasonStandings ?? []).find((s) => s.id === user?.id) ?? null,
+    [seasonStandings, user?.id]
+  );
+  const opponentSeasonStanding = useMemo(
+    () => (seasonStandings ?? []).find((s) => s.id === selectedPlayer?.id) ?? null,
+    [seasonStandings, selectedPlayer?.id]
+  );
+  // (B) confronto direto recortado pela temporada ativa — só dispara quando há temporada
+  const { data: h2hSeasonStats, isLoading: h2hSeasonLoading } = useHeadToHeadStats(
+    user?.id,
+    activeSeason && selectedPlayer && selectedPlayer.id !== user?.id
+      ? selectedPlayer.id
+      : undefined,
+    activeSeason?.id
   );
   const {
     data: selectedPlayerMatchesData,
@@ -536,6 +587,53 @@ export default function RankingPage() {
               <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Vocês ainda não têm partidas validadas entre si.
               </p>
+            )}
+
+            {/* ── Temporada atual (A: ranking lado a lado · B: confronto na temporada) ── */}
+            {activeSeason && selectedPlayer && user && selectedPlayer.id !== user.id && (
+              <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 sm:p-4">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4 shrink-0 text-amber-600" />
+                  <h3 className="text-sm font-semibold text-amber-900">
+                    Na temporada · {activeSeason.name}
+                  </h3>
+                </div>
+
+                {/* A — ranking da temporada lado a lado */}
+                <div className="grid grid-cols-2 gap-2">
+                  <SeasonStandingMini
+                    label="Você"
+                    loading={standingsLoading}
+                    standing={mySeasonStanding}
+                  />
+                  <SeasonStandingMini
+                    label={selectedPlayer.displayName}
+                    loading={standingsLoading}
+                    standing={opponentSeasonStanding}
+                  />
+                </div>
+
+                {/* B — confronto direto recortado pela temporada */}
+                <div className="rounded-xl border border-amber-200 bg-white/70 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700/80">
+                    Confronto direto nesta temporada
+                  </p>
+                  {h2hSeasonLoading ? (
+                    <p className="mt-1 text-xs text-muted-foreground">Carregando…</p>
+                  ) : h2hSeasonStats && h2hSeasonStats.total > 0 ? (
+                    <p className="mt-1 text-sm font-semibold text-amber-900">
+                      {h2hSeasonStats.wins}V × {h2hSeasonStats.losses}D{" "}
+                      <span className="font-normal text-amber-700/80">
+                        ({h2hSeasonStats.total} jogo{h2hSeasonStats.total > 1 ? "s" : ""})
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Vocês ainda não se enfrentaram nesta temporada.
+                    </p>
+                  )}
+                </div>
+              </section>
             )}
 
             {selectedPlayer && (

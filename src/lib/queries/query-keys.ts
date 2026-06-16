@@ -27,8 +27,8 @@ export const queryKeys = {
     pendingDashboard: (userId: string) =>
       [...queryKeys.matches.all, "pending-dashboard", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
-    h2h: (userId?: string, opponentId?: string) =>
-      [...queryKeys.matches.all, "h2h", userId, opponentId] as const,
+    h2h: (userId?: string, opponentId?: string, seasonId?: string | null) =>
+      [...queryKeys.matches.all, "h2h", userId, opponentId, seasonId ?? null] as const,
   },
 
   // Notifications
