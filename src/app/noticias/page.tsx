@@ -3,21 +3,26 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useNews, useSeasonNewsPosts, type NewsItem, type SeasonNewsPost } from "@/lib/queries";
+import { queryKeys } from "@/lib/queries/query-keys";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import { NewsListSkeleton } from "@/components/skeletons";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
   NewsReactionBarMock,
   type NewsReactionOverlayPanel,
 } from "@/components/news/news-reaction-bar-mock";
 import { useMemo, useState } from "react";
-import { Trophy } from "lucide-react";
+import { Trash2, Trophy } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { adminDeleteSeasonNewsPost } from "@/app/actions/seasons";
 
 type MergedNewsItem =
   | (NewsItem & { _sortDate: string; _kind: "resultado" })
   | (SeasonNewsPost & { _sortDate: string; _kind: "temporada" });
 
 export default function NoticiasPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, canAccessAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const {
     data,
     isLoading,
@@ -27,6 +32,14 @@ export default function NoticiasPage() {
     isFetchingNextPage,
   } = useNews(user?.id, !authLoading);
   const { data: seasonPosts, isLoading: seasonLoading } = useSeasonNewsPosts(!authLoading && !!user);
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    postId: string | null;
+    title: string;
+  }>({ isOpen: false, postId: null, title: "" });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const news = useMemo(() => {
     return data?.pages.flatMap((page) => page.news) ?? [];
@@ -69,15 +82,25 @@ export default function NoticiasPage() {
     return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.postId) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    const result = await adminDeleteSeasonNewsPost(deleteConfirm.postId);
+    setDeleteLoading(false);
+    if (!result.success) {
+      setDeleteError(result.error);
+      return false;
+    }
+    void queryClient.invalidateQueries({ queryKey: queryKeys.seasonNews });
+    setDeleteConfirm({ isOpen: false, postId: null, title: "" });
+  };
+
   const isPageLoading = authLoading || isLoading || seasonLoading;
 
   if (isPageLoading) {
     return (
-      <AppShell
-        title="Notícias"
-        subtitle="Feed de resultados e destaques"
-        showBack
-      >
+      <AppShell title="Notícias" subtitle="Feed de resultados e destaques" showBack>
         <NewsListSkeleton count={4} />
       </AppShell>
     );
@@ -85,11 +108,7 @@ export default function NoticiasPage() {
 
   if (error) {
     return (
-      <AppShell
-        title="Notícias"
-        subtitle="Feed de resultados e destaques"
-        showBack
-      >
+      <AppShell title="Notícias" subtitle="Feed de resultados e destaques" showBack>
         <p className="py-8 text-center text-sm text-red-500">
           Erro ao carregar notícias. Tente novamente.
         </p>
@@ -98,11 +117,7 @@ export default function NoticiasPage() {
   }
 
   return (
-    <AppShell
-      title="Notícias"
-      subtitle="Feed de resultados e destaques"
-      showBack
-    >
+    <AppShell title="Notícias" subtitle="Feed de resultados e destaques" showBack>
       <div className="space-y-4">
         {merged.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
@@ -122,9 +137,27 @@ export default function NoticiasPage() {
                         <Trophy className="h-3 w-3" />
                         Temporada
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTimeAgo(item.createdAt)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {formatTimeAgo(item.createdAt)}
+                        </span>
+                        {canAccessAdmin && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteConfirm({
+                                isOpen: true,
+                                postId: item.id,
+                                title: item.title,
+                              })
+                            }
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-yellow-600/60 transition hover:bg-yellow-200 hover:text-red-600"
+                            aria-label="Remover notícia"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="font-semibold text-foreground">{item.title}</p>
                     {item.resumo && (
@@ -207,6 +240,21 @@ export default function NoticiasPage() {
           </>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => {
+          setDeleteConfirm({ isOpen: false, postId: null, title: "" });
+          setDeleteError(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Remover notícia"
+        description={`Tem certeza que deseja remover "${deleteConfirm.title}"? Esta ação não pode ser desfeita.`}
+        confirmText="Remover"
+        variant="danger"
+        loading={deleteLoading}
+        errorMessage={deleteError ?? undefined}
+      />
     </AppShell>
   );
 }

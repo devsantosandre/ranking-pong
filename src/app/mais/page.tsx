@@ -3,9 +3,11 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { clearClientSessionData } from "@/lib/client-session-cleanup";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen, LogOut, Medal, Shield, Tv, UserCircle } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type MenuCard = {
@@ -61,6 +63,7 @@ export default function MaisPage() {
   const { user, canAccessAdmin, logout } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const items = canAccessAdmin ? [...menuItems, adminItem] : menuItems;
 
@@ -136,13 +139,24 @@ export default function MaisPage() {
 
         {/* Sair */}
         <button
-          onClick={handleLogout}
+          onClick={() => setLogoutConfirmOpen(true)}
           className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-600 transition hover:bg-red-100 active:scale-[0.99]"
         >
           <LogOut className="h-4 w-4" />
           Sair da conta
         </button>
       </div>
+
+      <ConfirmModal
+        isOpen={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        onConfirm={handleLogout}
+        title="Sair da conta"
+        description="Tem certeza que deseja sair? Você precisará fazer login novamente para acessar o app."
+        confirmText="Sair"
+        cancelText="Cancelar"
+        variant="danger"
+      />
     </AppShell>
   );
 }

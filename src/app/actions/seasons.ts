@@ -312,3 +312,28 @@ export async function adminReopenSeason(
     };
   }
 }
+
+// ── Remover notícia de temporada ──────────────────────────────────────────────
+
+export async function adminDeleteSeasonNewsPost(
+  newsPostId: string
+): Promise<SeasonAdminResult> {
+  try {
+    await requireModerator();
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from("news_posts")
+      .delete()
+      .eq("id", newsPostId)
+      .eq("tipo", "temporada");
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Erro ao remover notícia.",
+    };
+  }
+}
