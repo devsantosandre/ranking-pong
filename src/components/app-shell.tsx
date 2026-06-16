@@ -13,8 +13,6 @@ import {
   ListChecks,
   LogOut,
   Medal,
-  Newspaper,
-  Shield,
   Trophy,
   UserCircle,
   X,
@@ -31,16 +29,14 @@ type NavItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const baseNavItems: NavItem[] = [
+// 5 itens fixos — garante que a barra cabe em qualquer tela mobile
+const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/noticias", label: "Noticias", icon: Newspaper },
   { href: "/partidas", label: "Partidas", icon: ListChecks },
   { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/temporadas", label: "Temporadas", icon: Medal },
+  { href: "/perfil", label: "Perfil", icon: UserCircle },
 ];
-
-const adminNavItem: NavItem = { href: "/admin", label: "Admin", icon: Shield };
-const profileNavItem: NavItem = { href: "/perfil", label: "Perfil", icon: UserCircle };
 
 function isActiveRoute(pathname: string, href: string): boolean {
   if (href === "/") {
@@ -66,7 +62,7 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user, loading, logout, canAccessAdmin } = useAuth();
+  const { user, loading, logout } = useAuth();
   const {
     canShowSoftAsk,
     dismissSoftAsk,
@@ -90,19 +86,9 @@ export function AppShell({
           content: "max-w-[420px]",
         };
 
-  // Construir navItems dinamicamente baseado nas permissoes
-  const navItems = useMemo(() => {
-    const items = [...baseNavItems];
-    if (canAccessAdmin) {
-      items.push(adminNavItem);
-    }
-    items.push(profileNavItem);
-    return items;
-  }, [canAccessAdmin]);
-
   const active = useMemo(
     () => navItems.find((item) => isActiveRoute(pathname, item.href))?.href,
-    [pathname, navItems]
+    [pathname]
   );
 
   const handleLogout = async () => {

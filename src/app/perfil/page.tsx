@@ -10,7 +10,9 @@ import {
 import { useActiveSeason, useUserSeasonStanding } from "@/lib/queries";
 import {
   BookOpen,
+  Newspaper,
   Settings,
+  Shield,
 } from "lucide-react";
 import { useMemo } from "react";
 import Link from "next/link";
@@ -35,7 +37,7 @@ function formatSeasonCountdown(endsAt: string): string {
 }
 
 export default function PerfilPage() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, logout, canAccessAdmin } = useAuth();
   const { data: userStats, isLoading: userStatsLoading } = useUser(user?.id);
   const { data: rankingPosition, isLoading: rankingPositionLoading } = useUserRankingPosition(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
@@ -397,6 +399,22 @@ export default function PerfilPage() {
         </Link>
 
         <Link
+          href="/noticias"
+          className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary"
+        >
+          <div className="flex items-center gap-3">
+            <Newspaper className="h-5 w-5 text-primary" />
+            <div>
+              <p className="font-semibold text-foreground">Notícias</p>
+              <p className="text-xs text-muted-foreground">
+                Feed de resultados e temporadas
+              </p>
+            </div>
+          </div>
+          <span className="text-muted-foreground">→</span>
+        </Link>
+
+        <Link
           href="/perfil/configuracoes"
           className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary"
         >
@@ -411,6 +429,24 @@ export default function PerfilPage() {
           </div>
           <span className="text-muted-foreground">→</span>
         </Link>
+
+        {canAccessAdmin && (
+          <Link
+            href="/admin"
+            className="flex items-center justify-between rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm transition hover:border-orange-400"
+          >
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-orange-600" />
+              <div>
+                <p className="font-semibold text-orange-800">Painel Admin</p>
+                <p className="text-xs text-orange-600/80">
+                  Gerenciar jogadores, partidas e temporadas
+                </p>
+              </div>
+            </div>
+            <span className="text-orange-400">→</span>
+          </Link>
+        )}
 
         {/* Botão de logout */}
         <button
