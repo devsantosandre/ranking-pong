@@ -215,6 +215,7 @@ export default function RankingPage() {
   const [searchInput, setSearchInput] = useState("");
   const [activeTab, setActiveTab] = useState<"temporada" | "geral">("temporada");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [h2hTab, setH2hTab] = useState<"temporada" | "geral">("temporada");
   const sheetScrollRef = useRef<HTMLDivElement | null>(null);
   const historySentinelRef = useRef<HTMLDivElement | null>(null);
   const normalizedSearch = searchInput.trim().toLowerCase();
@@ -348,11 +349,113 @@ export default function RankingPage() {
 
   const handleOpenH2H = useCallback((playerId: string) => {
     setSelectedPlayerId(playerId);
+    setH2hTab("temporada");
   }, []);
 
   const handleSheetOpenChange = useCallback((open: boolean) => {
     if (!open) setSelectedPlayerId(null);
   }, []);
+
+  // ── conteúdo das abas do H2H ───────────────────────────────────────────────
+  const generalH2HContent = h2hLoading ? (
+    <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+      Carregando confronto…
+    </p>
+  ) : h2hError ? (
+    <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+      Erro ao carregar confronto. Tente novamente.
+    </p>
+  ) : h2hStats && h2hStats.total > 0 ? (
+    <div className="space-y-3 sm:space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+          <p className="text-2xl font-bold text-emerald-700 sm:text-3xl">{h2hStats.wins}</p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Você ganhou</p>
+        </article>
+        <article className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
+          <p className="text-2xl font-bold text-red-600 sm:text-3xl">{h2hStats.losses}</p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-red-600/80">Você perdeu</p>
+        </article>
+        <article className="col-span-2 rounded-xl border border-border bg-card p-4 text-center sm:col-span-1">
+          <p className="text-2xl font-bold text-primary sm:text-3xl">{h2hStats.total}</p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80">Total</p>
+        </article>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <p className="text-sm font-semibold text-muted-foreground">Aproveitamento</p>
+          <p className="text-3xl font-bold text-foreground">{h2hStats.winRate}%</p>
+        </div>
+        <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+            style={{ width: `${Math.max(0, Math.min(100, h2hStats.winRate))}%` }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {h2hStats.wins} vitória{h2hStats.wins === 1 ? "" : "s"} em{" "}
+          {h2hStats.total} confronto{h2hStats.total > 1 ? "s" : ""}
+        </p>
+        <p className="text-xs font-medium text-muted-foreground">
+          {h2hStats.wins > h2hStats.losses
+            ? "Você está em vantagem neste confronto."
+            : h2hStats.wins < h2hStats.losses
+              ? "Adversário em vantagem neste confronto."
+              : "Confronto equilibrado entre vocês."}
+        </p>
+      </div>
+    </div>
+  ) : (
+    <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+      Vocês ainda não têm partidas validadas entre si.
+    </p>
+  );
+
+  const seasonH2HContent =
+    activeSeason && selectedPlayer && user && selectedPlayer.id !== user.id ? (
+      <div className="space-y-3">
+        <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
+          <Trophy className="h-3.5 w-3.5 shrink-0" />
+          {activeSeason.name}
+        </p>
+
+        {/* A — ranking da temporada lado a lado */}
+        <div className="grid grid-cols-2 gap-2">
+          <SeasonStandingMini
+            label="Você"
+            loading={standingsLoading}
+            standing={mySeasonStanding}
+          />
+          <SeasonStandingMini
+            label={selectedPlayer.displayName}
+            loading={standingsLoading}
+            standing={opponentSeasonStanding}
+          />
+        </div>
+
+        {/* B — confronto direto recortado pela temporada */}
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700/80">
+            Confronto direto nesta temporada
+          </p>
+          {h2hSeasonLoading ? (
+            <p className="mt-1 text-xs text-muted-foreground">Carregando…</p>
+          ) : h2hSeasonStats && h2hSeasonStats.total > 0 ? (
+            <p className="mt-1 text-sm font-semibold text-amber-900">
+              {h2hSeasonStats.wins}V × {h2hSeasonStats.losses}D{" "}
+              <span className="font-normal text-amber-700/80">
+                ({h2hSeasonStats.total} jogo{h2hSeasonStats.total > 1 ? "s" : ""})
+              </span>
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Vocês ainda não se enfrentaram nesta temporada.
+            </p>
+          )}
+        </div>
+      </div>
+    ) : null;
 
   // ── render ────────────────────────────────────────────────────────────────
 
@@ -534,106 +637,25 @@ export default function RankingPage() {
               <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 Selecione outro jogador para comparar seu histórico de confrontos.
               </p>
-            ) : h2hLoading ? (
-              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-                Carregando H2H…
-              </p>
-            ) : h2hError ? (
-              <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-                Erro ao carregar H2H. Tente novamente.
-              </p>
-            ) : h2hStats && h2hStats.total > 0 ? (
-              <>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-                    <p className="text-2xl font-bold text-emerald-700 sm:text-3xl">{h2hStats.wins}</p>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Você ganhou</p>
-                  </article>
-                  <article className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
-                    <p className="text-2xl font-bold text-red-600 sm:text-3xl">{h2hStats.losses}</p>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-red-600/80">Você perdeu</p>
-                  </article>
-                  <article className="col-span-2 rounded-xl border border-border bg-card p-4 text-center sm:col-span-1">
-                    <p className="text-2xl font-bold text-primary sm:text-3xl">{h2hStats.total}</p>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80">Total</p>
-                  </article>
-                </div>
-
-                <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                    <p className="text-sm font-semibold text-muted-foreground">Aproveitamento</p>
-                    <p className="text-3xl font-bold text-foreground">{h2hStats.winRate}%</p>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                      style={{ width: `${Math.max(0, Math.min(100, h2hStats.winRate))}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {h2hStats.wins} vitória{h2hStats.wins === 1 ? "" : "s"} em{" "}
-                    {h2hStats.total} confronto{h2hStats.total > 1 ? "s" : ""}
-                  </p>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {h2hStats.wins > h2hStats.losses
-                      ? "Você está em vantagem neste confronto."
-                      : h2hStats.wins < h2hStats.losses
-                        ? "Adversário em vantagem neste confronto."
-                        : "Confronto equilibrado entre vocês."}
-                  </p>
-                </div>
-              </>
+            ) : activeSeason ? (
+              <Tabs
+                value={h2hTab}
+                onValueChange={(v) => setH2hTab(v as "temporada" | "geral")}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="temporada">Temporada</TabsTrigger>
+                  <TabsTrigger value="geral">Geral</TabsTrigger>
+                </TabsList>
+                <TabsContent value="temporada" className="mt-3">
+                  {seasonH2HContent}
+                </TabsContent>
+                <TabsContent value="geral" className="mt-3">
+                  {generalH2HContent}
+                </TabsContent>
+              </Tabs>
             ) : (
-              <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-                Vocês ainda não têm partidas validadas entre si.
-              </p>
-            )}
-
-            {/* ── Temporada atual (A: ranking lado a lado · B: confronto na temporada) ── */}
-            {activeSeason && selectedPlayer && user && selectedPlayer.id !== user.id && (
-              <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 sm:p-4">
-                <div className="flex items-center gap-2">
-                  <Trophy className="h-4 w-4 shrink-0 text-amber-600" />
-                  <h3 className="text-sm font-semibold text-amber-900">
-                    Na temporada · {activeSeason.name}
-                  </h3>
-                </div>
-
-                {/* A — ranking da temporada lado a lado */}
-                <div className="grid grid-cols-2 gap-2">
-                  <SeasonStandingMini
-                    label="Você"
-                    loading={standingsLoading}
-                    standing={mySeasonStanding}
-                  />
-                  <SeasonStandingMini
-                    label={selectedPlayer.displayName}
-                    loading={standingsLoading}
-                    standing={opponentSeasonStanding}
-                  />
-                </div>
-
-                {/* B — confronto direto recortado pela temporada */}
-                <div className="rounded-xl border border-amber-200 bg-white/70 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700/80">
-                    Confronto direto nesta temporada
-                  </p>
-                  {h2hSeasonLoading ? (
-                    <p className="mt-1 text-xs text-muted-foreground">Carregando…</p>
-                  ) : h2hSeasonStats && h2hSeasonStats.total > 0 ? (
-                    <p className="mt-1 text-sm font-semibold text-amber-900">
-                      {h2hSeasonStats.wins}V × {h2hSeasonStats.losses}D{" "}
-                      <span className="font-normal text-amber-700/80">
-                        ({h2hSeasonStats.total} jogo{h2hSeasonStats.total > 1 ? "s" : ""})
-                      </span>
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Vocês ainda não se enfrentaram nesta temporada.
-                    </p>
-                  )}
-                </div>
-              </section>
+              generalH2HContent
             )}
 
             {selectedPlayer && (
