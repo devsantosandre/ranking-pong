@@ -12,9 +12,9 @@ import {
   Info,
   ListChecks,
   LogOut,
-  Medal,
+  MoreHorizontal,
+  Newspaper,
   Trophy,
-  UserCircle,
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-store";
@@ -29,20 +29,28 @@ type NavItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
-// 5 itens fixos — garante que a barra cabe em qualquer tela mobile
+// 5 itens fixos — garante que a barra cabe em qualquer tela mobile.
+// "/mais" agrupa as rotas secundárias (Temporadas, Perfil, Regras, TV, Admin).
 const navItems: NavItem[] = [
-  { href: "/", label: "Home", icon: Home },
+  { href: "/",         label: "Home",     icon: Home },
+  { href: "/noticias", label: "Notícias", icon: Newspaper },
   { href: "/partidas", label: "Partidas", icon: ListChecks },
-  { href: "/ranking", label: "Ranking", icon: Trophy },
-  { href: "/temporadas", label: "Temporadas", icon: Medal },
-  { href: "/perfil", label: "Perfil", icon: UserCircle },
+  { href: "/ranking",  label: "Ranking",  icon: Trophy },
+  { href: "/mais",     label: "Mais",     icon: MoreHorizontal },
 ];
 
+// Rotas que vivem dentro do menu "/mais" — o item Mais fica ativo nelas.
+const maisChildRoutes = ["/mais", "/temporadas", "/perfil", "/admin", "/regras", "/tv"];
+
 function isActiveRoute(pathname: string, href: string): boolean {
+  if (href === "/mais") {
+    return maisChildRoutes.some((r) =>
+      r === "/" ? pathname === "/" : pathname === r || pathname.startsWith(`${r}/`)
+    );
+  }
   if (href === "/") {
     return pathname === "/";
   }
-
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

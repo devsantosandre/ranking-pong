@@ -10,7 +10,6 @@ import {
 import { useActiveSeason, useUserSeasonStanding } from "@/lib/queries";
 import {
   BookOpen,
-  Newspaper,
   Settings,
   Shield,
 } from "lucide-react";
@@ -393,22 +392,6 @@ export default function PerfilPage() {
             <div>
               <p className="font-semibold text-foreground">Regras do Ranking</p>
               <p className="text-xs text-muted-foreground">Como funciona a pontuacao ELO</p>
-            </div>
-          </div>
-          <span className="text-muted-foreground">→</span>
-        </Link>
-
-        <Link
-          href="/noticias"
-          className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary"
-        >
-          <div className="flex items-center gap-3">
-            <Newspaper className="h-5 w-5 text-primary" />
-            <div>
-              <p className="font-semibold text-foreground">Notícias</p>
-              <p className="text-xs text-muted-foreground">
-                Feed de resultados e temporadas
-              </p>
             </div>
           </div>
           <span className="text-muted-foreground">→</span>
