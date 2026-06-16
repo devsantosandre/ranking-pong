@@ -12,6 +12,7 @@ import {
   Info,
   ListChecks,
   LogOut,
+  Medal,
   Newspaper,
   Shield,
   Trophy,
@@ -35,6 +36,7 @@ const baseNavItems: NavItem[] = [
   { href: "/noticias", label: "Noticias", icon: Newspaper },
   { href: "/partidas", label: "Partidas", icon: ListChecks },
   { href: "/ranking", label: "Ranking", icon: Trophy },
+  { href: "/temporadas", label: "Temporadas", icon: Medal },
 ];
 
 const adminNavItem: NavItem = { href: "/admin", label: "Admin", icon: Shield };

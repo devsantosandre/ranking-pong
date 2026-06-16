@@ -3,10 +3,21 @@
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-store";
 import { useHomeHighlights, useRanking, useMatches, useRecentMatches } from "@/lib/queries";
+import { useActiveSeason, useUserSeasonStanding } from "@/lib/queries/use-seasons";
 import { HomePageSkeleton, PendingMatchListSkeleton } from "@/components/skeletons";
 import Link from "next/link";
 import { useMemo } from "react";
 import { getPlayerStyle } from "@/lib/divisions";
+
+function formatSeasonCountdown(endsAt: string): string {
+  const diffMs = new Date(endsAt).getTime() - Date.now();
+  if (diffMs <= 0) return "encerrando…";
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days > 1) return `${days} dias`;
+  if (days === 1) return "1 dia";
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  return hours > 1 ? `${hours} horas` : "menos de 1 hora";
+}
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
@@ -14,6 +25,8 @@ export default function Home() {
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
   const { data: recentMatchesData, isLoading: recentMatchesLoading } = useRecentMatches(user?.id);
   const { data: highlightsData, isLoading: highlightsLoading } = useHomeHighlights();
+  const { data: activeSeason } = useActiveSeason();
+  const { data: userSeasonStanding } = useUserSeasonStanding(activeSeason?.id, user?.id);
 
   // Flatten paginated data
   const ranking = useMemo(() => {
@@ -91,6 +104,32 @@ export default function Home() {
             </div>
           </div>
         </article>
+
+        {/* Cartão de temporada */}
+        {activeSeason && (
+          <Link href="/ranking" className="block">
+            <article className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">
+                    🏓 {activeSeason.name}
+                  </p>
+                  {userSeasonStanding ? (
+                    <p className="text-sm font-bold text-foreground">
+                      {userSeasonStanding.position != null ? `${userSeasonStanding.position}º lugar` : "Participando"}{" "}
+                      · <span className="text-primary">{userSeasonStanding.points} pts</span>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhum jogo na temporada ainda</p>
+                  )}
+                </div>
+                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                  {formatSeasonCountdown(activeSeason.ends_at)}
+                </span>
+              </div>
+            </article>
+          </Link>
+        )}
 
         {/* Destaques */}
         <div className="space-y-2">

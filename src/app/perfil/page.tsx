@@ -7,12 +7,14 @@ import {
   useUser,
   useUserRankingPosition,
 } from "@/lib/queries";
+import { useActiveSeason, useUserSeasonStanding } from "@/lib/queries";
 import {
   BookOpen,
   Settings,
 } from "lucide-react";
 import { useMemo } from "react";
 import Link from "next/link";
+import { Medal } from "lucide-react";
 import { ProfilePageSkeleton, MatchListSkeleton } from "@/components/skeletons";
 import {
   getPlayerStyle,
@@ -22,11 +24,23 @@ import {
 } from "@/lib/divisions";
 import { AchievementsSection } from "@/components/achievements-section";
 
+function formatSeasonCountdown(endsAt: string): string {
+  const diff = new Date(endsAt).getTime() - Date.now();
+  if (diff <= 0) return "encerrando…";
+  const days = Math.floor(diff / 86_400_000);
+  if (days >= 2) return `${days} dias`;
+  const hours = Math.floor(diff / 3_600_000);
+  if (hours >= 1) return `${hours}h`;
+  return "< 1h";
+}
+
 export default function PerfilPage() {
   const { user, loading: authLoading, logout } = useAuth();
   const { data: userStats, isLoading: userStatsLoading } = useUser(user?.id);
   const { data: rankingPosition, isLoading: rankingPositionLoading } = useUserRankingPosition(user?.id);
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
+  const { data: activeSeason } = useActiveSeason();
+  const { data: userSeasonStanding } = useUserSeasonStanding(activeSeason?.id, user?.id);
 
   const matches = useMemo(() => {
     return matchesData?.pages.flatMap((page) => page.matches) ?? [];
@@ -240,6 +254,37 @@ export default function PerfilPage() {
             </>
           </article>
         </div>
+
+        {/* Cartão de temporada ativa */}
+        {activeSeason && (
+          <Link href="/ranking" className="block">
+            <article className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-sm transition hover:border-primary/40">
+              <div className="flex items-center gap-3 min-w-0">
+                <Medal className="h-5 w-5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/70">
+                    {activeSeason.name}
+                  </p>
+                  {userSeasonStanding ? (
+                    <p className="text-sm font-bold text-foreground">
+                      {userSeasonStanding.position != null
+                        ? `${userSeasonStanding.position}º lugar`
+                        : "Participando"}{" "}
+                      · <span className="text-primary">{userSeasonStanding.points} pts</span>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum jogo na temporada ainda
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                {formatSeasonCountdown(activeSeason.ends_at)}
+              </span>
+            </article>
+          </Link>
+        )}
 
         {/* Conquistas */}
         <AchievementsSection userId={user.id} />

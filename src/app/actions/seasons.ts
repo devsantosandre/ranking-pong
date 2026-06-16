@@ -117,6 +117,107 @@ export async function adminCloseSeasonNow(
   }
 }
 
+// ── Admin: criar temporada ────────────────────────────────────────────────────
+
+export async function adminCreateSeason(input: {
+  name: string;
+  starts_at: string;
+  ends_at: string;
+  recurrence: string;
+}): Promise<SeasonAdminResult> {
+  try {
+    await requireModerator();
+    const actor = await getCurrentUser();
+    const supabase = createAdminClient();
+
+    const slug = input.name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const { error } = await supabase.from("seasons").insert({
+      name: input.name.trim(),
+      slug: `${slug}-${Date.now()}`,
+      starts_at: input.starts_at,
+      ends_at: input.ends_at,
+      recurrence: input.recurrence,
+      status: "upcoming",
+      created_by: actor?.id ?? null,
+    });
+
+    if (error) return { success: false, error: error.message };
+
+    await supabase.from("admin_logs").insert({
+      admin_id: actor?.id ?? null,
+      admin_role: actor?.role ?? "admin",
+      action: "season_created",
+      action_description: `Temporada "${input.name}" criada.`,
+      target_type: "season",
+      target_id: null,
+      target_name: input.name,
+      old_value: null,
+      new_value: { name: input.name, starts_at: input.starts_at, ends_at: input.ends_at },
+      reason: null,
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Erro ao criar temporada.",
+    };
+  }
+}
+
+// ── Admin: editar temporada ───────────────────────────────────────────────────
+
+export async function adminEditSeason(
+  seasonId: string,
+  input: { name: string; starts_at: string; ends_at: string; recurrence: string }
+): Promise<SeasonAdminResult> {
+  try {
+    await requireModerator();
+    const actor = await getCurrentUser();
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from("seasons")
+      .update({
+        name: input.name.trim(),
+        starts_at: input.starts_at,
+        ends_at: input.ends_at,
+        recurrence: input.recurrence,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", seasonId)
+      .in("status", ["upcoming", "active"]);
+
+    if (error) return { success: false, error: error.message };
+
+    await supabase.from("admin_logs").insert({
+      admin_id: actor?.id ?? null,
+      admin_role: actor?.role ?? "admin",
+      action: "season_edited",
+      action_description: `Temporada "${input.name}" editada.`,
+      target_type: "season",
+      target_id: seasonId,
+      target_name: input.name,
+      old_value: null,
+      new_value: { name: input.name, starts_at: input.starts_at, ends_at: input.ends_at },
+      reason: null,
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Erro ao editar temporada.",
+    };
+  }
+}
+
 // ── Admin: reabrir ────────────────────────────────────────────────────────────
 
 export async function adminReopenSeason(

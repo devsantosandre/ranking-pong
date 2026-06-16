@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Shield,
   Tv,
+  Medal,
 } from "lucide-react";
 
 const adminSections = [
@@ -51,6 +52,14 @@ const adminSections = [
     icon: Settings,
     description: "Regras de pontuacao e limites",
     color: "text-orange-600 bg-orange-100",
+    adminOnly: true,
+  },
+  {
+    href: "/admin/temporadas",
+    label: "Temporadas",
+    icon: Medal,
+    description: "Criar, encerrar e reabrir temporadas",
+    color: "text-yellow-600 bg-yellow-100",
     adminOnly: true,
   },
   {

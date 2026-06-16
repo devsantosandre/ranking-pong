@@ -60,6 +60,88 @@ export function useActiveSeason() {
   });
 }
 
+export type ClosedSeason = Season & {
+  champion: {
+    id: string;
+    full_name: string | null;
+    name: string | null;
+    email: string | null;
+  } | null;
+};
+
+export type UserSeasonStanding = {
+  points: number;
+  wins: number;
+  losses: number;
+  games: number;
+  position: number | null;
+  win_rate: number | null;
+} | null;
+
+export function useClosedSeasons() {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: queryKeys.seasons.closed(),
+    queryFn: async (): Promise<ClosedSeason[]> => {
+      const { data, error } = await supabase
+        .from("seasons")
+        .select(`
+          id, name, slug, starts_at, ends_at, status, recurrence,
+          champion_user_id, closed_at, created_at,
+          champion:users!champion_user_id(id, full_name, name, email)
+        `)
+        .eq("status", "closed")
+        .order("ends_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ClosedSeason[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useAllSeasons() {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: queryKeys.seasons.list(),
+    queryFn: async (): Promise<ClosedSeason[]> => {
+      const { data, error } = await supabase
+        .from("seasons")
+        .select(`
+          id, name, slug, starts_at, ends_at, status, recurrence,
+          champion_user_id, closed_at, created_at,
+          champion:users!champion_user_id(id, full_name, name, email)
+        `)
+        .order("starts_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ClosedSeason[];
+    },
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useUserSeasonStanding(
+  seasonId?: string | null,
+  userId?: string | null
+) {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: queryKeys.seasons.userStanding(seasonId ?? "", userId ?? ""),
+    queryFn: async (): Promise<UserSeasonStanding> => {
+      if (!seasonId || !userId) return null;
+      const { data, error } = await supabase
+        .from("season_standings")
+        .select("points, wins, losses, games, position, win_rate")
+        .eq("season_id", seasonId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserSeasonStanding;
+    },
+    enabled: !!seasonId && !!userId,
+    staleTime: 1000 * 30,
+  });
+}
+
 export function useSeasonStandings(seasonId?: string | null) {
   const supabase = createClient();
 
