@@ -5,7 +5,7 @@ import { PLAYERS_PER_DIVISION, TOP_3_STYLES, DIVISION_STYLES } from "@/lib/divis
 import { calculateElo } from "@/lib/elo";
 import { useSettings } from "@/lib/queries";
 import { useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trophy } from "lucide-react";
 
 export default function RegrasPage() {
   const { data: settings, isLoading } = useSettings();
@@ -40,6 +40,29 @@ export default function RegrasPage() {
     );
     const minMatches = minMatchesSetting ? parseInt(minMatchesSetting.value, 10) : 20;
     return !isNaN(minMatches) && minMatches > 0 ? minMatches : 20;
+  }, [settings]);
+
+  const seasonPointsWin = useMemo(() => {
+    const s = settings?.find((s) => s.key === "season_points_win");
+    const v = s ? parseInt(s.value, 10) : 3;
+    return !isNaN(v) && v > 0 ? v : 3;
+  }, [settings]);
+
+  const seasonPointsLoss = useMemo(() => {
+    const s = settings?.find((s) => s.key === "season_points_loss");
+    const v = s ? parseInt(s.value, 10) : 1;
+    return !isNaN(v) && v >= 0 ? v : 1;
+  }, [settings]);
+
+  const seasonZebraEnabled = useMemo(() => {
+    const s = settings?.find((s) => s.key === "season_zebra_enabled");
+    return s?.value === "true";
+  }, [settings]);
+
+  const seasonZebraBonus = useMemo(() => {
+    const s = settings?.find((s) => s.key === "season_zebra_bonus");
+    const v = s ? parseInt(s.value, 10) : 2;
+    return !isNaN(v) && v > 0 ? v : 2;
   }, [settings]);
 
   // Calcular exemplos de pontuacao com o K factor atual
@@ -209,6 +232,72 @@ export default function RegrasPage() {
             <li className="flex items-start gap-2">
               <span className="text-green-500 mt-0.5">✓</span>
               <span>O rating segue exatamente a soma das vitórias e derrotas, inclusive abaixo de zero</span>
+            </li>
+          </ul>
+        </section>
+
+        {/* Temporadas */}
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy className="h-5 w-5 text-amber-600" />
+            <h2 className="text-lg font-bold text-amber-900">Temporadas</h2>
+          </div>
+          <p className="text-sm text-amber-800/80 mb-4">
+            Uma temporada é uma competição paralela ao ranking ELO, com período definido.
+            Todo jogador acumula pontos separadamente — o placar começa do zero em cada temporada.
+          </p>
+
+          <p className="text-sm font-semibold text-amber-900 mb-2">Pontuação por partida</p>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="rounded-xl bg-green-100 p-3 text-center">
+              <p className="text-xl font-bold text-green-700">+{seasonPointsWin} pts</p>
+              <p className="text-xs text-green-600">por vitória</p>
+            </div>
+            <div className="rounded-xl bg-amber-100 p-3 text-center">
+              <p className="text-xl font-bold text-amber-700">+{seasonPointsLoss} pt</p>
+              <p className="text-xs text-amber-600">por derrota</p>
+            </div>
+          </div>
+          {seasonZebraEnabled && (
+            <div className="mb-3 rounded-xl bg-purple-100 p-3 text-center">
+              <p className="text-sm font-bold text-purple-700">+{seasonZebraBonus} pts bônus zebra</p>
+              <p className="text-xs text-purple-600">ao vencer alguém acima de você no ranking geral</p>
+            </div>
+          )}
+          <p className="text-xs text-amber-700/70 italic mb-4">
+            Toda partida vale — mesmo na derrota você acumula pontos!
+          </p>
+
+          <ul className="space-y-2 text-sm text-amber-800/80">
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span>
+                Partidas validadas durante uma temporada ativa contam <strong>automaticamente</strong> para o placar — não é preciso fazer nada diferente.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span>
+                O ranking da temporada fica na aba <strong>Temporada</strong> dentro de Ranking, separado do ranking ELO.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span>
+                O ELO continua sendo calculado normalmente em paralelo — as partidas valem para os dois rankings ao mesmo tempo.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span>
+                Quando a temporada encerra, o jogador com mais pontos é o <strong>campeão</strong> e fica registrado no Hall da Fama em <strong>Temporadas</strong>.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span>
+                O ELO acumulado durante a temporada <strong>não é zerado</strong> no encerramento — só a pontuação de temporada recomeça do zero na próxima.
+              </span>
             </li>
           </ul>
         </section>

@@ -6,8 +6,10 @@ import {
   useMatches,
   useUser,
   useUserRankingPosition,
+  usePlayerSeasonMatches,
 } from "@/lib/queries";
 import { useActiveSeason, useUserSeasonStanding } from "@/lib/queries";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   BookOpen,
   Settings,
@@ -42,6 +44,10 @@ export default function PerfilPage() {
   const { data: matchesData, isLoading: matchesLoading } = useMatches(user?.id);
   const { data: activeSeason } = useActiveSeason();
   const { data: userSeasonStanding } = useUserSeasonStanding(activeSeason?.id, user?.id);
+  const { data: seasonMatchesData, isLoading: seasonMatchesLoading } = usePlayerSeasonMatches(
+    user?.id,
+    activeSeason?.id
+  );
 
   const matches = useMemo(() => {
     return matchesData?.pages.flatMap((page) => page.matches) ?? [];
@@ -59,6 +65,10 @@ export default function PerfilPage() {
 
   // Últimas 5 partidas validadas
   const recentMatches = validatedMatches.slice(0, 5);
+
+  const recentSeasonMatches = useMemo(() => {
+    return seasonMatchesData?.pages[0]?.matches?.slice(0, 5) ?? [];
+  }, [seasonMatchesData]);
 
   // Calcular streak (vitórias consecutivas recentes)
   const streak = useMemo(() => {
@@ -325,61 +335,127 @@ export default function PerfilPage() {
         {/* Últimos jogos */}
         <div className="space-y-3">
           <p className="px-1 text-sm font-semibold text-foreground">Últimos jogos</p>
-          {matchesLoading ? (
-            <MatchListSkeleton count={3} />
-          ) : recentMatches.length > 0 ? (
-            recentMatches.map((match) => {
-              const euSouA = match.player_a_id === user.id;
-              const opponent = euSouA ? match.player_b : match.player_a;
-              const euVenci = match.vencedor_id === user.id;
-              const meusPoints = euSouA ? match.pontos_variacao_a : match.pontos_variacao_b;
+          <Tabs defaultValue="geral">
+            <TabsList className="w-full">
+              <TabsTrigger value="geral" className="flex-1">Geral (ELO)</TabsTrigger>
+              <TabsTrigger value="temporada" className="flex-1">Temporada</TabsTrigger>
+            </TabsList>
 
-              return (
-                <article
-                  key={match.id}
-                  className="flex items-center justify-between rounded-2xl border border-border bg-card p-3 shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                        euVenci ? "bg-emerald-100" : "bg-red-100"
-                      }`}
+            {/* Aba Geral */}
+            <TabsContent value="geral" className="mt-3 space-y-2">
+              {matchesLoading ? (
+                <MatchListSkeleton count={3} />
+              ) : recentMatches.length > 0 ? (
+                recentMatches.map((match) => {
+                  const euSouA = match.player_a_id === user.id;
+                  const opponent = euSouA ? match.player_b : match.player_a;
+                  const euVenci = match.vencedor_id === user.id;
+                  const meusPoints = euSouA ? match.pontos_variacao_a : match.pontos_variacao_b;
+
+                  return (
+                    <article
+                      key={match.id}
+                      className="flex items-center justify-between rounded-2xl border border-border bg-card p-3 shadow-sm"
                     >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                            euVenci ? "bg-emerald-100" : "bg-red-100"
+                          }`}
+                        >
+                          <span
+                            className={`text-sm font-bold ${
+                              euVenci ? "text-emerald-700" : "text-red-600"
+                            }`}
+                          >
+                            {euVenci ? "V" : "D"}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            vs {getPlayerName(opponent)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {match.resultado_a} x {match.resultado_b}
+                          </p>
+                        </div>
+                      </div>
                       <span
-                        className={`text-sm font-bold ${
-                          euVenci ? "text-emerald-700" : "text-red-600"
+                        className={`text-sm font-semibold ${
+                          euVenci ? "text-green-600" : "text-red-500"
                         }`}
                       >
-                        {euVenci ? "V" : "D"}
+                        {meusPoints !== undefined && meusPoints !== null
+                          ? (meusPoints >= 0 ? `+${meusPoints}` : meusPoints)
+                          : (euVenci ? "+12" : "-12")
+                        } pts ELO
                       </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        vs {getPlayerName(opponent)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {match.resultado_a} x {match.resultado_b}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-sm font-semibold ${
-                      euVenci ? "text-green-600" : "text-red-500"
-                    }`}
-                  >
-                    {meusPoints !== undefined && meusPoints !== null
-                      ? (meusPoints >= 0 ? `+${meusPoints}` : meusPoints)
-                      : (euVenci ? "+12" : "-12")
-                    } pts
-                  </span>
-                </article>
-              );
-            })
-          ) : (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              Nenhum jogo registrado ainda
-            </p>
-          )}
+                    </article>
+                  );
+                })
+              ) : (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Nenhum jogo registrado ainda
+                </p>
+              )}
+            </TabsContent>
+
+            {/* Aba Temporada */}
+            <TabsContent value="temporada" className="mt-3 space-y-2">
+              {!activeSeason ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Nenhuma temporada ativa no momento
+                </p>
+              ) : seasonMatchesLoading ? (
+                <MatchListSkeleton count={3} />
+              ) : recentSeasonMatches.length > 0 ? (
+                recentSeasonMatches.map((match) => {
+                  const euSouA = match.player_a_id === user.id;
+                  const opponent = euSouA ? match.player_b : match.player_a;
+                  const euVenci = match.vencedor_id === user.id;
+                  const seasonPts = match.season_points_player;
+
+                  return (
+                    <article
+                      key={match.id}
+                      className="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50/60 p-3 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                            euVenci ? "bg-emerald-100" : "bg-red-100"
+                          }`}
+                        >
+                          <span
+                            className={`text-sm font-bold ${
+                              euVenci ? "text-emerald-700" : "text-red-600"
+                            }`}
+                          >
+                            {euVenci ? "V" : "D"}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            vs {getPlayerName(opponent)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {match.resultado_a} x {match.resultado_b}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold text-amber-700">
+                        +{seasonPts} pts
+                      </span>
+                    </article>
+                  );
+                })
+              ) : (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Nenhum jogo registrado na temporada ainda
+                </p>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Link para Regras */}
