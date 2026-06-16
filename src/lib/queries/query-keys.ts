@@ -21,6 +21,8 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.matches.all, "detail", id] as const,
     playerValidated: (playerId?: string) =>
       [...queryKeys.matches.all, "player-validated-v2", playerId] as const,
+    playerSeasonValidated: (playerId?: string, seasonId?: string) =>
+      [...queryKeys.matches.all, "player-season-validated", playerId, seasonId] as const,
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
       [...queryKeys.matches.all, "pending-actions", userId] as const,

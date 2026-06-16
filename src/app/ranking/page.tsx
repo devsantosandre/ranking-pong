@@ -6,11 +6,13 @@ import { memo, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   useHeadToHeadStats,
   usePlayerValidatedMatches,
+  usePlayerSeasonMatches,
   useRankingAll,
   useTotalValidatedMatches,
   useActiveSeason,
   useSeasonStandings,
   type PlayerValidatedMatch,
+  type PlayerSeasonMatch,
 } from "@/lib/queries";
 import { PlayerListSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/lib/auth-store";
@@ -217,7 +219,8 @@ export default function RankingPage() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [h2hTab, setH2hTab] = useState<"temporada" | "geral">("temporada");
   const sheetScrollRef = useRef<HTMLDivElement | null>(null);
-  const historySentinelRef = useRef<HTMLDivElement | null>(null);
+  const historyGeneralSentinelRef = useRef<HTMLDivElement | null>(null);
+  const historySeasonSentinelRef = useRef<HTMLDivElement | null>(null);
   const normalizedSearch = searchInput.trim().toLowerCase();
   const isSearching = normalizedSearch.length >= 2;
 
@@ -277,6 +280,7 @@ export default function RankingPage() {
     [allPlayers, selectedPlayerId]
   );
 
+  // H2H stats — geral (sem filtro de temporada)
   const {
     data: h2hStats,
     isLoading: h2hLoading,
@@ -287,7 +291,6 @@ export default function RankingPage() {
   );
 
   // ── temporada no H2H ───────────────────────────────────────────────────────
-  // (A) posição/pontos de cada um na temporada — reaproveita seasonStandings já carregado
   const mySeasonStanding = useMemo(
     () => (seasonStandings ?? []).find((s) => s.id === user?.id) ?? null,
     [seasonStandings, user?.id]
@@ -296,7 +299,8 @@ export default function RankingPage() {
     () => (seasonStandings ?? []).find((s) => s.id === selectedPlayer?.id) ?? null,
     [seasonStandings, selectedPlayer?.id]
   );
-  // (B) confronto direto recortado pela temporada ativa — só dispara quando há temporada
+
+  // H2H stats — recortado pela temporada ativa
   const { data: h2hSeasonStats, isLoading: h2hSeasonLoading } = useHeadToHeadStats(
     user?.id,
     activeSeason && selectedPlayer && selectedPlayer.id !== user?.id
@@ -304,6 +308,8 @@ export default function RankingPage() {
       : undefined,
     activeSeason?.id
   );
+
+  // ── histórico geral do adversário ────────────────────────────────────────
   const {
     data: selectedPlayerMatchesData,
     isLoading: selectedPlayerMatchesLoading,
@@ -312,6 +318,7 @@ export default function RankingPage() {
     hasNextPage: hasNextPlayerMatchesPage,
     isFetchingNextPage: isFetchingNextPlayerMatchesPage,
   } = usePlayerValidatedMatches(selectedPlayer?.id);
+
   const selectedPlayerMatches = useMemo(
     () => selectedPlayerMatchesData?.pages.flatMap((p) => p.matches) ?? [],
     [selectedPlayerMatchesData]
@@ -321,10 +328,29 @@ export default function RankingPage() {
     [selectedPlayerMatchesData, selectedPlayerMatches.length]
   );
 
+  // ── histórico da temporada do adversário ─────────────────────────────────
+  const {
+    data: selectedPlayerSeasonMatchesData,
+    isLoading: selectedPlayerSeasonMatchesLoading,
+    fetchNextPage: fetchNextSeasonMatchesPage,
+    hasNextPage: hasNextSeasonMatchesPage,
+    isFetchingNextPage: isFetchingNextSeasonMatchesPage,
+  } = usePlayerSeasonMatches(selectedPlayer?.id, activeSeason?.id);
+
+  const selectedPlayerSeasonMatches = useMemo(
+    () => selectedPlayerSeasonMatchesData?.pages.flatMap((p) => p.matches) ?? [],
+    [selectedPlayerSeasonMatchesData]
+  );
+  const selectedPlayerSeasonMatchesTotal = useMemo(
+    () => selectedPlayerSeasonMatchesData?.pages[0]?.totalCount ?? selectedPlayerSeasonMatches.length,
+    [selectedPlayerSeasonMatchesData, selectedPlayerSeasonMatches.length]
+  );
+
+  // ── IntersectionObserver — histórico geral ────────────────────────────────
   useEffect(() => {
     if (!selectedPlayerId || !hasNextPlayerMatchesPage || isFetchingNextPlayerMatchesPage) return;
     const root = sheetScrollRef.current;
-    const sentinel = historySentinelRef.current;
+    const sentinel = historyGeneralSentinelRef.current;
     if (!root || !sentinel) return;
 
     const observer = new IntersectionObserver(
@@ -338,6 +364,25 @@ export default function RankingPage() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [fetchNextPlayerMatchesPage, hasNextPlayerMatchesPage, isFetchingNextPlayerMatchesPage, selectedPlayerId, selectedPlayerMatches.length]);
+
+  // ── IntersectionObserver — histórico da temporada ─────────────────────────
+  useEffect(() => {
+    if (!selectedPlayerId || !hasNextSeasonMatchesPage || isFetchingNextSeasonMatchesPage) return;
+    const root = sheetScrollRef.current;
+    const sentinel = historySeasonSentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting || isFetchingNextSeasonMatchesPage || !hasNextSeasonMatchesPage) return;
+        void fetchNextSeasonMatchesPage();
+      },
+      { root, rootMargin: "180px 0px", threshold: 0.01 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextSeasonMatchesPage, hasNextSeasonMatchesPage, isFetchingNextSeasonMatchesPage, selectedPlayerId, selectedPlayerSeasonMatches.length]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
@@ -356,7 +401,64 @@ export default function RankingPage() {
     if (!open) setSelectedPlayerId(null);
   }, []);
 
-  // ── conteúdo das abas do H2H ───────────────────────────────────────────────
+  // ── conteúdo Geral: confronto direto + posição/rating + histórico ─────────
+  const generalHistorySection = selectedPlayer && user && selectedPlayer.id !== user.id ? (
+    <section className="space-y-3 rounded-2xl border border-border bg-card p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-foreground">
+          Todas as partidas de {selectedPlayer.displayName}
+        </h3>
+        {!selectedPlayerMatchesLoading && !selectedPlayerMatchesError && (
+          <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+            {selectedPlayerMatchesTotal.toLocaleString("pt-BR")} jogos
+          </span>
+        )}
+      </div>
+
+      {selectedPlayerMatchesLoading ? (
+        <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Carregando partidas…
+        </p>
+      ) : selectedPlayerMatchesError ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+          Erro ao carregar partidas do jogador.
+        </p>
+      ) : selectedPlayerMatches.length > 0 ? (
+        <>
+          <div className="space-y-2">
+            {selectedPlayerMatches.map((match) => (
+              <PlayerMatchHistoryCard
+                key={match.id}
+                match={match}
+                playerId={selectedPlayer.id}
+                loggedUserId={user?.id}
+              />
+            ))}
+          </div>
+
+          <div ref={historyGeneralSentinelRef} className="h-1 w-full" />
+
+          {isFetchingNextPlayerMatchesPage && (
+            <p className="rounded-xl border border-border bg-muted/40 p-3 text-center text-xs font-medium text-muted-foreground">
+              Carregando mais partidas…
+            </p>
+          )}
+
+          <LoadMoreButton
+            onClick={() => fetchNextPlayerMatchesPage()}
+            isLoading={isFetchingNextPlayerMatchesPage}
+            hasMore={Boolean(hasNextPlayerMatchesPage)}
+            className="py-1"
+          />
+        </>
+      ) : (
+        <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Nenhuma partida validada encontrada para este jogador.
+        </p>
+      )}
+    </section>
+  ) : null;
+
   const generalH2HContent = h2hLoading ? (
     <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
       Carregando confronto…
@@ -405,13 +507,50 @@ export default function RankingPage() {
               : "Confronto equilibrado entre vocês."}
         </p>
       </div>
+
+      {/* Posição geral do adversário */}
+      {selectedPlayer && (
+        <div className="rounded-xl border border-border bg-muted/40 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Ranking geral
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {selectedPlayer.position}º no ranking •{" "}
+            <span className="text-muted-foreground font-normal">
+              {(selectedPlayer.rating_atual ?? 250).toLocaleString("pt-BR")} pts ELO
+            </span>
+          </p>
+        </div>
+      )}
+
+      {generalHistorySection}
     </div>
   ) : (
-    <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-      Vocês ainda não têm partidas validadas entre si.
-    </p>
+    <div className="space-y-3">
+      <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+        Vocês ainda não têm partidas validadas entre si.
+      </p>
+
+      {/* Posição geral do adversário mesmo sem confronto direto */}
+      {selectedPlayer && (
+        <div className="rounded-xl border border-border bg-muted/40 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Ranking geral
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {selectedPlayer.position}º no ranking •{" "}
+            <span className="text-muted-foreground font-normal">
+              {(selectedPlayer.rating_atual ?? 250).toLocaleString("pt-BR")} pts ELO
+            </span>
+          </p>
+        </div>
+      )}
+
+      {generalHistorySection}
+    </div>
   );
 
+  // ── conteúdo Temporada: ranking + confronto + histórico da temporada ──────
   const seasonH2HContent =
     activeSeason && selectedPlayer && user && selectedPlayer.id !== user.id ? (
       <div className="space-y-3">
@@ -454,6 +593,59 @@ export default function RankingPage() {
             </p>
           )}
         </div>
+
+        {/* C — histórico de partidas da temporada */}
+        <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/30 p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-amber-900">
+              Partidas na temporada
+            </h3>
+            {!selectedPlayerSeasonMatchesLoading && (
+              <span className="shrink-0 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                {selectedPlayerSeasonMatchesTotal.toLocaleString("pt-BR")} jogos
+              </span>
+            )}
+          </div>
+
+          {selectedPlayerSeasonMatchesLoading ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+              Carregando partidas da temporada…
+            </p>
+          ) : selectedPlayerSeasonMatches.length > 0 ? (
+            <>
+              <div className="space-y-2">
+                {selectedPlayerSeasonMatches.map((match) => (
+                  <PlayerMatchHistoryCard
+                    key={match.id}
+                    match={match}
+                    playerId={selectedPlayer.id}
+                    loggedUserId={user?.id}
+                    seasonPoints={match.season_points_player}
+                  />
+                ))}
+              </div>
+
+              <div ref={historySeasonSentinelRef} className="h-1 w-full" />
+
+              {isFetchingNextSeasonMatchesPage && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-700">
+                  Carregando mais partidas…
+                </p>
+              )}
+
+              <LoadMoreButton
+                onClick={() => fetchNextSeasonMatchesPage()}
+                isLoading={isFetchingNextSeasonMatchesPage}
+                hasMore={Boolean(hasNextSeasonMatchesPage)}
+                className="py-1"
+              />
+            </>
+          ) : (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700/80">
+              Nenhuma partida nesta temporada ainda.
+            </p>
+          )}
+        </section>
       </div>
     ) : null;
 
@@ -592,7 +784,7 @@ export default function RankingPage() {
         </Tabs>
       </div>
 
-      {/* ── Sheet H2H (inalterado) ─────────────────────────────────────────── */}
+      {/* ── Sheet H2H ──────────────────────────────────────────────────────── */}
       <Sheet open={Boolean(selectedPlayerId)} onOpenChange={handleSheetOpenChange}>
         <SheetContent
           side="bottom"
@@ -607,21 +799,15 @@ export default function RankingPage() {
             ref={sheetScrollRef}
             className="flex-1 space-y-3 overflow-y-auto px-4 pb-6 pt-4 sm:space-y-4 sm:px-5"
           >
+            {/* Card do adversário — só nome, sem ELO/posição (estão nas abas) */}
             {selectedPlayer && user && selectedPlayer.id !== user.id && (
               <article className="rounded-xl border border-primary/25 bg-primary/5 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">
                   Adversário
                 </p>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-primary sm:text-base">
-                      {selectedPlayer.displayName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedPlayer.position}º no ranking • {(selectedPlayer.rating_atual ?? 250).toLocaleString("pt-BR")} pts
-                    </p>
-                  </div>
-                </div>
+                <p className="mt-1 truncate text-sm font-semibold text-primary sm:text-base">
+                  {selectedPlayer.displayName}
+                </p>
               </article>
             )}
 
@@ -650,69 +836,14 @@ export default function RankingPage() {
                 <TabsContent value="temporada" className="mt-3">
                   {seasonH2HContent}
                 </TabsContent>
-                <TabsContent value="geral" className="mt-3">
+                <TabsContent value="geral" className="mt-3 space-y-3">
                   {generalH2HContent}
                 </TabsContent>
               </Tabs>
             ) : (
-              generalH2HContent
-            )}
-
-            {selectedPlayer && (
-              <section className="space-y-3 rounded-2xl border border-border bg-card p-3 sm:p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Todas as partidas de {selectedPlayer.displayName}
-                  </h3>
-                  {!selectedPlayerMatchesLoading && !selectedPlayerMatchesError && (
-                    <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                      {selectedPlayerMatchesTotal.toLocaleString("pt-BR")} jogos
-                    </span>
-                  )}
-                </div>
-
-                {selectedPlayerMatchesLoading ? (
-                  <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-                    Carregando partidas…
-                  </p>
-                ) : selectedPlayerMatchesError ? (
-                  <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-                    Erro ao carregar partidas do jogador.
-                  </p>
-                ) : selectedPlayerMatches.length > 0 ? (
-                  <>
-                    <div className="space-y-2">
-                      {selectedPlayerMatches.map((match) => (
-                        <PlayerMatchHistoryCard
-                          key={match.id}
-                          match={match}
-                          playerId={selectedPlayer.id}
-                          loggedUserId={user?.id}
-                        />
-                      ))}
-                    </div>
-
-                    <div ref={historySentinelRef} className="h-1 w-full" />
-
-                    {isFetchingNextPlayerMatchesPage && (
-                      <p className="rounded-xl border border-border bg-muted/40 p-3 text-center text-xs font-medium text-muted-foreground">
-                        Carregando mais partidas…
-                      </p>
-                    )}
-
-                    <LoadMoreButton
-                      onClick={() => fetchNextPlayerMatchesPage()}
-                      isLoading={isFetchingNextPlayerMatchesPage}
-                      hasMore={Boolean(hasNextPlayerMatchesPage)}
-                      className="py-1"
-                    />
-                  </>
-                ) : (
-                  <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-                    Nenhuma partida validada encontrada para este jogador.
-                  </p>
-                )}
-              </section>
+              <div className="space-y-3">
+                {generalH2HContent}
+              </div>
             )}
           </div>
         </SheetContent>
@@ -766,10 +897,12 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
   match,
   playerId,
   loggedUserId,
+  seasonPoints,
 }: {
-  match: PlayerValidatedMatch;
+  match: PlayerValidatedMatch | PlayerSeasonMatch;
   playerId: string;
   loggedUserId?: string;
+  seasonPoints?: number;
 }) {
   const playerIsA = match.player_a_id === playerId;
   const opponent = playerIsA ? match.player_b : match.player_a;
@@ -777,7 +910,6 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
   const isAgainstLoggedUser = Boolean(loggedUserId && opponent.id === loggedUserId);
   const playerScore = playerIsA ? match.resultado_a : match.resultado_b;
   const opponentScore = playerIsA ? match.resultado_b : match.resultado_a;
-  const playerPoints = playerIsA ? match.pontos_variacao_a : match.pontos_variacao_b;
   const playerWon = match.vencedor_id === playerId;
   const playerLost = Boolean(match.vencedor_id && match.vencedor_id !== playerId);
   const resultLabel = playerWon ? "Vitória" : playerLost ? "Derrota" : "Sem vencedor";
@@ -786,14 +918,23 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
     : playerLost
       ? "bg-red-100 text-red-600"
       : "bg-muted text-muted-foreground";
-  const pointsLabel =
-    typeof playerPoints === "number" ? `${playerPoints > 0 ? "+" : ""}${playerPoints} pts` : null;
-  const pointsClassName =
-    typeof playerPoints === "number"
-      ? playerPoints >= 0
-        ? "text-emerald-600"
-        : "text-red-600"
-      : "text-muted-foreground";
+
+  // Pontos: modo temporada (âmbar) ou modo ELO (verde/vermelho)
+  let pointsLabel: string | null = null;
+  let pointsClassName = "text-muted-foreground";
+  let pointsSuffix: string | null = null;
+
+  if (seasonPoints !== undefined) {
+    pointsLabel = `+${seasonPoints} pts`;
+    pointsClassName = "text-amber-700";
+    pointsSuffix = "na temporada";
+  } else {
+    const playerPoints = playerIsA ? match.pontos_variacao_a : match.pontos_variacao_b;
+    if (typeof playerPoints === "number") {
+      pointsLabel = `${playerPoints > 0 ? "+" : ""}${playerPoints} pts`;
+      pointsClassName = playerPoints >= 0 ? "text-emerald-600" : "text-red-600";
+    }
+  }
 
   return (
     <article
@@ -846,9 +987,14 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
         </div>
       </div>
 
-      {pointsLabel ? (
-        <p className={`text-xs font-semibold ${pointsClassName}`}>{pointsLabel}</p>
-      ) : null}
+      {pointsLabel && (
+        <p className={`text-xs font-semibold ${pointsClassName}`}>
+          {pointsLabel}
+          {pointsSuffix && (
+            <span className="ml-1 font-normal text-muted-foreground">{pointsSuffix}</span>
+          )}
+        </p>
+      )}
     </article>
   );
 });
