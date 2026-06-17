@@ -22,6 +22,10 @@ const settingDisplayOrder = [
   "rating_inicial",
   "achievements_rating_min_players",
   "achievements_rating_min_validated_matches",
+  "season_points_win",
+  "season_points_loss",
+  "season_zebra_bonus",
+  "season_zebra_enabled",
 ] as const;
 
 type SupportedSettingKey = (typeof settingDisplayOrder)[number];
@@ -51,6 +55,22 @@ const settingLabels: Record<SupportedSettingKey, { label: string; description: s
   achievements_rating_min_validated_matches: {
     label: "Conquistas Rating: Min. Partidas",
     description: "Minimo de partidas validadas globais para liberar conquistas de rating",
+  },
+  season_points_win: {
+    label: "Temporada: Pontos por Vitória",
+    description: "Pontos de temporada ganhos ao vencer uma partida (padrão: 3)",
+  },
+  season_points_loss: {
+    label: "Temporada: Pontos por Derrota",
+    description: "Pontos de temporada ganhos ao perder uma partida (nunca negativo; padrão: 1)",
+  },
+  season_zebra_bonus: {
+    label: "Temporada: Bônus de Zebra",
+    description: "Pontos extras ao vencer alguém com rating Geral maior (padrão: 2)",
+  },
+  season_zebra_enabled: {
+    label: "Temporada: Habilitar Bônus de Zebra",
+    description: "Liga ou desliga o bônus de zebra (valores: true / false)",
   },
 };
 
@@ -145,6 +165,12 @@ export default function AdminConfiguracoesPage() {
   const validateField = (value: string, key?: string | null): string | null => {
     if (!value.trim()) {
       return "Valor nao pode ser vazio";
+    }
+    if (key === "season_zebra_enabled") {
+      if (value !== "true" && value !== "false") {
+        return "Valor deve ser 'true' ou 'false'";
+      }
+      return null;
     }
     const num = parseInt(value, 10);
     if (isNaN(num)) {
@@ -290,13 +316,25 @@ export default function AdminConfiguracoesPage() {
                       <div className="space-y-2">
                         <div className="flex gap-2">
                           <div className="flex-1">
-                            <Input
-                              type="number"
-                              value={editValue}
-                              onChange={(e) => handleValueChange(e.target.value)}
-                              className={fieldError ? "border-red-500" : ""}
-                              autoFocus
-                            />
+                            {setting.key === "season_zebra_enabled" ? (
+                              <select
+                                className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${fieldError ? "border-red-500" : "border-input"}`}
+                                value={editValue}
+                                onChange={(e) => handleValueChange(e.target.value)}
+                                autoFocus
+                              >
+                                <option value="true">Sim (ativado)</option>
+                                <option value="false">Não (desativado)</option>
+                              </select>
+                            ) : (
+                              <Input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => handleValueChange(e.target.value)}
+                                className={fieldError ? "border-red-500" : ""}
+                                autoFocus
+                              />
+                            )}
                             {setting.key === "pending_confirmation_deadline_hours" ? (
                               <p className="mt-1 text-xs text-muted-foreground">
                                 Informe o prazo em horas.

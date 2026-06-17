@@ -21,14 +21,16 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.matches.all, "detail", id] as const,
     playerValidated: (playerId?: string) =>
       [...queryKeys.matches.all, "player-validated-v2", playerId] as const,
+    playerSeasonValidated: (playerId?: string, seasonId?: string) =>
+      [...queryKeys.matches.all, "player-season-validated", playerId, seasonId] as const,
     pending: (userId: string) => [...queryKeys.matches.all, "pending", userId] as const,
     pendingActions: (userId: string) =>
       [...queryKeys.matches.all, "pending-actions", userId] as const,
     pendingDashboard: (userId: string) =>
       [...queryKeys.matches.all, "pending-dashboard", userId] as const,
     recent: (userId: string) => [...queryKeys.matches.all, "recent", userId] as const,
-    h2h: (userId?: string, opponentId?: string) =>
-      [...queryKeys.matches.all, "h2h", userId, opponentId] as const,
+    h2h: (userId?: string, opponentId?: string, seasonId?: string | null) =>
+      [...queryKeys.matches.all, "h2h", userId, opponentId, seasonId ?? null] as const,
   },
 
   // Notifications
@@ -62,8 +64,23 @@ export const queryKeys = {
   // varrida pelo invalidateQueries(matches.all) do Realtime
   pendingStatus: (userId: string) => ["pending-status", userId] as const,
 
+  // Seasons
+  seasons: {
+    all: ["seasons"] as const,
+    active: () => [...queryKeys.seasons.all, "active"] as const,
+    closed: () => [...queryKeys.seasons.all, "closed"] as const,
+    standings: (id: string) => [...queryKeys.seasons.all, "standings", id] as const,
+    list: () => [...queryKeys.seasons.all, "list"] as const,
+    detail: (id: string) => [...queryKeys.seasons.all, "detail", id] as const,
+    userStanding: (seasonId: string, userId: string) =>
+      [...queryKeys.seasons.all, "user-standing", seasonId, userId] as const,
+  },
+
   // Settings
   settings: ["settings"] as const,
+
+  // Notícias de temporada (news_posts tipo='temporada')
+  seasonNews: ["season-news"] as const,
 
   // Achievements
   achievements: {

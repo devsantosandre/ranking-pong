@@ -86,6 +86,10 @@ export type PlayerValidatedMatch = {
   player_b: UserInfo;
 };
 
+export type PlayerSeasonMatch = PlayerValidatedMatch & {
+  season_points_player: number;
+};
+
 type MatchesPage = {
   matches: MatchWithUsers[];
   nextPage: number | undefined;
@@ -517,23 +521,115 @@ export function useTotalValidatedMatches() {
   return query;
 }
 
+type SeasonMatchRpcRow = {
+  id: string;
+  player_a_id: string;
+  player_b_id: string;
+  vencedor_id: string | null;
+  resultado_a: number;
+  resultado_b: number;
+  created_at: string;
+  pa_id: string | null;
+  pa_name: string | null;
+  pa_full_name: string | null;
+  pa_email: string | null;
+  pb_id: string | null;
+  pb_name: string | null;
+  pb_full_name: string | null;
+  pb_email: string | null;
+  season_points_player: number | string | null;
+  total_count: number | string | null;
+};
+
+type PlayerSeasonMatchesPage = {
+  matches: PlayerSeasonMatch[];
+  totalCount: number;
+  nextPage: number | undefined;
+};
+
+export function usePlayerSeasonMatches(
+  playerId: string | undefined,
+  seasonId: string | undefined
+) {
+  const supabase = createClient();
+
+  return useInfiniteQuery({
+    queryKey: queryKeys.matches.playerSeasonValidated(playerId, seasonId),
+    queryFn: async ({ pageParam = 0 }): Promise<PlayerSeasonMatchesPage> => {
+      if (!playerId || !seasonId) {
+        return { matches: [], totalCount: 0, nextPage: undefined };
+      }
+
+      const limit = PAGE_SIZE;
+      const offset = (pageParam as number) * PAGE_SIZE;
+
+      const { data, error } = await supabase.rpc("get_player_season_matches_v1", {
+        p_player_id: playerId,
+        p_season_id: seasonId,
+        p_limit: limit,
+        p_offset: offset,
+      });
+
+      if (error) throw error;
+
+      const rows = (data ?? []) as SeasonMatchRpcRow[];
+      const totalCount = rows.length > 0 ? Number(rows[0]!.total_count ?? 0) : 0;
+
+      const matches: PlayerSeasonMatch[] = rows.map((row) => ({
+        id: row.id,
+        player_a_id: row.player_a_id,
+        player_b_id: row.player_b_id,
+        vencedor_id: row.vencedor_id,
+        resultado_a: row.resultado_a,
+        resultado_b: row.resultado_b,
+        created_at: row.created_at,
+        pontos_variacao_a: null,
+        pontos_variacao_b: null,
+        player_a: {
+          id: row.pa_id ?? row.player_a_id,
+          name: row.pa_name ?? null,
+          full_name: row.pa_full_name ?? null,
+          email: row.pa_email ?? null,
+        },
+        player_b: {
+          id: row.pb_id ?? row.player_b_id,
+          name: row.pb_name ?? null,
+          full_name: row.pb_full_name ?? null,
+          email: row.pb_email ?? null,
+        },
+        season_points_player: Number(row.season_points_player ?? 0),
+      }));
+
+      const nextPage = offset + limit < totalCount ? (pageParam as number) + 1 : undefined;
+
+      return { matches, totalCount, nextPage };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    initialPageParam: 0,
+    enabled: !!playerId && !!seasonId,
+    staleTime: 1000 * 60,
+  });
+}
+
 export function useHeadToHeadStats(
   userId: string | undefined,
-  opponentId: string | undefined
+  opponentId: string | undefined,
+  seasonId?: string | null
 ) {
   const supabase = createClient();
 
   return useQuery({
-    queryKey: queryKeys.matches.h2h(userId, opponentId),
+    queryKey: queryKeys.matches.h2h(userId, opponentId, seasonId),
     queryFn: async (): Promise<HeadToHeadStats> => {
       if (!userId || !opponentId || userId === opponentId) {
         return { wins: 0, losses: 0, total: 0, winRate: 0 };
       }
 
       const { data, error } = await supabase
-        .rpc("get_head_to_head_stats_v1", {
+        .rpc("get_head_to_head_stats_v2", {
           p_user_id: userId,
           p_opponent_id: opponentId,
+          p_season_id: seasonId ?? undefined,
         });
 
       if (error) throw error;
