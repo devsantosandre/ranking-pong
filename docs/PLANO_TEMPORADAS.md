@@ -1,7 +1,12 @@
 # Plano de Implementação — Sistema de Temporadas
 
-> Documento autossuficiente para continuar a implementação (Etapas 3–5).
-> Escrito no Opus 4.8 para execução no Sonnet 4.6. Leia tudo antes de codar.
+> **STATUS: ✅ CONCLUÍDO** — Todas as etapas implementadas, testadas e publicadas no `develop`.
+> Próximo módulo: **Rachão / Torneios** → ver `docs/RACHAO_TORNEIOS.md`
+
+---
+
+> Documento original de planejamento (Etapas 3–5).
+> Escrito no Opus 4.8, executado no Sonnet 4.6.
 
 ## 0. Invariantes (NÃO violar)
 
@@ -22,7 +27,7 @@ Pontuação da temporada (configurável em `settings`): vitória `+season_points
 
 Datas das temporadas: planejadas **manualmente** pelo admin. Encerramento: **automático "preguiçoso"** (sem cron) verificado nas leituras + botão admin "Encerrar agora"/"Reabrir". Campeão vai pro **Hall da Fama** + conquista + notícia + push.
 
-## 2. Estado atual (JÁ FEITO — apenas arquivos criados, NÃO aplicados)
+## 2. Estado atual (TUDO FEITO E APLICADO NO HML)
 
 - `supabase/migrations/20260616000000_create_seasons_tables.sql` — enums, tabelas `seasons` e `season_standings`, coluna `matches.season_id`, RLS (leitura pública), settings (`season_points_win/loss`, `season_zebra_bonus/enabled`), conquista `season_champion`, e uma "Temporada Inaugural" ativa.
 - `supabase/migrations/20260616000100_season_points_recalc_and_triggers.sql` — `recalc_season_standings(season_id)` + triggers `matches_stamp_season` (BEFORE) e `matches_recalc_season` (AFTER) que mantêm `season_standings` automaticamente em qualquer caminho (confirmação manual/automática, cancelamento, correção).
@@ -145,16 +150,48 @@ Imitar `confirmation-sla.ts`:
 
 ---
 
-## 6. Testes (Vitest + Playwright, ver `README-TESTS.md`)
-- Unit: cálculo de pontos (vitória/derrota/zebra) e desempate; lógica de contagem regressiva.
-- Integração (se houver harness de DB): validar partida soma standings; cancelar/corrigir reconstrói; `close_season` congela posição + define campeão.
-- E2E smoke: trocar abas, ver banner, Hall da Fama.
+## 6. Testes implementados
 
-## 7. Ordem sugerida de PRs
-1. (feito) Migrations Etapas 1–2.
-2. Etapa 3 (UI abas) — entrega visível.
-3. Etapa 4 (encerramento + campeão).
-4. Etapa 5 (Hall da Fama + admin + cartões).
+### Integração (`tests/integration/12-seasons.test.ts`)
+- Schema: tabelas e colunas esperadas
+- Settings: chaves seedadas e valores válidos
+- RLS: leitura pública, bloqueio de escrita direta por player
+- Ciclo de vida: create → recalc → close_season (vazio, idempotência, status, closed_at)
+- Triggers: stamp de season_id e atualização de standings
+- Campeão: close_season define champion_user_id, congela posições
+- Achievement season_champion concedido
+- Restrições de integridade: única temporada ativa, closed_at preenchido
 
-## 8. Lembrete final
-Nunca aplicar em produção. Entregar migrations como arquivos e instruir `npm run db:push:hml` para o usuário. Não tocar nas funções do ELO. Seguir o guia visual.
+### Integração (`tests/integration/13-season-actions.test.ts`)
+- Ativação: upcoming → active; índice único parcial bloqueia segunda ativa
+- Admin logs de ativação inseríveis
+- Reabertura: limpeza de champion/closed_at; zerar posições; notícia deletável
+- Notícias tipo='temporada': insert, listagem, bloqueio por RLS
+- Lifecycle: close_season em temporada expirada; recalc sem partidas
+
+### E2E (`tests/e2e/seasons.spec.ts`)
+- /temporadas: carregamento, título, subtítulo, estado ativo/vazio, expand/collapse do Hall da Fama
+- /ranking: abas Temporada/Geral, aba padrão, conteúdo, busca
+- Home e Perfil: cartão de temporada
+- Admin /admin/temporadas: título, formulário, lista, settings, botão Ativar, modal de confirmação
+
+### E2E (`tests/e2e/profile.spec.ts`)
+- Abas Geral/Temporada visíveis em Últimos Jogos
+- Aba Geral padrão; conteúdo de cada aba
+- Sem erros críticos de JS
+
+### E2E (`tests/e2e/regras.spec.ts`)
+- /regras: carregamento, título, seção Temporadas, pontos, Hall da Fama, ELO
+
+## 7. Histórico de PRs
+1. ✅ Migrations Etapas 1–2 (schema + triggers)
+2. ✅ Etapa 3 — ranking com abas Temporada/Geral
+3. ✅ Etapa 4 — encerramento automático + campeão + push + conquista
+4. ✅ Etapa 5 — Hall da Fama + admin temporadas + cartões home/perfil
+5. ✅ Extras — botão Ativar, abas perfil, seção regras, expandível no Hall da Fama
+6. ✅ Testes e documentação
+
+## 8. Próximo módulo
+→ **Rachão / Torneios** — ver `docs/RACHAO_TORNEIOS.md`
+
+Invariante mantida: nunca aplicar em produção, não alterar funções ELO.

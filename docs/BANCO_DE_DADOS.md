@@ -12,20 +12,21 @@ Documentação completa das tabelas do Supabase (PostgreSQL) utilizadas no siste
                               │   (central)     │
                               └────────┬────────┘
                                        │
-        ┌──────────────┬───────────────┼───────────────┬──────────────┐
-        │              │               │               │              │
-        ▼              ▼               ▼               ▼              ▼                ▼
-┌───────────────┐ ┌─────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐ ┌──────────────────┐
-│    matches    │ │settings │ │ admin_logs   │ │notifications│ │daily_limits │ │push_subscriptions│
-└───────┬───────┘ └─────────┘ └──────────────┘ └────────────┘ └─────────────┘ └──────────────────┘
-        │
-        ├──────────────┬───────────────┬───────────────┐
-        │              │               │               │
-        ▼              ▼               ▼               ▼
-┌───────────────┐ ┌───────────┐ ┌────────────┐ ┌─────────────┐
-│  match_sets   │ │news_posts │ │live_updates│ │  rating_    │
-└───────────────┘ └───────────┘ └────────────┘ │transactions │
-                                               └─────────────┘
+   ┌──────────┬───────────┬────────────┼────────────┬──────────────┬──────────────┐
+   │          │           │            │            │              │              │
+   ▼          ▼           ▼            ▼            ▼              ▼              ▼
+┌────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌──────────┐ ┌──────────────────┐
+│matches │ │settings │ │admin_logs│ │notifica- │ │daily_  │ │seasons   │ │push_subscriptions│
+│        │ │         │ │          │ │tions     │ │limits  │ │          │ └──────────────────┘
+└───┬────┘ └─────────┘ └──────────┘ └──────────┘ └────────┘ └────┬─────┘
+    │                                                              │
+    ├──────────┬──────────┬──────────┐                            ▼
+    │          │          │          │                   ┌──────────────────┐
+    ▼          ▼          ▼          ▼                   │ season_standings │
+┌─────────┐ ┌─────────┐ ┌────────┐ ┌──────────────┐    └──────────────────┘
+│match_   │ │news_    │ │live_   │ │rating_       │
+│sets     │ │posts    │ │updates │ │transactions  │
+└─────────┘ └─────────┘ └────────┘ └──────────────┘
 
 ┌───────────────┐      ┌─────────────────┐
 │ achievements  │◄────►│user_achievements│
@@ -83,6 +84,7 @@ Registro de todas as partidas do sistema.
 | `rating_final_a` | integer | - | Sim | Rating final do jogador A |
 | `rating_final_b` | integer | - | Sim | Rating final do jogador B |
 | `k_factor_used` | integer | - | Sim | K factor congelado no momento do registro da partida |
+| `season_id` | uuid | - | Sim | FK -> seasons.id (preenchido ao validar se houver temporada ativa) |
 | `status` | match_status | 'pendente' | Não | Status da partida |
 | `tipo_resultado` | resultado_tipo | - | Sim | Tipo: win, loss, wo |
 | `criado_por` | uuid | - | Sim | FK -> users.id (quem registrou) |
@@ -203,6 +205,63 @@ Configurações dinâmicas do sistema.
 | `rating_inicial` | "250" | Rating inicial usado na criação de jogadores |
 | `achievements_rating_min_players` | "6" | Minimo de jogadores com jogo validado para liberar conquistas de rating |
 | `achievements_rating_min_validated_matches` | "20" | Minimo de partidas validadas globais para liberar conquistas de rating |
+| `season_points_win` | "3" | Pontos de temporada por vitória |
+| `season_points_loss` | "1" | Pontos de temporada por derrota |
+| `season_zebra_bonus` | "2" | Bônus de zebra em pontos de temporada |
+| `season_zebra_enabled` | "false" | Habilita bônus de zebra na temporada |
+
+---
+
+### seasons
+
+Temporadas competitivas. Apenas uma pode estar `active` por vez (índice único parcial).
+
+| Campo | Tipo | Padrão | Nullable | Descrição |
+|-------|------|--------|----------|-----------|
+| `id` | uuid | gen_random_uuid() | Não | PK |
+| `name` | text | - | Não | Nome da temporada |
+| `slug` | text | - | Sim | URL slug único |
+| `starts_at` | timestamptz | - | Não | Início da temporada |
+| `ends_at` | timestamptz | - | Não | Fim da temporada |
+| `status` | season_status | 'upcoming' | Não | Estado: upcoming, active, closed |
+| `recurrence` | season_recurrence | 'none' | Sim | Cadência: none, weekly, monthly, quarterly, semiannual |
+| `champion_user_id` | uuid | - | Sim | FK -> users.id (definido ao encerrar) |
+| `closed_at` | timestamptz | - | Sim | Data/hora do encerramento |
+| `created_by` | uuid | - | Sim | FK -> users.id |
+| `created_at` | timestamptz | now() | Sim | Data de criação |
+| `updated_at` | timestamptz | now() | Sim | Data de atualização |
+
+**Índice único parcial:** `UNIQUE WHERE status = 'active'` — impede duas temporadas ativas simultaneamente.
+
+**Encerramento:** automático ("preguiçoso" via `after()` nas leituras) + manual pelo admin.
+Função PostgreSQL: `close_season(p_season_id uuid, p_actor_id uuid DEFAULT NULL)`.
+
+---
+
+### season_standings
+
+Classificação de cada jogador em cada temporada. Atualizada automaticamente por trigger após cada partida validada.
+
+| Campo | Tipo | Padrão | Nullable | Descrição |
+|-------|------|--------|----------|-----------|
+| `season_id` | uuid | - | Não | FK -> seasons.id (parte da PK) |
+| `user_id` | uuid | - | Não | FK -> users.id (parte da PK) |
+| `points` | integer | 0 | Não | Pontos acumulados na temporada |
+| `wins` | integer | 0 | Não | Vitórias na temporada |
+| `losses` | integer | 0 | Não | Derrotas na temporada |
+| `games` | integer | 0 | Não | Total de jogos na temporada |
+| `zebra_wins` | integer | 0 | Não | Vitórias com bônus de zebra |
+| `win_rate` | numeric | - | Sim | Aproveitamento: wins / games |
+| `position` | integer | - | Sim | Posição final (NULL até encerrar; congelada pelo `close_season`) |
+| `updated_at` | timestamptz | now() | Não | Última atualização |
+
+**PK:** `(season_id, user_id)`
+
+**Triggers:**
+- `matches_stamp_season` (BEFORE validate) — carrimba `matches.season_id` com a temporada ativa
+- `matches_recalc_season` (AFTER validate/cancel/correct) — chama `recalc_season_standings(season_id)` automaticamente
+
+**Desempate:** `points DESC → win_rate DESC → wins DESC → games DESC`
 
 ---
 
@@ -408,10 +467,16 @@ CREATE TYPE transaction_motivo AS ENUM (
 );
 
 -- Tipo de notícia
-CREATE TYPE news_tipo AS ENUM ('resultado');
+CREATE TYPE news_tipo AS ENUM ('resultado', 'temporada');
 
 -- Tipo de notificação
 CREATE TYPE notification_tipo AS ENUM ('desafio', 'ranking_update', 'news', 'confirmacao');
+
+-- Status da temporada
+CREATE TYPE season_status AS ENUM ('upcoming', 'active', 'closed');
+
+-- Cadência de recorrência da temporada
+CREATE TYPE season_recurrence AS ENUM ('none', 'weekly', 'monthly', 'quarterly', 'semiannual');
 ```
 
 ---
@@ -460,6 +525,8 @@ Row Level Security está **habilitado** nas seguintes tabelas:
 | 20260212193000 | realtime_notifications_pending_v1 | Publication + policies + índice em notifications |
 | 20260218171000 | push_notifications_pending_v1 | Tabela push_subscriptions + RLS + índices |
 | 20260218193000 | optimize_news_feed_query | Índice parcial de performance para feed de notícias |
+| 20260616000000 | create_seasons_tables | Enums season_status/recurrence, tabelas seasons/season_standings, coluna matches.season_id, RLS, settings season_*, conquista season_champion, Temporada Inaugural |
+| 20260616000100 | season_points_recalc_and_triggers | Função recalc_season_standings, triggers matches_stamp_season e matches_recalc_season, função close_season, enum news_tipo 'temporada' |
 
 ---
 
@@ -498,4 +565,12 @@ live_updates.match_id    -> matches.id
 user_achievements.user_id       -> users.id
 user_achievements.achievement_id -> achievements.id
 user_achievements.match_id      -> matches.id
+
+matches.season_id               -> seasons.id
+
+seasons.champion_user_id        -> users.id
+seasons.created_by              -> users.id
+
+season_standings.season_id      -> seasons.id
+season_standings.user_id        -> users.id
 ```

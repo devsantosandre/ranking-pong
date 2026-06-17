@@ -1,368 +1,160 @@
-# Smash Pong - Documentação do Projeto
+# Ranking Pong — Regras e Funcionamento
+
+> **Documento de referência** para jogadores, admins e desenvolvedores.
+> Reflete o estado atual do sistema (2026).
+
+---
 
 ## Visão Geral
 
-- App mobile-first (PWA instalável) para ranking interno de tênis de mesa
-- Mesma base pode ser empacotada com Capacitor para iOS/Android
-- Ranking único (sem divisões), nomes completos, regras internas de pontuação e limite de confrontos diários
-- **Principais áreas:** Ranking, Partidas, Novo Jogo (wizard), Notícias (posts de jogos realizados), Estatísticas, Perfil
+App mobile-first (PWA instalável) de ranking interno de tênis de mesa.
+Dois sistemas de pontuação rodam em paralelo, sem interferência mútua:
+
+| Sistema | Base | Zera? | Campeão? |
+|---------|------|-------|---------|
+| **Ranking Geral** | ELO (rating vitalício) | Nunca | — |
+| **Temporada** | Pontos por período | A cada temporada | 🏆 Hall da Fama |
 
 ---
 
-## Regras do Jogo e Pontuação
+## Ranking Geral (ELO)
 
 ### Pontuação Inicial
-- Todos começam com **250 pts**
+- Todos começam com **1 000 pts ELO**
 
-### Formato das Partidas
-- Partidas sempre **melhor de 5 sets**
-- Encerra ao atingir **3 sets vencidos**
+### Cálculo de Pontos
+- Baseado no **sistema ELO** — a variação depende do rating relativo dos dois jogadores
+- Quanto maior a diferença de rating, menor o ganho para o favorito e maior para o zebra
+- Fator K configurável via painel admin (padrão: **24**)
+
+### Bônus de Zebra
+- Aplicado quando um jogador de rating significativamente menor vence o favorito
+- Bônus adicional sobre a variação normal do ELO
+
+### Inatividade
+- Aplicada automaticamente para jogadores sem partidas por período prolongado
+- Consultável em `/admin/configuracoes`
+
+---
+
+## Temporadas
+
+### O que é uma Temporada
+- Período competitivo com início e fim definidos pelo admin
+- Pontuação **zerada** a cada nova temporada — parte do zero
+- Roda em **paralelo** ao ELO: uma partida conta para ambos ao mesmo tempo
+
+### Ciclo de Vida
+```
+Agendada (upcoming) → Ativa (active) → Encerrada (closed)
+                                ↑                    ↓
+                           [Reabrir]            Hall da Fama
+```
+- **Agendada**: criada pelo admin, ainda não iniciada
+- **Ativa**: aberta para partidas; apenas **uma** temporada ativa por vez
+- **Encerrada**: posições congeladas; campeão definido
+
+### Pontuação da Temporada
+Configurável em `/admin/configuracoes`:
+
+| Resultado | Padrão |
+|-----------|--------|
+| Vitória | +3 pts |
+| Derrota | +1 pt (nunca negativo — incentiva jogar) |
+| Bônus de Zebra | +2 pts (quando habilitado) |
+
+> Bônus de zebra: habilitado/desabilitado pelo admin. Aplicado ao vencedor quando vence alguém de rating ELO significativamente maior.
+
+### Desempate
+Em caso de empate de pontos, usa-se em cascata:
+1. Pontos (primário)
+2. Aproveitamento — `vitórias / jogos` (win rate)
+3. Número de vitórias
+4. Número de jogos disputados
+
+### Campeão
+- **1 campeão** por temporada: o jogador na posição 1 ao encerrar
+- Conquista `season_champion` concedida automaticamente
+- Notícia publicada no feed
+- Push notification enviado a todos os participantes
+- Nome registrado no **Hall da Fama** (`/temporadas`)
+
+---
+
+## Formato das Partidas
+
+- Partidas sempre **melhor de 5 sets** (encerra ao atingir 3 sets vencidos)
 - **Sem empates**
+- Limite: máximo **2 confrontos por dia** contra o mesmo adversário
 
-### Limite de Confrontos
-- Máximo **2 confrontos por dia** contra o mesmo adversário
+### Fluxo de Confirmação
 
-### Sistema de Pontuação
+```
+Registro (criado_por) → Pendente → Confirmação pelo oponente → Validado ✓
+                                         ↓
+                                   Contestar (novo placar) → Pendente transferida
+                                         ↓
+                                   Jogo não existiu → Pendente de cancelamento
+```
 
-| Resultado | Pontuação |
-|-----------|-----------|
-| Vitória | **+20 pts** |
-| Derrota | **+8 pts** (incentiva jogar) |
-| WO/abandono - Faltante | **-10 pts** |
-| WO/abandono - Vencedor | **+12 pts** |
-
-### Inatividade
-- **-5 pts** a cada 14 dias sem jogar (acumulativo até voltar a jogar)
-
----
-
-## Navegação/Telas (Mobile)
-
-### Bottom Navigation
-- Notícias | Jogos (Partidas) | Iniciar (FAB Novo Jogo) | Conta (Perfil)
-- Ranking e Estatísticas acessíveis via tabs ou atalhos no header/menu interno
-
-### Tela: Ranking
-- Lista de alunos com:
-  - Foto
-  - Nome completo
-  - Posição
-  - Pontos
-  - Variação recente
-  - Badge de inatividade
-- Busca e filtros: Todos / Ativos / Inativos
-- CTA "Desafiar"
-
-### Tela: Partidas
-- **Tabs:** "Recentes" e "Pendentes/Confirmação"
-- Pendentes exibem status, instrução e CTAs apenas para quem deve agir:
-  - Quem registrou e aguarda não vê botões
-  - O oponente pode **Confirmar**, **Contestar** (seleciona novo placar rápido) ou marcar que o **jogo não existiu**
-  - Se alguém ajustar o placar, volta para pendente e só o outro lado vê os botões para confirmar/ajustar novamente
-  - Se alguém marcar que o jogo não existiu, a pendência volta para o outro jogador confirmar o cancelamento
-- Recentes mostram badge “Validado”, placar e variação aplicada
-
-### Tela: Registrar Jogo (Wizard 2 passos)
-1. **Passo 1:** Selecionar adversário (combobox com busca em usuários reais do Supabase Auth; exclui o logado)
-2. **Passo 2:** Escolher resultado rápido (3x0, 3x1, 3x2, 0x3, 1x3, 2x3) — sempre melhor de 5
-   - Mostrar previsão de pontos (Vitória +20 / Derrota -8)
-   - Aviso "máx. 2 jogos/dia"
-- CTA "Registrar partida" só habilita com adversário + resultado; cria partida pendente para o adversário confirmar/contestar
-
-### Tela: Notícias (somente jogos confirmados)
-- Feed vertical; ao confirmar uma partida gera post automático “Resultado registrado”
-- Card:
-  - Título/temporada (simples)
-  - Tempo relativo
-  - Texto: "Fulano ganhou de Sicrano por 6x3 4x6 10x6" (vencedor em verde, derrotado em vermelho)
-- Estados loading/vazio
-
-### Tela: Estatísticas
-- Snapshot de pontos atuais e variação semanal
-- Gráfico simples do histórico
-- Cards de:
-  - Streak
-  - Jogos no mês
-  - Vitórias/derrotas
-- Aviso de inatividade e CTA "Marcar jogo"
-
-### Tela: Perfil
-- Avatar, nome completo, email
-- Botões:
-  - Editar perfil
-  - QR/Convite
-  - Notificações
-  - Sair
-- Lista compacta de últimos jogos
-- Toggle tema (opcional)
-
-### Autenticação
-- Supabase Auth (email/senha). Todas as telas (exceto login) exigem usuário autenticado.
-- Header mostra usuário logado e botão “Sair”.
-
-### Fluxo de confirmação/contestação
-- Registrar: cria partida **pendente** para o oponente.
-- Oponente: **Confirmar** aplica pontos e move para Recentes/Notícias; **Contestar** abre seleção de placar rápido e salva, devolvendo para pendente com `edited` para o outro lado confirmar.
-- Jogo inexistente: quem deve agir pode marcar que a partida não aconteceu; o app devolve para o adversário confirmar o cancelamento. Se o prazo de confirmação expirar, o sistema cancela automaticamente a partida.
-- Limite diário respeitado mesmo em pendentes (não permite 3º jogo/dia contra o mesmo adversário).
+1. **Registrar**: cria partida pendente; oponente é notificado
+2. **Confirmar**: aplica pontos ELO e pontos de temporada (se houver temporada ativa)
+3. **Contestar**: ajusta o placar e devolve a pendência ao outro jogador
+4. **Jogo não existiu**: solicita cancelamento; o outro lado precisa confirmar
 
 ---
 
-## Modelo de Dados
+## Conquistas
 
-### Tabela: `students`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| user_id | uuid | FK para auth.users |
-| nome_completo | text | Nome completo do jogador |
-| email | text | Email |
-| foto_url | text | URL da foto |
-| rating_atual | int | Pontuação atual |
-| streak | int | Sequência de vitórias/derrotas |
-| jogos_disputados | int | Total de jogos |
-| vitorias | int | Total de vitórias |
-| derrotas | int | Total de derrotas |
-| inactivity_days | int | Dias de inatividade |
-| role | enum | [player] |
-| created_at | timestamp | Data de criação |
+Desbloqueadas automaticamente ao atingir marcos:
+- Número de vitórias (bronze → diamante)
+- Sequências (streak)
+- Marco de rating ELO
+- **Campeão de temporada** (`season_champion`) — concedida pelo `close_season`
 
-### Tabela: `matches`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| player_a_id | uuid | FK para students |
-| player_b_id | uuid | FK para students |
-| vencedor_id | uuid | FK para students |
-| data_partida | date | Data da partida |
-| status | enum | [pendente, validado, in_progress, cancelado] |
-| resultado_a | int | Sets vencidos por A |
-| resultado_b | int | Sets vencidos por B |
-| pontos_variacao_a | int | Variação de pontos de A |
-| pontos_variacao_b | int | Variação de pontos de B |
-| rating_final_a | int | Rating final de A |
-| rating_final_b | int | Rating final de B |
-| tipo_resultado | enum | [win, loss, wo] |
-| criado_por | uuid | FK para students |
-| aprovado_por | uuid | FK para students |
-| created_at | timestamp | Data de criação |
-
-### Tabela: `match_sets`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| match_id | uuid | FK para matches |
-| numero_set | int | Número do set (1-5) |
-| pontos_a | int | Pontos de A no set |
-| pontos_b | int | Pontos de B no set |
-| vencedor_set | uuid | FK para students |
-
-### Tabela: `daily_limits`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| student_id | uuid | FK para students |
-| opponent_id | uuid | FK para students |
-| data | date | Data |
-| jogos_registrados | int | Quantidade de jogos no dia |
-
-> Impede mais de 2 jogos/dia contra o mesmo adversário
-
-### Tabela: `rating_transactions`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| match_id | uuid | FK para matches |
-| student_id | uuid | FK para students |
-| motivo | enum | [vitoria, derrota, bonus, inatividade, wo] |
-| valor | int | Valor da transação |
-| rating_antes | int | Rating antes |
-| rating_depois | int | Rating depois |
-| created_at | timestamp | Data de criação |
-
-### Tabela: `ranking_snapshots`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| data_referencia | date | Data de referência |
-| student_id | uuid | FK para students |
-| posicao | int | Posição no ranking |
-| rating | int | Rating |
-| vitorias | int | Vitórias no período |
-| derrotas | int | Derrotas no período |
-| jogos_no_periodo | int | Jogos no período |
-| inatividade | int | Dias de inatividade |
-
-### Tabela: `news_posts`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| title | text | Título |
-| slug | text | Slug único |
-| resumo | text | Resumo |
-| content_md | text | Conteúdo em Markdown |
-| tags | text[] | Tags |
-| cover_url | text | URL da capa |
-| tipo | enum | [resultado] |
-| published_at | timestamp | Data de publicação |
-| created_by | uuid | FK para students |
-| pinned | boolean | Fixado no topo |
-
-### Tabela: `notifications`
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| student_id | uuid | FK para students |
-| tipo | enum | [desafio, ranking_update, news] |
-| payload | jsonb | Dados extras |
-| lida | boolean | Se foi lida |
-| created_at | timestamp | Data de criação |
-
-### Tabela: `live_updates` (opcional)
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid | PK |
-| match_id | uuid | FK para matches |
-| payload | jsonb | Dados do update |
-| created_at | timestamp | Data de criação |
+Ver lista completa em `docs/CONQUISTAS.md`.
 
 ---
 
-## Regras de Negócio / Validações
+## Painel Admin
 
-### Limite Diário
-- Checagem via trigger/view em `daily_limits`
-- Bloqueia 3º jogo/dia para o mesmo par de jogadores
+Acessível a usuários com role `admin` ou `moderator`:
 
-### Partida Válida
-- `resultado_a + resultado_b >= 3`
-- Um deles deve ser `= 3` (melhor de 5)
-- Sets devem estar alinhados com o vencedor
-
-### Permissão de Registro
-- Registro só permitido se jogador autenticado é `player_a` ou `player_b`
-- Ambos confirmam para aplicar bônus de +5 pts
-
-### Inatividade
-- Aplicada por job diário (cron)
-- A cada 14 dias sem jogos: -5 pts
-
-### WO (Walk Over)
-- Aplicação automática das penalidades/bonificações
+| Área | Ação |
+|------|------|
+| `/admin/temporadas` | Criar, editar, ativar, encerrar, reabrir temporadas |
+| `/admin/configuracoes` | Ajustar K factor, limite diário, pontos de temporada, bônus de zebra |
+| `/admin/usuarios` | Ativar/desativar jogadores, ajustar rating |
+| `/admin/partidas` | Cancelar, corrigir partidas |
+| `/admin/logs` | Auditoria de ações administrativas |
 
 ---
 
-## Fluxos Principais
+## Navegação
 
-### Registrar Partida
-1. Escolher adversário
-2. Preencher sets
-3. Validar limite diário
-4. Gravar `match` + `match_sets`
-5. Calcular pontos (vitória/derrota/wo + bônus)
-6. Salvar `rating_transactions`
-7. Atualizar `rating_atual` dos dois jogadores
-
-### Confirmar Partida
-1. Jogador pendente confirma
-2. Se ambos confirmam no mesmo dia → aplica bônus +5 para cada
-
-### Notícias
-- Ao validar partida concluída, criar post tipo "resultado"
-- Formato: "Fulano ganhou de Sicrano por..."
-
-### Ranking
-- Consulta `students` ordenado por `rating_atual`
-- Exibe streak e inatividade
-
-### Estatísticas
-- Lê `ranking_snapshots` e `rating_transactions`
-- Monta gráficos e cartões
+### Bottom Navigation (mobile)
+- **Home** — resumo, partidas recentes, cartão da temporada ativa
+- **Partidas** — histórico e pendências de confirmação
+- **Registrar** (FAB) — wizard de novo jogo
+- **Ranking** — abas Temporada e Geral
+- **Mais** — Notícias, Temporadas (Hall da Fama), Regras, Perfil, Admin
 
 ---
 
 ## Tecnologias
 
-### Frontend
-- **Next.js 14** (App Router, Server Actions)
-- **TypeScript**
-- **Tailwind CSS** + **shadcn/ui**
-- **React Query**
-- **Framer Motion**
-- **next-themes**
-- **PWA** (next-pwa)
-- **Capacitor** para empacotar mobile
-
-### Backend
-- **Supabase**
-  - Postgres
-  - Auth
-  - Storage
-  - Realtime
-  - Edge Functions
-- **RLS** para segurança
-- **Cron** para inatividade/snapshots
-
-### Observabilidade
-- Vercel Analytics
-- Sentry (opcional)
-
-### Testes
-- **Vitest/RTL** para lógica e hooks
-- **Playwright** mobile para smoke tests (ranking, registrar partida, ver notícia)
+| Camada | Stack |
+|--------|-------|
+| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, shadcn/ui, React Query (TanStack v5) |
+| Backend | Supabase (PostgreSQL, Auth, Realtime, RLS) |
+| Testes | Vitest (unit + integração), Playwright (E2E) |
+| Deploy | Vercel (frontend) + Supabase self-hosted (HML e prod) |
 
 ---
 
-## API / Server Actions
+## Links Rápidos
 
-### Auth
-- Login magic link / OAuth
-- Onboarding exige nome completo
-
-### Partidas
-- `registerMatch`
-- `confirmMatch`
-- `listMatches(cursor, status)`
-- `updateLiveScore` (opcional)
-
-### Ranking
-- `getRanking`
-- `getRankingHistory`
-
-### Notícias
-- `createResultPost` (deriva de partida)
-- `listNewsFeed`
-
-### Notificações
-- Subscribe a eventos (desafios, resultados)
-
----
-
-## Interações e UI
-
-- Microanimações leves (hover/press +4px, slide de tabs)
-- Toasts claros para sucesso/erro
-- Estados loading/vazio em todas as listas
-- Like/dislike minimal nos cards de notícias (contagem)
-
----
-
-## Roadmap
-
-1. **Setup projeto** - Next, Tailwind/shadcn, React Query, PWA + Supabase client/server
-2. **Schema Supabase** - RLS + triggers de limite diário; gerar tipos TypeScript
-3. **Cálculo de pontuação** - Implementar lógica interna com testes Vitest
-4. **Fluxo de partidas** - register/confirm + UI Partidas/Novo Jogo
-5. **Ranking + Estatísticas** - snapshots, histórico
-6. **Notícias de resultados** - feed
-7. **Inatividade** - cron + notificações básicas
-8. **Testes e Deploy** - end-to-end mobile, Vercel + Supabase
-
-
-
-
-
-
-
-
-
+- Banco de dados: `docs/BANCO_DE_DADOS.md`
+- Cálculo ELO: `docs/ELO.md`
+- Conquistas: `docs/CONQUISTAS.md`
+- Rachão/Torneios (próxima fase): `docs/RACHAO_TORNEIOS.md`
