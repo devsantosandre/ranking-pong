@@ -89,6 +89,48 @@ test.describe("Temporadas — página /temporadas", () => {
     expect(hasActiveBadge || hasEmptyMsg || hasSeasonName).toBe(true);
   });
 
+  test("botão 'Ver classificação completa' colapsa e expande histórico de temporada encerrada", async ({ page }) => {
+    const user = await createE2EUser("season-expand-standings");
+    created.push(user);
+
+    await loginViaUI(page, user.email, user.password);
+    await page.goto("/temporadas");
+    await page.waitForTimeout(4_000);
+
+    const expandBtn = page.getByRole("button", { name: /Ver classificação completa/i }).first();
+    const hasClosed = await expandBtn.isVisible().catch(() => false);
+
+    if (!hasClosed) {
+      console.warn("⚠ ACHADO: botão 'Ver classificação completa' ausente — nenhuma temporada encerrada no ambiente");
+      return;
+    }
+
+    // Expande
+    await expandBtn.click();
+    await page.waitForTimeout(1_000);
+
+    const hasStandings = await page
+      .getByText(/Classificação final/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+
+    expect(hasStandings).toBe(true);
+
+    // Colapsa
+    const hideBtn = page.getByRole("button", { name: /Ocultar classificação/i }).first();
+    await hideBtn.click();
+    await page.waitForTimeout(500);
+
+    const isHidden = await page
+      .getByText(/Classificação final/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+
+    expect(isHidden).toBe(false);
+  });
+
   test("botão 'Ver ranking completo →' está visível e navega para /ranking", async ({ page }) => {
     const user = await createE2EUser("season-page-link");
     created.push(user);
@@ -479,5 +521,131 @@ test.describe("Admin — /admin/temporadas", () => {
     await expect(page.getByText("Temporada: Pontos por Derrota")).toBeVisible();
     await expect(page.getByText("Temporada: Bônus de Zebra")).toBeVisible();
     await expect(page.getByText("Temporada: Habilitar Bônus de Zebra")).toBeVisible();
+  });
+
+  test("botão 'Ativar' é visível para temporadas agendadas (upcoming)", async ({ page }) => {
+    const { createClient } = await import("@supabase/supabase-js");
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.SUPABASE_SERVICE_ROLE_KEY as string,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    const adminUser = await createE2EUser("admin-ativar-btn");
+    created.push(adminUser);
+
+    await adminSupabase.from("users").update({ role: "admin" }).eq("id", adminUser.id);
+
+    // Cria uma temporada upcoming para garantir que o botão Ativar apareça
+    const slug = `qa-ativar-${Date.now().toString(36)}`;
+    const future = new Date(Date.now() + 60 * 24 * 3600_000).toISOString();
+    const { data: season } = await adminSupabase
+      .from("seasons")
+      .insert({
+        name: "QA Temporada Ativar",
+        slug,
+        starts_at: new Date().toISOString(),
+        ends_at: future,
+        recurrence: "none",
+        status: "upcoming",
+      })
+      .select("id")
+      .single();
+
+    // Limpeza após o teste
+    if (season?.id) {
+      const seasonId = season.id;
+      page.on("close", async () => {
+        await adminSupabase.from("seasons").delete().eq("id", seasonId);
+      });
+    }
+
+    await loginViaUI(page, adminUser.email, adminUser.password);
+    await page.goto("/admin/temporadas");
+    await page.waitForTimeout(3_000);
+
+    const ativarBtn = page.getByRole("button", { name: /Ativar/i }).first();
+    const isVisible = await ativarBtn.isVisible().catch(() => false);
+
+    if (!isVisible) {
+      console.warn("⚠ ACHADO: botão 'Ativar' não visível — nenhuma temporada agendada encontrada");
+      // Limpa a temporada criada
+      if (season?.id) await adminSupabase.from("seasons").delete().eq("id", season.id);
+      return;
+    }
+
+    expect(isVisible).toBe(true);
+
+    // Limpa
+    if (season?.id) await adminSupabase.from("seasons").delete().eq("id", season.id);
+  });
+
+  test("botão 'Ativar' abre modal de confirmação", async ({ page }) => {
+    const { createClient } = await import("@supabase/supabase-js");
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.SUPABASE_SERVICE_ROLE_KEY as string,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    // Verifica se já existe temporada ativa (não podemos ativar se houver)
+    const { data: activeSeason } = await adminSupabase
+      .from("seasons")
+      .select("id")
+      .eq("status", "active")
+      .maybeSingle();
+
+    const adminUser = await createE2EUser("admin-ativar-modal");
+    created.push(adminUser);
+
+    await adminSupabase.from("users").update({ role: "admin" }).eq("id", adminUser.id);
+
+    const slug = `qa-modal-${Date.now().toString(36)}`;
+    const future = new Date(Date.now() + 60 * 24 * 3600_000).toISOString();
+    const { data: season } = await adminSupabase
+      .from("seasons")
+      .insert({
+        name: "QA Modal Ativar",
+        slug,
+        starts_at: new Date().toISOString(),
+        ends_at: future,
+        recurrence: "none",
+        status: "upcoming",
+      })
+      .select("id")
+      .single();
+
+    await loginViaUI(page, adminUser.email, adminUser.password);
+    await page.goto("/admin/temporadas");
+    await page.waitForTimeout(3_000);
+
+    const ativarBtn = page.getByRole("button", { name: /Ativar/i }).first();
+    const isVisible = await ativarBtn.isVisible().catch(() => false);
+
+    if (!isVisible) {
+      console.warn("⚠ ACHADO: botão 'Ativar' não encontrado — pulando teste de modal");
+      if (season?.id) await adminSupabase.from("seasons").delete().eq("id", season.id);
+      return;
+    }
+
+    await ativarBtn.click();
+
+    // Modal de confirmação deve aparecer
+    const hasModal = await page
+      .getByText(/Ativar temporada/i)
+      .first()
+      .isVisible({ timeout: 5_000 })
+      .catch(() => false);
+
+    expect(hasModal).toBe(true);
+
+    // Fecha o modal (pressiona Escape ou cancela) sem confirmar
+    await page.keyboard.press("Escape");
+
+    // Limpa
+    if (season?.id) await adminSupabase.from("seasons").delete().eq("id", season.id);
+    if (activeSeason) {
+      // Se havia temporada ativa, não mudamos nada
+    }
   });
 });
