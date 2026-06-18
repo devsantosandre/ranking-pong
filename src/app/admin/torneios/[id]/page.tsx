@@ -7,6 +7,7 @@ import { BracketCanvas } from "@/components/bracket/bracket-canvas";
 import { SeedingBoard } from "@/components/tournaments/seeding-board";
 import { GroupDistributionBoard } from "@/components/tournaments/group-distribution-board";
 import { DivisionSwitcher } from "@/components/tournaments/division-switcher";
+import { ShareRegistration } from "@/components/tournaments/share-registration";
 import { ScoreSheet } from "@/components/tournaments/score-sheet";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
@@ -388,6 +389,10 @@ export default function AdminTournamentPage() {
           {tab === "inscritos" && (
             <div className="flex flex-col gap-2">
 
+              {/* Inscrições abertas → compartilhar link/QR de auto-inscrição */}
+              {tournament.status === "registration" && (
+                <ShareRegistration tournamentId={id} />
+              )}
 
               <div className="flex items-center justify-between px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
