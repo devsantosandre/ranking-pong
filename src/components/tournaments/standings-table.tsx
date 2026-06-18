@@ -26,7 +26,7 @@ export function StandingsTable({
 }: StandingsTableProps) {
   if (standings.length === 0) {
     return (
-      <p className="py-6 text-center text-sm text-white/40">
+      <p className="py-6 text-center text-sm text-(--arena-muted)">
         Nenhuma partida de grupo registrada ainda
       </p>
     );
@@ -44,16 +44,23 @@ export function StandingsTable({
   return (
     <div className="flex flex-col gap-4">
       {groups.map(([groupId, rows], gi) => (
-        <div key={groupId} className="glass overflow-hidden rounded-2xl">
+        <div
+          key={groupId}
+          className="glass overflow-hidden rounded-2xl"
+          style={{ border: "1px solid var(--glass-border)" }}
+        >
           {/* Cabeçalho do grupo */}
           <div
-            className="flex items-center justify-between border-b border-white/8 px-4 py-2.5"
-            style={{ background: "color-mix(in srgb,var(--arena-primary) 8%,transparent)" }}
+            className="flex items-center justify-between px-4 py-2.5"
+            style={{
+              background: "color-mix(in srgb,var(--arena-primary) 8%,transparent)",
+              borderBottom: "1px solid var(--glass-border)",
+            }}
           >
-            <p className="text-[11px] font-bold uppercase tracking-widest text-white/60">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-(--arena-primary)">
               Grupo {String.fromCharCode(65 + gi)}
             </p>
-            <div className="flex gap-3 text-[10px] font-semibold uppercase tracking-widest text-white/30">
+            <div className="flex gap-3 text-[10px] font-semibold uppercase tracking-widest text-(--arena-muted)">
               <span className="w-6 text-center">J</span>
               <span className="w-6 text-center">V</span>
               <span className="w-6 text-center">D</span>
@@ -74,19 +81,22 @@ export function StandingsTable({
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.04 }}
-                className={cn(
-                  "flex items-center gap-3 border-b border-white/5 px-4 py-2.5 last:border-0 transition-colors",
-                  isQualifying && "bg-[color-mix(in_srgb,var(--state-played)_5%,transparent)]",
-                )}
+                className="flex items-center gap-3 px-4 py-2.5 transition-colors"
+                style={{
+                  borderBottom: i < rows.length - 1 ? "1px solid var(--glass-border)" : "none",
+                  background: isQualifying
+                    ? "color-mix(in srgb,var(--state-played) 7%,transparent)"
+                    : "transparent",
+                }}
               >
                 {/* Posição */}
                 <div
-                  className={cn(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold",
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold"
+                  style={
                     isQualifying
-                      ? "text-(--state-played) bg-[color-mix(in_srgb,var(--state-played)_15%,transparent)]"
-                      : "text-white/40 bg-white/5",
-                  )}
+                      ? { color: "var(--state-played)", background: "color-mix(in srgb,var(--state-played) 15%,transparent)" }
+                      : { color: "var(--arena-muted)", background: "color-mix(in srgb,var(--arena-foreground) 7%,transparent)" }
+                  }
                 >
                   {row.position}
                 </div>
@@ -96,9 +106,10 @@ export function StandingsTable({
                   {flag && <span className={`fi fi-${flag.toLowerCase()} text-sm`} aria-hidden />}
                   <span
                     className={cn(
-                      "truncate text-sm font-semibold",
-                      isQualifying ? "text-white" : "text-white/60",
+                      "truncate text-sm",
+                      isQualifying ? "font-bold" : "font-semibold",
                     )}
+                    style={{ color: isQualifying ? "var(--arena-foreground)" : "var(--arena-muted)" }}
                   >
                     {name}
                   </span>
@@ -116,14 +127,14 @@ export function StandingsTable({
                 </div>
 
                 {/* Stats */}
-                <div className="flex gap-3 text-xs tabular-nums text-white/40">
+                <div className="flex gap-3 text-xs tabular-nums text-(--arena-muted)">
                   <span className="w-6 text-center">{row.wins + row.losses}</span>
-                  <span className="w-6 text-center text-(--state-played)">{row.wins}</span>
-                  <span className="w-6 text-center text-(--state-noshow)">{row.losses}</span>
+                  <span className="w-6 text-center" style={{ color: "var(--state-played)" }}>{row.wins}</span>
+                  <span className="w-6 text-center" style={{ color: "var(--state-noshow)" }}>{row.losses}</span>
                   <span className="w-8 text-center">
                     {row.setsWon}-{row.setsLost}
                   </span>
-                  <span className="w-6 text-center font-bold text-white/70">{row.points}</span>
+                  <span className="w-6 text-center font-bold text-(--arena-foreground)">{row.points}</span>
                 </div>
               </motion.div>
             );

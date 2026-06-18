@@ -23,7 +23,7 @@ export function UpsetBadge({ winnerName }: UpsetBadgeProps) {
     >
       <span>🔥</span>
       ZEBRA
-      <span className="ml-0.5 text-white/50 font-normal normal-case tracking-normal">
+      <span className="ml-0.5 text-(--arena-muted) font-normal normal-case tracking-normal">
         {winnerName} eliminou o favorito
       </span>
     </motion.div>

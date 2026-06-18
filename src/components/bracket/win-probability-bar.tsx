@@ -15,7 +15,7 @@ export function WinProbabilityBar({ pA, nameA, nameB }: WinProbabilityBarProps) 
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between text-[10px] font-semibold text-white/50">
+      <div className="flex items-center justify-between text-[10px] font-semibold text-(--arena-muted)">
         <span className={aWins ? "text-(--state-active)" : ""}>
           {nameA} {pA}%
         </span>
@@ -25,7 +25,7 @@ export function WinProbabilityBar({ pA, nameA, nameB }: WinProbabilityBarProps) 
       </div>
       <div
         className="relative h-1.5 overflow-hidden rounded-full"
-        style={{ background: "rgba(255,255,255,0.08)" }}
+        style={{ background: "color-mix(in srgb, var(--arena-foreground) 10%, transparent)" }}
         aria-label={`Probabilidade: ${nameA} ${pA}%, ${nameB} ${pB}%`}
         role="meter"
         aria-valuenow={pA}
