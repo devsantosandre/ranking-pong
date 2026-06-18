@@ -39,8 +39,12 @@ export function nextPowerOfTwo(n: number): number {
   return p;
 }
 
-/** Gera a ordem de semeadura padrão (bracket espelho clássico) */
-function buildStandardOrder(n: number): number[] {
+/** Gera a ordem de semeadura padrão (bracket espelho clássico).
+ * Retorna, para cada posição do bracket, o número do seed que a ocupa.
+ * Ex.: n=8 → [1,8,5,4,3,6,7,2]. Garante que, faltando jogadores (BYEs nos
+ * seeds mais altos), cada BYE cai num confronto distinto — nunca dois BYEs
+ * no mesmo jogo. */
+export function buildStandardOrder(n: number): number[] {
   if (n === 1) return [1];
   const half = buildStandardOrder(n / 2);
   const result: number[] = [];

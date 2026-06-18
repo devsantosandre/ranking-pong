@@ -1,7 +1,7 @@
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
 import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
 import { computeBracketLayout } from "../bracket-layout";
-import { standardSeeding, eloSeeding, sequentialSeeding, nextPowerOfTwo } from "../seeding";
+import { nextPowerOfTwo, buildStandardOrder } from "../seeding";
 import { computeGroupStandings } from "../standings";
 
 function uuid() {
@@ -364,6 +364,9 @@ export const mockRepo: TournamentRepo = {
   },
 
   async generateBracket(tournamentId, method: SeedingMethod) {
+    // A força de cada jogador vem do `seed` definido no seeding; `method` é
+    // mantido na assinatura por paridade com a RPC do Supabase.
+    void method;
     seedTournament();
     const t = tournaments.get(tournamentId);
     const parts = (participants.get(tournamentId) ?? []).filter((p) => p.signupStatus === "confirmed");
@@ -411,52 +414,75 @@ export const mockRepo: TournamentRepo = {
     }
 
     // ── Eliminatória simples ──
-    const seeded = method === "elo" ? eloSeeding(parts, new Map())
-      : method === "sequential" ? sequentialSeeding(parts)
-      : standardSeeding(parts);
-
-    const n = nextPowerOfTwo(seeded.length);
-    const matchList: TournamentMatch[] = [];
+    // Ordena por força (seed do organizador; menor = mais forte) e posiciona no
+    // bracket pela ordem espelhada — assim os BYEs caem distribuídos nos seeds
+    // altos, nunca deixando um confronto "a definir × a definir".
+    const ranked = [...parts].sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
+    const n = nextPowerOfTwo(ranked.length);
     const rounds = Math.log2(n);
+    const order = buildStandardOrder(n);
+    const slots = order.map((seedNum) => ranked[seedNum - 1] ?? null); // null = BYE
 
-    // matchIds[k] corresponde ao round = (rounds - k)
-    // matchIds[0] = rodada inicial (mais partidas, round=rounds)
-    // matchIds[rounds-1] = final (1 partida, round=1)
+    const matchList: TournamentMatch[] = [];
+    const matchById = new Map<string, TournamentMatch>();
+
+    // matchIds[k] → round = (rounds - k); [0] = rodada inicial, [rounds-1] = final
     const matchIds: string[][] = [];
     for (let r = 1; r <= rounds; r++) {
       const count = Math.pow(2, rounds - r);
       matchIds.push(Array.from({ length: count }, () => uuid()));
     }
 
-    // Rodada inicial (round = rounds, matchIds[0])
+    // Rodada inicial
     const initialIds = matchIds[0]!;
     for (let i = 0; i < initialIds.length; i++) {
-      const a = seeded[i * 2] ?? null;
-      const b = seeded[i * 2 + 1] ?? null;
+      const a = slots[i * 2] ?? null;
+      const b = slots[i * 2 + 1] ?? null;
+      const isBye = (!!a && !b) || (!!b && !a);
+      const winner = isBye ? (a?.id ?? b?.id ?? null) : null;
       const nextMatchId = rounds > 1 ? (matchIds[1]![Math.floor(i / 2)] ?? null) : null;
-      matchList.push({
+      const m: TournamentMatch = {
         id: initialIds[i]!, tournamentId, round: rounds, bracket: "winners", slot: i,
         groupId: null, participantAId: a?.id ?? null, participantBId: b?.id ?? null,
-        scoreA: null, scoreB: null, sets: null, winnerParticipantId: b ? null : (a?.id ?? null),
+        scoreA: null, scoreB: null, sets: null, winnerParticipantId: winner,
         nextMatchId, nextMatchSlot: (i % 2) as 0 | 1,
-        status: b ? "pending" : "finished",
-        deadlineAt: null, scheduledAt: null, tableNo: null, startedAt: null, finishedAt: null,
-      });
+        status: isBye ? "finished" : "pending",
+        deadlineAt: null, scheduledAt: null, tableNo: null, startedAt: null,
+        finishedAt: isBye ? new Date().toISOString() : null,
+      };
+      matchList.push(m);
+      matchById.set(m.id, m);
     }
 
-    // Rodadas subsequentes: round r → matchIds[rounds - r]
+    // Rodadas subsequentes (vazias)
     for (let r = rounds - 1; r >= 1; r--) {
       const ids = matchIds[rounds - r]!;
       for (let i = 0; i < ids.length; i++) {
         const nextMatchId = r > 1 ? (matchIds[rounds - r + 1]![Math.floor(i / 2)] ?? null) : null;
-        matchList.push({
+        const m: TournamentMatch = {
           id: ids[i]!, tournamentId, round: r, bracket: "winners", slot: i,
           groupId: null, participantAId: null, participantBId: null,
           scoreA: null, scoreB: null, sets: null, winnerParticipantId: null,
           nextMatchId, nextMatchSlot: r > 1 ? ((i % 2) as 0 | 1) : null,
           status: "pending",
           deadlineAt: null, scheduledAt: null, tableNo: null, startedAt: null, finishedAt: null,
-        });
+        };
+        matchList.push(m);
+        matchById.set(m.id, m);
+      }
+    }
+
+    // Propaga vencedores de BYE para a rodada seguinte
+    for (const m of matchList) {
+      if (m.status === "finished" && m.winnerParticipantId && m.nextMatchId) {
+        const next = matchById.get(m.nextMatchId);
+        if (next) {
+          if (m.nextMatchSlot === 0) next.participantAId = m.winnerParticipantId;
+          else next.participantBId = m.winnerParticipantId;
+          if (next.participantAId && next.participantBId && next.status === "pending") {
+            next.status = "scheduled";
+          }
+        }
       }
     }
 

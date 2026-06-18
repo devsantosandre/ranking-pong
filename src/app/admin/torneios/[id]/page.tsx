@@ -532,18 +532,45 @@ export default function AdminTournamentPage() {
                       {confirmed.length < 2 ? "Adicione ao menos 2 jogadores" : "Pronto para gerar"}
                     </p>
                   </div>
-                  {confirmed.length >= 2 && !hasGroups && (
-                    <button
-                      type="button"
-                      onClick={() => setGenerateConfirmOpen(true)}
-                      disabled={isPending}
-                      className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
-                      style={{ background: "var(--arena-primary)" }}
-                    >
-                      <Network className="h-4 w-4" />
-                      Gerar chave agora
-                    </button>
-                  )}
+                  {confirmed.length >= 2 && !hasGroups && (() => {
+                    const num = confirmed.length;
+                    const isPow2 = (num & (num - 1)) === 0;
+                    const nextPow = 1 << Math.ceil(Math.log2(num));
+                    const byes = nextPow - num;
+                    const prevPow = nextPow / 2;
+                    return (
+                      <div className="flex w-full flex-col items-center gap-3">
+                        {!isPow2 && (
+                          <div
+                            className="w-full rounded-xl px-3 py-2.5 text-left"
+                            style={{
+                              background: "color-mix(in srgb, #f5a524 12%, transparent)",
+                              border: "1px solid color-mix(in srgb, #f5a524 30%, transparent)",
+                            }}
+                          >
+                            <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "#b45309" }}>
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                              {byes} jogador{byes > 1 ? "es" : ""} avança{byes > 1 ? "m" : ""} sem jogar a 1ª rodada
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-(--arena-muted)">
+                              Com {num} jogadores o chaveamento não fecha redondo. Para todos jogarem desde o início,
+                              use {prevPow} ou {nextPow} jogadores.
+                            </p>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setGenerateConfirmOpen(true)}
+                          disabled={isPending}
+                          className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
+                          style={{ background: "var(--arena-primary)" }}
+                        >
+                          <Network className="h-4 w-4" />
+                          {isPow2 ? "Gerar chave agora" : "Gerar mesmo assim"}
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {hasGroups && !hasBracket && (
                     <p className="text-sm text-(--arena-muted)">
                       Finalize a fase de grupos para gerar o mata-mata.
