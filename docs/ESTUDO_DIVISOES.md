@@ -1,6 +1,8 @@
 # Estudo: Divisões em Torneios
 
-> **Status (2026-06-18):** ✅ **IMPLEMENTADO mock-first** (Opção B, fases F1–F5). Validado contra a indústria (§12.5). Migration F6 criada só em arquivo (`20260618000000_tournament_events.sql`), **não aplicada**. Falta só aplicar a migration + validar contra Supabase local. Este documento permanece como o design de referência.
+> **Status (2026-06-18):** ✅ **IMPLEMENTADO mock-first** (Opção B, fases F1–F5). Validado contra a indústria (§12.5). Migration F6 criada só em arquivo (`20260618000000_tournament_events.sql`), **não aplicada**. Falta só aplicar a migration + validar contra Supabase local.
+>
+> ⚠️ **NOTA DE NOMENCLATURA (decidida com o organizador após este estudo):** na **UI**, o conceito foi **unificado** — não existe "Evento" separado de "Torneio". Tudo é **Torneio**, que contém uma ou mais **Categorias** (este doc usa "evento/divisão", que no produto viram **torneio/categoria**). O menu "Eventos" foi removido; criar torneio oferece "Único" ou "Com categorias". Por baixo o modelo é o mesmo (`tournament_events` = o torneio agrupador; cada categoria = um `tournament` com `event_id`). Rotas internas ainda usam `/eventos` (cosmético). Validação da terminologia: USATT/ITTF usam Torneio→evento/categoria; "categoria" é o termo BR mais familiar (cobre nível A/B/C e tipo Absoluto/Veteranos/Feminino).
 > **Data:** 2026-06-18
 > **Autor:** Claude (a pedido do organizador)
 > **Regra do projeto respeitada:** nenhuma migration foi aplicada; os SQLs abaixo são esboços ilustrativos.
