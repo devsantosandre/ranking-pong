@@ -1,6 +1,7 @@
 # Design — Módulo de Rachão / Torneios
 
-> Próxima fase de desenvolvimento após as Temporadas.
+> ⚠️ **Status (2026-06-18): design absorvido pelo Arena v2 e em boa parte implementado.** Este documento é a visão de produto original do Rachão; a execução, a arquitetura final e o estado atual estão em **[`docs/arena/`](arena/README.md)** — em especial o mapa vivo [`arena/12-estado-atual-e-proximos-passos.md`](arena/12-estado-atual-e-proximos-passos.md). Mantido como referência de intenção.
+>
 > Documento de design para orientar a implementação.
 
 ---

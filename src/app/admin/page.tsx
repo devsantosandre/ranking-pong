@@ -15,6 +15,7 @@ import {
   Shield,
   Tv,
   Medal,
+  Trophy,
 } from "lucide-react";
 
 const adminSections = [
@@ -60,6 +61,14 @@ const adminSections = [
     icon: Medal,
     description: "Criar, encerrar e reabrir temporadas",
     color: "text-yellow-600 bg-yellow-100",
+    adminOnly: true,
+  },
+  {
+    href: "/admin/torneios",
+    label: "Torneios",
+    icon: Trophy,
+    description: "Criar e gerenciar torneios, seeds e resultados",
+    color: "text-violet-600 bg-violet-100",
     adminOnly: true,
   },
   {

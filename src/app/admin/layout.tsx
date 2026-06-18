@@ -31,5 +31,9 @@ export default function AdminLayout({
     return null;
   }
 
-  return <>{children}</>;
+  return (
+    <div className="arena min-h-screen" style={{ background: "var(--arena-bg-1)" }}>
+      {children}
+    </div>
+  );
 }
