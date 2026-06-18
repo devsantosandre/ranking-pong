@@ -121,9 +121,8 @@ export function BracketClientShell({
           <div
             className="arena w-full max-w-sm rounded-t-3xl p-5 sm:rounded-3xl"
             style={{
-              background: "var(--glass-bg-strong)",
+              background: "var(--popover)",
               border: "1px solid var(--glass-border)",
-              backdropFilter: "blur(20px)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
