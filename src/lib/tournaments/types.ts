@@ -33,6 +33,43 @@ export interface Tournament {
   createdBy: string;
   createdAt: string;
   finishedAt: string | null;
+  // Divisões (Opção B): quando o torneio pertence a um evento, é uma divisão dele.
+  // eventId null = torneio avulso (comportamento legado, intacto).
+  eventId: string | null;
+  divisionLabel: string | null;
+  divisionOrder: number;
+}
+
+/**
+ * Evento (o "dia"/competição guarda-chuva) que agrupa várias divisões.
+ * Cada divisão É um Tournament independente apontando para este evento.
+ */
+export interface TournamentEvent {
+  id: string;
+  name: string;
+  eventDate: string | null;
+  venue: string | null;
+  branding: { logoUrl?: string; primary?: string } | null;
+  seasonId: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** Resumo leve de uma divisão, para o hub admin / seletores / TV. */
+export interface DivisionSummary {
+  id: string; // tournamentId da divisão
+  name: string;
+  divisionLabel: string | null;
+  divisionOrder: number;
+  format: TournamentFormat;
+  status: TournamentStatus;
+  participantCount: number;
+  championName: string | null;
+  hasLiveMatch: boolean;
+}
+
+export interface TournamentEventDetail extends TournamentEvent {
+  divisions: DivisionSummary[];
 }
 
 export interface TournamentParticipant {
@@ -122,6 +159,22 @@ export function tournamentFromRow(row: Record<string, unknown>): Tournament {
     createdBy: row.created_by as string,
     createdAt: row.created_at as string,
     finishedAt: (row.finished_at as string | null) ?? null,
+    eventId: (row.event_id as string | null) ?? null,
+    divisionLabel: (row.division_label as string | null) ?? null,
+    divisionOrder: (row.division_order as number | null) ?? 0,
+  };
+}
+
+export function tournamentEventFromRow(row: Record<string, unknown>): TournamentEvent {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    eventDate: (row.event_date as string | null) ?? null,
+    venue: (row.venue as string | null) ?? null,
+    branding: (row.branding as TournamentEvent["branding"]) ?? null,
+    seasonId: (row.season_id as string | null) ?? null,
+    createdBy: row.created_by as string,
+    createdAt: row.created_at as string,
   };
 }
 

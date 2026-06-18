@@ -306,6 +306,26 @@ Cada fase é entregável e reversível isoladamente.
 5. **Best-of por divisão.** Naturalmente independente (cada divisão é um torneio). ✔️
 6. **Relação com ELO/temporada.** ✅ **DECIDIDO: isoladas.** Divisões **não** afetam o ranking ELO geral nem a temporada — seguem a regra do Rachão. Consequência de modelagem: `tournament_events.season_id` torna-se **opcional/dispensável** (pode ficar como metadado de organização, mas sem efeito no ELO). Os resultados das divisões não disparam triggers de ELO (já garantido por usarem `tournament_matches`, que não dispara ELO).
 7. **Quantas divisões por evento?** Sem limite técnico; a UI (chips/cards) deve aguentar ~6 com conforto.
+8. **Conflito de agenda (jogador em 2 divisões com partidas ao mesmo tempo).** Validado pela indústria (SPORT Software bloqueia). **Só se aplica quando houver agendamento por mesa/horário** — hoje não há, então é **refinamento futuro**. Por ora, a responsabilidade é do organizador.
+
+---
+
+## 12.5. Validação com a prática de torneios (pesquisa — 2026-06-18)
+
+Antes de implementar, o design foi confrontado com como softwares de torneio reais resolvem o problema. **A Opção B está alinhada com a indústria:**
+
+- **Challonge** tem uma feature **"Event"** que agrupa **múltiplos torneios independentes** numa página só (para convenções com vários torneios no mesmo dia) — é **literalmente a Opção B** (evento agrupa torneios; cada divisão é um torneio). Confirma também a separação entre *Group Stage* (grupos que convergem num torneio) e *Event* (torneios paralelos) → valida nossa desambiguação §2.
+- **PLAYINGA**: "um torneio pode ter múltiplas divisões (ex.: U19, Mens Singles)" com estatísticas **agregadas por divisão e por torneio** — confirma o modelo mental do organizador ("evento do dia" + abas de divisão).
+- **TV/telão**: **Score7** usa `?interval=N` (range **5–120s**, default **15s**) para ciclar slides automaticamente; **Scoreholio** rotaciona entre quadras e o bracket. Nosso `/tv/evento/[id]?rotate=N` (§8) adota a **mesma convenção** — ajustar para range 5–120s, default 15s, e priorizar divisões com jogo ao vivo.
+- **Terminologia**: a indústria usa "divisão", "categoria" e "evento" de forma sobreposta (divisão por nível/rating band; categoria por tipo — Absoluto/Veteranos/Feminino). Nosso `division_label` é **texto livre**, então cobre os dois sem mudança de modelo.
+
+**Refinamentos que a pesquisa acrescentou (futuros, não bloqueiam a implementação):**
+- **Conflito de agenda**: o SPORT Software bloqueia um jogador de jogar em duas disciplinas ao mesmo tempo. Como o mesmo jogador pode estar em várias divisões (decisão §11.1), isso vira relevante **quando houver agendamento por mesa/horário** — até lá, não se aplica. Adicionado como edge case §11.8.
+- **Distribuição por rating band**: PlayPass cria divisões balanceadas por faixa de rating (ex.: 1400–1599). Casa com o refinamento §11.3 (distribuir inscritos por divisão usando o ELO).
+
+**Veredito da validação:** plano de acordo, sem erros estruturais. Prosseguir com a Fase F1 (mock-first).
+
+Fontes: [Challonge — Competition Formats](https://kb.challonge.com/en/article/learn-about-challonge-competition-formats-1f8j1cf/) · [PLAYINGA — Table Tennis](https://playinga.com/en/table-tennis-tournament-software/) · [Score7 — TV no telão](https://kb.score7.io/blog/guides/display-tournament-on-tv-venue-monitor/) · [Scoreholio — Dashboard na TV](https://docs.scoreholio.com/scoreboards-and-dashboards/display-dashboard-on-a-tv) · [PlayPass — Table Tennis Scheduler](https://playpass.com/sports-software/table-tennis-schedule-maker)
 
 ---
 

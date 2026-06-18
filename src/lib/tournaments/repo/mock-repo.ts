@@ -1,5 +1,5 @@
-import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput } from "./tournament-repo";
-import type { Tournament, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
+import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
+import type { Tournament, TournamentEvent, TournamentEventDetail, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
 import { computeBracketLayout } from "../bracket-layout";
 import { standardSeeding, eloSeeding, sequentialSeeding, nextPowerOfTwo } from "../seeding";
 import { computeGroupStandings } from "../standings";
@@ -16,17 +16,20 @@ type MockGlobal = {
   __mockParticipants?: Map<string, TournamentParticipant[]>;
   __mockMatches?: Map<string, TournamentMatch[]>;
   __mockGroupSlotMap?: Map<string, GroupSlotEntry[]>;
+  __mockEvents?: Map<string, TournamentEvent>;
 };
 const g = globalThis as typeof globalThis & MockGlobal;
 if (!g.__mockTournaments) g.__mockTournaments = new Map<string, Tournament>();
 if (!g.__mockParticipants) g.__mockParticipants = new Map<string, TournamentParticipant[]>();
 if (!g.__mockMatches) g.__mockMatches = new Map<string, TournamentMatch[]>();
 if (!g.__mockGroupSlotMap) g.__mockGroupSlotMap = new Map<string, GroupSlotEntry[]>();
+if (!g.__mockEvents) g.__mockEvents = new Map<string, TournamentEvent>();
 
 const tournaments = g.__mockTournaments;
 const participants = g.__mockParticipants;
 const matches = g.__mockMatches;
 const groupSlotMap = g.__mockGroupSlotMap;
+const events = g.__mockEvents;
 
 // ── Helpers para o fluxo grupos_knockout ──
 
@@ -148,6 +151,7 @@ function seedTournament(): Tournament {
       verificationCode: null, maxParticipants: 8, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
+      eventId: null, divisionLabel: null, divisionOrder: 0,
     });
     participants.set(id, [
       { id: "p1", tournamentId: id, userId: "u1", guestName: "Carlos Almeida",   seed: 1, groupId: null, pot: null, flag: "br", avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -168,6 +172,7 @@ function seedGroupTournament(): Tournament {
       verificationCode: null, maxParticipants: 6, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
+      eventId: null, divisionLabel: null, divisionOrder: 0,
     });
     const gParts: TournamentParticipant[] = [
       { id: "g1", tournamentId: id, userId: null, guestName: "Felipe Torres",    seed: 1, groupId: "A", pot: null, flag: null, avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -218,6 +223,7 @@ function seedKingTournament(): Tournament {
       verificationCode: null, maxParticipants: null, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
+      eventId: null, divisionLabel: null, divisionOrder: 0,
     });
     const kParts: TournamentParticipant[] = [
       { id: "k1", tournamentId: id, userId: null, guestName: "Rodrigo Costa",    seed: 1, groupId: null, pot: null, flag: null, avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -251,7 +257,8 @@ export const mockRepo: TournamentRepo = {
     seedTournament();
     seedGroupTournament();
     seedKingTournament();
-    const all = Array.from(tournaments.values());
+    // Divisões (eventId != null) são listadas via getEvent, não soltas aqui.
+    const all = Array.from(tournaments.values()).filter((t) => t.eventId === null);
     if (!filter?.status) return all;
     return all.filter((t) => t.status === filter.status);
   },
@@ -278,6 +285,9 @@ export const mockRepo: TournamentRepo = {
       verificationCode: null, maxParticipants: input.maxParticipants ?? null,
       seasonId: input.seasonId ?? null, championUserId: null, championName: null,
       branding: null, createdBy: input.createdBy, createdAt: new Date().toISOString(), finishedAt: null,
+      eventId: input.eventId ?? null,
+      divisionLabel: input.divisionLabel ?? null,
+      divisionOrder: input.divisionOrder ?? 0,
     };
     tournaments.set(id, t);
     participants.set(id, []);
@@ -547,4 +557,131 @@ export const mockRepo: TournamentRepo = {
     const t = tournaments.get(tournamentId);
     if (t) tournaments.set(tournamentId, { ...t, status: "active" });
   },
+
+  // ── Eventos / Divisões ──
+
+  async listEvents() {
+    seedEventDemo();
+    return Array.from(events.values()).sort((a, b) => (b.eventDate ?? "").localeCompare(a.eventDate ?? ""));
+  },
+
+  async getEvent(eventId) {
+    seedEventDemo();
+    const ev = events.get(eventId);
+    if (!ev) return null;
+    const divisions: DivisionSummary[] = Array.from(tournaments.values())
+      .filter((t) => t.eventId === eventId)
+      .sort((a, b) => a.divisionOrder - b.divisionOrder)
+      .map(buildDivisionSummary);
+    return { ...ev, divisions };
+  },
+
+  async createEvent(input: CreateEventInput) {
+    const id = uuid();
+    const ev: TournamentEvent = {
+      id, name: input.name, eventDate: input.eventDate ?? null, venue: input.venue ?? null,
+      branding: null, seasonId: input.seasonId ?? null, createdBy: input.createdBy,
+      createdAt: new Date().toISOString(),
+    };
+    events.set(id, ev);
+    return ev;
+  },
+
+  async updateEvent(eventId, patch) {
+    const ev = events.get(eventId);
+    if (!ev) throw new Error("Evento não encontrado");
+    const updated = { ...ev, ...patch };
+    events.set(eventId, updated);
+    return updated;
+  },
+
+  async addDivision(eventId, input: AddDivisionInput) {
+    const ev = events.get(eventId);
+    if (!ev) throw new Error("Evento não encontrado");
+    const existing = Array.from(tournaments.values()).filter((t) => t.eventId === eventId);
+    const id = uuid();
+    const t: Tournament = {
+      id, name: `${ev.name} — ${input.label}`, format: input.format, bestOf: input.bestOf,
+      status: "draft", seedingMethod: input.seedingMethod ?? "standard",
+      registrationMode: input.registrationMode ?? "invite",
+      verificationCode: null, maxParticipants: null, seasonId: ev.seasonId,
+      championUserId: null, championName: null, branding: ev.branding,
+      createdBy: ev.createdBy, createdAt: new Date().toISOString(), finishedAt: null,
+      eventId, divisionLabel: input.label, divisionOrder: existing.length,
+    };
+    tournaments.set(id, t);
+    participants.set(id, []);
+    matches.set(id, []);
+    return t;
+  },
+
+  async setDivisionOrder(eventId, order) {
+    for (const o of order) {
+      const t = tournaments.get(o.tournamentId);
+      if (t && t.eventId === eventId) tournaments.set(o.tournamentId, { ...t, divisionOrder: o.divisionOrder });
+    }
+  },
 };
+
+function buildDivisionSummary(t: Tournament): DivisionSummary {
+  const ps = participants.get(t.id) ?? [];
+  const ms = matches.get(t.id) ?? [];
+  return {
+    id: t.id, name: t.name, divisionLabel: t.divisionLabel,
+    divisionOrder: t.divisionOrder, format: t.format, status: t.status,
+    participantCount: ps.length, championName: t.championName,
+    hasLiveMatch: ms.some((m) => m.status === "in_progress"),
+  };
+}
+
+// Evento demo: "Rachão de Sábado" com 3 divisões (A active c/ jogo ao vivo, B inscrições, C rascunho).
+function seedEventDemo(): TournamentEvent {
+  const eventId = "mock-event-1";
+  if (events.has(eventId)) return events.get(eventId)!;
+  events.set(eventId, {
+    id: eventId, name: "Rachão de Sábado",
+    eventDate: new Date().toISOString().slice(0, 10), venue: "Escola de Tênis de Mesa",
+    branding: null, seasonId: null, createdBy: "admin", createdAt: new Date().toISOString(),
+  });
+
+  const mkParts = (divId: string, names: string[]): TournamentParticipant[] =>
+    names.map((n, i) => ({
+      id: `${divId}-p${i + 1}`, tournamentId: divId, userId: null, guestName: n,
+      seed: i + 1, groupId: null, pot: null, flag: null, avatarUrl: null, color: null,
+      signupStatus: "confirmed" as const, partnerParticipantId: null,
+    }));
+
+  const mkDiv = (divId: string, label: string, order: number, format: Tournament["format"], status: Tournament["status"]) => {
+    tournaments.set(divId, {
+      id: divId, name: `Rachão de Sábado — ${label}`, format, bestOf: 3,
+      status, seedingMethod: "standard", registrationMode: "invite",
+      verificationCode: null, maxParticipants: null, seasonId: null,
+      championUserId: null, championName: null, branding: null,
+      createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
+      eventId, divisionLabel: label, divisionOrder: order,
+    });
+  };
+
+  // Divisão A — eliminatória em andamento, com 1 semi ao vivo (renderiza bracket + indicador "ao vivo")
+  mkDiv("mock-div-a", "A · Avançados", 0, "single_elimination", "active");
+  participants.set("mock-div-a", mkParts("mock-div-a", ["Felipe Torres", "Marina Lopes", "Roberto Nunes", "Juliana Castro"]));
+  const aSf1 = uuid(); const aSf2 = uuid(); const aFinal = uuid();
+  const now = new Date().toISOString();
+  matches.set("mock-div-a", [
+    { id: aSf1, tournamentId: "mock-div-a", round: 2, bracket: "winners", slot: 0, groupId: null, participantAId: "mock-div-a-p1", participantBId: "mock-div-a-p4", scoreA: 3, scoreB: 1, sets: null, winnerParticipantId: "mock-div-a-p1", nextMatchId: aFinal, nextMatchSlot: 0, status: "finished", deadlineAt: null, scheduledAt: null, tableNo: 1, startedAt: now, finishedAt: now },
+    { id: aSf2, tournamentId: "mock-div-a", round: 2, bracket: "winners", slot: 1, groupId: null, participantAId: "mock-div-a-p2", participantBId: "mock-div-a-p3", scoreA: null, scoreB: null, sets: null, winnerParticipantId: null, nextMatchId: aFinal, nextMatchSlot: 1, status: "in_progress", deadlineAt: null, scheduledAt: null, tableNo: 2, startedAt: now, finishedAt: null },
+    { id: aFinal, tournamentId: "mock-div-a", round: 1, bracket: "winners", slot: 0, groupId: null, participantAId: "mock-div-a-p1", participantBId: null, scoreA: null, scoreB: null, sets: null, winnerParticipantId: null, nextMatchId: null, nextMatchSlot: null, status: "pending", deadlineAt: null, scheduledAt: null, tableNo: null, startedAt: null, finishedAt: null },
+  ]);
+
+  // Divisão B — inscrições abertas, sem chave ainda
+  mkDiv("mock-div-b", "B · Intermediários", 1, "single_elimination", "registration");
+  participants.set("mock-div-b", mkParts("mock-div-b", ["Diego Pinto", "Fernanda Melo", "Bruno Alves", "Carla Dias"]));
+  matches.set("mock-div-b", []);
+
+  // Divisão C — rascunho
+  mkDiv("mock-div-c", "C · Iniciantes", 2, "groups_knockout", "draft");
+  participants.set("mock-div-c", mkParts("mock-div-c", ["Léo Maia", "Tom Reis", "Ana Vaz", "Bia Sá"]));
+  matches.set("mock-div-c", []);
+
+  return events.get(eventId)!;
+}

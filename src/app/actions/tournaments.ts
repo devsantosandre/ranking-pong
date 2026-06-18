@@ -234,3 +234,74 @@ export async function registerSelf(tournamentId: string, rawInput: unknown) {
   revalidatePath(`/torneios/${tournamentId}/inscrever`);
   return { participant: added[0]! };
 }
+
+// ── Eventos / Divisões (Opção B) ──────────────────────────────────────────
+
+function invalidateEvent(eventId: string) {
+  revalidatePath("/admin/eventos");
+  revalidatePath(`/admin/eventos/${eventId}`);
+  revalidatePath(`/eventos/${eventId}`);
+  revalidatePath(`/tv/evento/${eventId}`);
+  revalidatePath("/torneios");
+}
+
+const createEventSchema = z.object({
+  name: z.string().min(2).max(100),
+  eventDate: z.string().optional(),
+  venue: z.string().max(120).optional(),
+  seasonId: z.string().uuid().optional(),
+});
+
+export async function createEvent(rawInput: unknown) {
+  const user = await assertAdmin();
+  const input = createEventSchema.parse(rawInput);
+  const repo = await getTournamentRepo();
+  const event = await repo.createEvent({ ...input, createdBy: user.id });
+  await logAdmin("event_create", { id: event.id, name: event.name });
+  revalidatePath("/admin/eventos");
+  return { event };
+}
+
+export async function updateEvent(eventId: string, rawPatch: unknown) {
+  await assertAdmin();
+  const patch = z.object({
+    name: z.string().min(2).max(100).optional(),
+    eventDate: z.string().optional(),
+    venue: z.string().max(120).optional(),
+  }).parse(rawPatch);
+  const repo = await getTournamentRepo();
+  const event = await repo.updateEvent(eventId, patch);
+  invalidateEvent(eventId);
+  return { event };
+}
+
+const addDivisionSchema = z.object({
+  label: z.string().min(1).max(60),
+  format: z.enum(["single_elimination","double_elimination","round_robin","groups_knockout","swiss","scorecard","americano","king_of_table","league"]),
+  bestOf: z.number().int().refine((n) => [1,3,5,7].includes(n), "Deve ser 1, 3, 5 ou 7"),
+  seedingMethod: z.enum(["standard","pots","sequential","manual","elo"]).optional(),
+  registrationMode: z.enum(["invite","open"]).optional(),
+});
+
+export async function addDivision(eventId: string, rawInput: unknown) {
+  await assertAdmin();
+  const input = addDivisionSchema.parse(rawInput);
+  const repo = await getTournamentRepo();
+  const division = await repo.addDivision(eventId, input);
+  await logAdmin("event_add_division", { event_id: eventId, division_id: division.id, label: input.label });
+  invalidateEvent(eventId);
+  return { division };
+}
+
+const setDivisionOrderSchema = z.array(
+  z.object({ tournamentId: z.string().min(1), divisionOrder: z.number().int().min(0) }),
+);
+
+export async function setDivisionOrder(eventId: string, rawOrder: unknown) {
+  await assertAdmin();
+  const order = setDivisionOrderSchema.parse(rawOrder);
+  const repo = await getTournamentRepo();
+  await repo.setDivisionOrder(eventId, order);
+  invalidateEvent(eventId);
+  return { ok: true };
+}

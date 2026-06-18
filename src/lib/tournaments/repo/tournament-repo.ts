@@ -1,5 +1,7 @@
 import type {
   Tournament,
+  TournamentEvent,
+  TournamentEventDetail,
   TournamentParticipant,
   TournamentMatch,
   TournamentDetail,
@@ -18,6 +20,26 @@ export interface CreateTournamentInput {
   maxParticipants?: number;
   seasonId?: string;
   createdBy: string;
+  // Divisões: quando preenchido, o torneio nasce como divisão de um evento.
+  eventId?: string;
+  divisionLabel?: string;
+  divisionOrder?: number;
+}
+
+export interface CreateEventInput {
+  name: string;
+  eventDate?: string;
+  venue?: string;
+  seasonId?: string;
+  createdBy: string;
+}
+
+export interface AddDivisionInput {
+  label: string;
+  format: TournamentFormat;
+  bestOf: number;
+  seedingMethod?: SeedingMethod;
+  registrationMode?: RegistrationMode;
 }
 
 export interface AddParticipantInput {
@@ -62,4 +84,12 @@ export interface TournamentRepo {
   finishTournament(tournamentId: string, championParticipantId: string): Promise<Tournament>;
   openRegistration(tournamentId: string): Promise<void>;
   closeRegistration(tournamentId: string): Promise<void>;
+
+  // ── Eventos / Divisões (Opção B) — só orquestração; a engine acima não muda ──
+  listEvents(): Promise<TournamentEvent[]>;
+  getEvent(eventId: string): Promise<TournamentEventDetail | null>;
+  createEvent(input: CreateEventInput): Promise<TournamentEvent>;
+  updateEvent(eventId: string, patch: Partial<Pick<TournamentEvent, "name" | "eventDate" | "venue" | "branding">>): Promise<TournamentEvent>;
+  addDivision(eventId: string, input: AddDivisionInput): Promise<Tournament>;
+  setDivisionOrder(eventId: string, order: { tournamentId: string; divisionOrder: number }[]): Promise<void>;
 }
