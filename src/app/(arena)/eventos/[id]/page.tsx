@@ -30,7 +30,7 @@ export default async function EventoPublicoPage({
   const totalPlayers = divisions.reduce((acc, d) => acc + d.participantCount, 0);
 
   return (
-    <ArenaShell title={event.name} subtitle="Evento" showBack>
+    <ArenaShell title={event.name} subtitle="Torneio" showBack>
       <div className="flex flex-col gap-4">
         <GlassCard className="flex items-center justify-between gap-3">
           <div className="min-w-0 space-y-1">
@@ -47,7 +47,7 @@ export default async function EventoPublicoPage({
               )}
             </div>
             <p className="text-xs text-(--arena-muted)">
-              {divisions.length} {divisions.length === 1 ? "divisão" : "divisões"} · {totalPlayers} {totalPlayers === 1 ? "jogador" : "jogadores"}
+              {divisions.length} {divisions.length === 1 ? "categoria" : "categorias"} · {totalPlayers} {totalPlayers === 1 ? "jogador" : "jogadores"}
             </p>
           </div>
           <Link href={`/tv/evento/${event.id}`} target="_blank">
@@ -62,12 +62,12 @@ export default async function EventoPublicoPage({
         </GlassCard>
 
         <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
-          Divisões
+          Categorias
         </p>
 
         {divisions.length === 0 && (
           <GlassCard className="py-10 text-center">
-            <p className="text-sm text-(--arena-muted)">As divisões aparecem aqui quando começarem</p>
+            <p className="text-sm text-(--arena-muted)">As categorias aparecem aqui quando começarem</p>
           </GlassCard>
         )}
 

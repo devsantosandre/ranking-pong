@@ -2,6 +2,7 @@ import type {
   Tournament,
   TournamentEvent,
   TournamentEventDetail,
+  EventListItem,
   TournamentParticipant,
   TournamentMatch,
   TournamentDetail,
@@ -86,7 +87,7 @@ export interface TournamentRepo {
   closeRegistration(tournamentId: string): Promise<void>;
 
   // ── Eventos / Divisões (Opção B) — só orquestração; a engine acima não muda ──
-  listEvents(): Promise<TournamentEvent[]>;
+  listEvents(): Promise<EventListItem[]>;
   getEvent(eventId: string): Promise<TournamentEventDetail | null>;
   createEvent(input: CreateEventInput): Promise<TournamentEvent>;
   updateEvent(eventId: string, patch: Partial<Pick<TournamentEvent, "name" | "eventDate" | "venue" | "branding">>): Promise<TournamentEvent>;

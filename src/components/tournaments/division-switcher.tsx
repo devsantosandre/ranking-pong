@@ -32,7 +32,7 @@ export function DivisionSwitcher({ eventId, currentTournamentId, variant }: Divi
         <span
           className="flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition hover:opacity-80"
           style={{ background: "var(--glass-bg)", color: "var(--arena-muted)" }}
-          title="Voltar ao evento"
+          title="Voltar ao torneio"
         >
           {variant === "admin" ? <Home className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
         </span>

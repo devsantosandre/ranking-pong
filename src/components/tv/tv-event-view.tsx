@@ -17,7 +17,8 @@ interface TvEventViewProps {
 export function TvEventView({ eventId, initialEvent, rotateSeconds }: TvEventViewProps) {
   const { data } = useEvent(eventId, { refetchInterval: 10_000 });
   const event = data ?? initialEvent;
-  const divisions = event.divisions;
+  // No telão só entram categorias que já começaram (rascunho fica de fora).
+  const divisions = event.divisions.filter((d) => d.status !== "draft");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Divisão ativa derivada no render (sem effect): a selecionada, se ainda existir; senão a primeira.

@@ -72,6 +72,13 @@ export interface TournamentEventDetail extends TournamentEvent {
   divisions: DivisionSummary[];
 }
 
+/** Item leve para listagens: torneio (agrupador) + resumo de suas categorias. */
+export interface EventListItem extends TournamentEvent {
+  categoriesCount: number;
+  firstCategoryId: string | null;
+  hasLiveMatch: boolean;
+}
+
 export interface TournamentParticipant {
   id: string;
   tournamentId: string;

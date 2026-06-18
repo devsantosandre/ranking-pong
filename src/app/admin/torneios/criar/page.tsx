@@ -1,13 +1,12 @@
 "use client";
 
 import { ArenaShell } from "@/components/arena/arena-shell";
-import { GlassCard } from "@/components/arena/glass-card";
-import { createTournament } from "@/app/actions/tournaments";
+import { createTournament, createEvent } from "@/app/actions/tournaments";
 import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
 import {
   Loader2, Network, GitBranch, RotateCw,
-  Layers, Crown, Trophy, Check, AlertCircle,
+  Layers, Crown, Trophy, Check, AlertCircle, ListTree,
 } from "lucide-react";
 import type { TournamentFormat } from "@/lib/tournaments/types";
 
@@ -36,6 +35,7 @@ export default function CriarTorneioPage() {
   const [name, setName] = useState("");
   const [format, setFormat] = useState<TournamentFormat>("single_elimination");
   const [bestOf, setBestOf] = useState(3);
+  const [multiCategory, setMultiCategory] = useState(false);
 
   const selectedFormat = FORMATS.find((f) => f.value === format)!;
 
@@ -45,8 +45,14 @@ export default function CriarTorneioPage() {
     if (!name.trim()) { setError("O nome do torneio é obrigatório."); return; }
     startTransition(async () => {
       try {
-        const result = await createTournament({ name: name.trim(), format, bestOf });
-        if (result?.tournament?.id) router.push(`/admin/torneios/${result.tournament.id}`);
+        if (multiCategory) {
+          // Torneio com categorias → cria o agrupador e leva ao hub para adicionar as categorias.
+          const result = await createEvent({ name: name.trim() });
+          if (result?.event?.id) router.push(`/admin/eventos/${result.event.id}`);
+        } else {
+          const result = await createTournament({ name: name.trim(), format, bestOf });
+          if (result?.tournament?.id) router.push(`/admin/torneios/${result.tournament.id}`);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro ao criar torneio.");
       }
@@ -87,6 +93,46 @@ export default function CriarTorneioPage() {
           />
         </div>
 
+        {/* Tipo de torneio */}
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+            Tipo
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { multi: false, Icon: Trophy, title: "Único", desc: "Uma competição só" },
+              { multi: true, Icon: ListTree, title: "Com categorias", desc: "A/B/C, Absoluto, Veteranos…" },
+            ] as const).map((opt) => {
+              const sel = multiCategory === opt.multi;
+              return (
+                <button
+                  key={opt.title}
+                  type="button"
+                  onClick={() => setMultiCategory(opt.multi)}
+                  disabled={isPending}
+                  className="flex flex-col items-start gap-1 rounded-2xl p-3 text-left transition-all hover:scale-[1.01]"
+                  style={sel
+                    ? { background: "color-mix(in srgb, var(--arena-primary) 8%, var(--glass-bg))", border: "1.5px solid color-mix(in srgb, var(--arena-primary) 40%, transparent)" }
+                    : { background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}
+                >
+                  <opt.Icon className="h-5 w-5" style={{ color: sel ? "var(--arena-primary)" : "var(--arena-muted)" }} />
+                  <span className="text-sm font-bold" style={{ color: sel ? "var(--arena-primary)" : "var(--arena-foreground)" }}>{opt.title}</span>
+                  <span className="text-[11px] text-(--arena-muted)">{opt.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {multiCategory && (
+          <p className="rounded-2xl px-4 py-3 text-xs text-(--arena-muted)"
+            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
+            Você definirá o <strong className="text-(--arena-foreground)">formato e os sets de cada categoria</strong> no próximo passo, ao adicioná-las.
+          </p>
+        )}
+
+        {!multiCategory && (
+          <>
         {/* Formato */}
         <div className="flex flex-col gap-2">
           <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
@@ -189,6 +235,8 @@ export default function CriarTorneioPage() {
             })}
           </div>
         </div>
+          </>
+        )}
 
         {/* Erro */}
         {error && (
@@ -218,9 +266,9 @@ export default function CriarTorneioPage() {
         >
           {isPending
             ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <selectedFormat.Icon className="h-4 w-4" />
+            : multiCategory ? <ListTree className="h-4 w-4" /> : <selectedFormat.Icon className="h-4 w-4" />
           }
-          {isPending ? "Criando…" : "Criar torneio"}
+          {isPending ? "Criando…" : multiCategory ? "Criar e adicionar categorias" : "Criar torneio"}
         </button>
       </form>
     </ArenaShell>

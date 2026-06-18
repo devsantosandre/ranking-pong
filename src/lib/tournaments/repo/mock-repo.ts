@@ -1,5 +1,5 @@
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEvent, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
+import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
 import { computeBracketLayout } from "../bracket-layout";
 import { standardSeeding, eloSeeding, sequentialSeeding, nextPowerOfTwo } from "../seeding";
 import { computeGroupStandings } from "../standings";
@@ -585,7 +585,20 @@ export const mockRepo: TournamentRepo = {
 
   async listEvents() {
     seedEventDemo();
-    return Array.from(events.values()).sort((a, b) => (b.eventDate ?? "").localeCompare(a.eventDate ?? ""));
+    return Array.from(events.values())
+      .sort((a, b) => (b.eventDate ?? "").localeCompare(a.eventDate ?? ""))
+      .map((ev): EventListItem => {
+        const cats = Array.from(tournaments.values())
+          .filter((t) => t.eventId === ev.id)
+          .sort((a, b) => a.divisionOrder - b.divisionOrder);
+        const hasLive = cats.some((c) => (matches.get(c.id) ?? []).some((m) => m.status === "in_progress"));
+        return {
+          ...ev,
+          categoriesCount: cats.length,
+          firstCategoryId: cats[0]?.id ?? null,
+          hasLiveMatch: hasLive,
+        };
+      });
   },
 
   async getEvent(eventId) {

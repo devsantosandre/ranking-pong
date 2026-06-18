@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/client";
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEventDetail, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
+import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
 import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow } from "../types";
 
 export const supabaseRepo: TournamentRepo = {
@@ -168,7 +168,22 @@ export const supabaseRepo: TournamentRepo = {
     const client = createClient();
     const { data, error } = await client.from("tournament_events").select("*").order("event_date", { ascending: false });
     if (error) throw error;
-    return (data ?? []).map((r: Record<string, unknown>) => tournamentEventFromRow(r));
+    const evs = (data ?? []).map((r: Record<string, unknown>) => tournamentEventFromRow(r));
+    return Promise.all(
+      evs.map(async (ev: TournamentEvent): Promise<EventListItem> => {
+        const [cats, live] = await Promise.all([
+          client.from("tournaments").select("id").eq("event_id", ev.id).order("division_order", { ascending: true }),
+          client.from("tournaments").select("id, tournament_matches!inner(id)").eq("event_id", ev.id).eq("tournament_matches.status", "in_progress"),
+        ]);
+        const ids = (cats.data ?? []) as { id: string }[];
+        return {
+          ...ev,
+          categoriesCount: ids.length,
+          firstCategoryId: ids[0]?.id ?? null,
+          hasLiveMatch: (live.data ?? []).length > 0,
+        };
+      }),
+    );
   },
 
   async getEvent(eventId): Promise<TournamentEventDetail | null> {

@@ -40,7 +40,7 @@ export default function EventoHubPage() {
   const totalPlayers = event?.divisions.reduce((acc, d) => acc + d.participantCount, 0) ?? 0;
 
   return (
-    <ArenaShell title={event?.name ?? "Evento"} subtitle="Admin" showBack>
+    <ArenaShell title={event?.name ?? "Torneio"} subtitle="Admin" showBack>
       <div className="flex flex-col gap-4">
         {isLoading && (
           <div className="flex items-center justify-center py-16">
@@ -50,7 +50,7 @@ export default function EventoHubPage() {
 
         {!isLoading && !event && (
           <GlassCard className="py-12 text-center">
-            <p className="text-sm font-bold text-(--arena-foreground)">Evento não encontrado</p>
+            <p className="text-sm font-bold text-(--arena-foreground)">Torneio não encontrado</p>
           </GlassCard>
         )}
 
@@ -60,7 +60,7 @@ export default function EventoHubPage() {
             <GlassCard className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs text-(--arena-muted)">
-                  {event.divisions.length} {event.divisions.length === 1 ? "divisão" : "divisões"} · {totalPlayers} {totalPlayers === 1 ? "jogador" : "jogadores"}
+                  {event.divisions.length} {event.divisions.length === 1 ? "categoria" : "categorias"} · {totalPlayers} {totalPlayers === 1 ? "jogador" : "jogadores"}
                 </p>
               </div>
               <Link href={`/tv/evento/${event.id}`} target="_blank">
@@ -73,15 +73,15 @@ export default function EventoHubPage() {
                   }}
                 >
                   <Tv className="h-3.5 w-3.5" />
-                  TV do evento
+                  TV do torneio
                 </button>
               </Link>
             </GlassCard>
 
-            {/* Divisões */}
+            {/* Categorias */}
             <div className="flex items-center justify-between px-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
-                Divisões
+                Categorias
               </p>
               <button
                 type="button"
@@ -93,7 +93,7 @@ export default function EventoHubPage() {
                 }}
               >
                 <Plus className="h-3.5 w-3.5" />
-                Nova divisão
+                Nova categoria
               </button>
             </div>
 
@@ -103,9 +103,9 @@ export default function EventoHubPage() {
                   style={{ background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)" }}>
                   <Layers className="h-6 w-6 text-(--arena-primary)" />
                 </div>
-                <p className="text-sm font-bold text-(--arena-foreground)">Nenhuma divisão ainda</p>
+                <p className="text-sm font-bold text-(--arena-foreground)">Nenhuma categoria ainda</p>
                 <p className="max-w-xs text-xs text-(--arena-muted)">
-                  Adicione divisões como A · Avançados, B · Intermediários… Cada uma tem formato e chave próprios.
+                  Adicione categorias como A · Avançados, B · Intermediários… Cada uma tem formato e chave próprios.
                 </p>
               </GlassCard>
             )}
@@ -182,14 +182,14 @@ function NewDivisionModal({ eventId, onClose }: { eventId: string; onClose: () =
 
   function handleSubmit() {
     setError(null);
-    if (!label.trim()) { setError("Dê um nome para a divisão (ex.: A · Avançados)."); return; }
+    if (!label.trim()) { setError("Dê um nome para a categoria (ex.: A · Avançados)."); return; }
     startTransition(async () => {
       try {
         await addDivision(eventId, { label: label.trim(), format, bestOf });
         await queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
         onClose();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro ao criar divisão.");
+        setError(err instanceof Error ? err.message : "Erro ao criar categoria.");
       }
     });
   }
@@ -200,12 +200,12 @@ function NewDivisionModal({ eventId, onClose }: { eventId: string; onClose: () =
       onClick={onClose}>
       <div
         className="w-full max-w-md rounded-t-3xl p-5 sm:rounded-3xl"
-        style={{ background: "var(--glass-bg-strong, #fff)", border: "1px solid var(--glass-border)" }}
+        style={{ background: "var(--popover)", border: "1px solid var(--glass-border)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
           <p className="text-base font-bold text-(--arena-foreground)" style={{ fontFamily: "var(--font-display)" }}>
-            Nova divisão
+            Nova categoria
           </p>
           <button type="button" onClick={onClose} className="text-(--arena-muted) hover:text-(--arena-foreground)">
             <X className="h-5 w-5" />
@@ -215,7 +215,7 @@ function NewDivisionModal({ eventId, onClose }: { eventId: string; onClose: () =
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="div-label" className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
-              Nome da divisão
+              Nome da categoria
             </label>
             <input
               id="div-label" type="text" placeholder="Ex: A · Avançados"
@@ -284,7 +284,7 @@ function NewDivisionModal({ eventId, onClose }: { eventId: string; onClose: () =
             style={{ background: "var(--arena-primary)" }}
           >
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {isPending ? "Criando…" : "Adicionar divisão"}
+            {isPending ? "Criando…" : "Adicionar categoria"}
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { TournamentEvent, TournamentEventDetail } from "@/lib/tournaments/types";
+import type { EventListItem, TournamentEventDetail } from "@/lib/tournaments/types";
 
 export const eventKeys = {
   all: ["events"] as const,
@@ -9,7 +9,7 @@ export const eventKeys = {
   detail: (id: string) => ["events", "detail", id] as const,
 };
 
-async function fetchEvents(): Promise<TournamentEvent[]> {
+async function fetchEvents(): Promise<EventListItem[]> {
   const res = await fetch("/api/events");
   if (!res.ok) throw new Error("Falha ao buscar eventos");
   return res.json();
