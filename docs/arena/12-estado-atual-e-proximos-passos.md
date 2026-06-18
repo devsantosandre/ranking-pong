@@ -32,8 +32,11 @@
 ### Formatos com motor funcional ponta a ponta
 - ✅ **Eliminatória simples** — BYEs **distribuídos** por seed (nunca confronto vazio) e que **avançam automaticamente**; aviso de nº não-redondo.
 - ✅ **Grupos + mata-mata** (round-robin por grupo → `closeGroupStage` semeia o mata-mata; auto-avanço).
+- ✅ **Round-robin puro** — todos×todos num grupo único; classificação é a tabela; campeão = líder.
 - ✅ **Rei da mesa**.
-- ⬜ Definidos em metadata mas **sem engine**: dupla eliminação, round-robin puro, suíço, scorecard, americano, liga.
+- 🚫 **Scorecard** descartado (round-robin cobre "todos jogam + tabela").
+- ⬜ Avançados (F4), **fora do leque de criação** até terem engine: dupla eliminação, suíço, americano, liga.
+- ✅ **Leque de criação** mostra só formatos funcionais (elim. simples, round-robin, grupos+mata-mata, rei da mesa).
 
 ### UI
 - ✅ **Admin** (`/admin/torneios`): lista unificada (torneios simples + com categorias), criar com escolha **Único / Com categorias**, gestão `[id]` com abas dinâmicas — **Inscritos · Seeds · Grupos\* · Chave · Placar**.
@@ -73,7 +76,7 @@ Um **Torneio** contém uma ou mais **Categorias** (ex.: A/B/C por nível, ou Abs
 | 2 | Toggle de **dark mode** Arena | baixo | Tokens já existem |
 | 3 | Inscrição aberta por **código/QR** ponta a ponta | médio | Rota `/inscrever` existe — auditar fluxo completo |
 | 4 | **E2E Playwright** dos fluxos de torneio | médio | DoD pede (criar→chave→placar→campeão). ⚠️ esbarra no login HML |
-| 5 | Formatos restantes (**round-robin puro**, **scorecard** primeiro) | médio→alto | Sob demanda |
+| 5 | ~~Round-robin / scorecard~~ ✅ round-robin feito; scorecard descartado | — | Avançados (dupla elim., suíço, americano, liga) só sob demanda |
 | 6 | Auto-fit/zoom do bracket em tela cheia (hoje só pan) | médio | Tv-bracket-view tem auto-fit (com 1 warning de ref a sanar) |
 | 7 | Diferenciais F3 (palpites, recap narrado, ticker TV, zebra na TV) | alto | Pós-essencial |
 
