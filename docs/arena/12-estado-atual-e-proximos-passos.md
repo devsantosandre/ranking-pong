@@ -74,7 +74,7 @@ Um **Torneio** contém uma ou mais **Categorias** (ex.: A/B/C por nível, ou Abs
 |---|---|---|---|
 | 1 | Aplicar migrations + validar `supabase-repo` contra **Supabase local** | médio | **Só o usuário** aplica; hoje só o mock roda. Inclui `20260618000000_tournament_events.sql` |
 | 2 | Toggle de **dark mode** Arena | baixo | Tokens já existem |
-| 3 | Inscrição aberta por **código/QR** ponta a ponta | médio | Rota `/inscrever` existe — auditar fluxo completo |
+| 3 | ~~Inscrição aberta por código/QR~~ ✅ **FEITO** | — | `/inscrever` + card admin "Compartilhe a inscrição" (link/copiar/share/QR) |
 | 4 | **E2E Playwright** dos fluxos de torneio | médio | DoD pede (criar→chave→placar→campeão). ⚠️ esbarra no login HML |
 | 5 | ~~Round-robin / scorecard~~ ✅ round-robin feito; scorecard descartado | — | Avançados (dupla elim., suíço, americano, liga) só sob demanda |
 | 6 | Auto-fit/zoom do bracket em tela cheia (hoje só pan) | médio | Tv-bracket-view tem auto-fit (com 1 warning de ref a sanar) |
