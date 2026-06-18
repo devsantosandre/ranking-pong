@@ -24,7 +24,7 @@ import {
   Users, Network, ListOrdered, Play, Trophy,
   Loader2, CheckCircle, UserPlus, RotateCcw,
   X, Tv, Swords, ChevronRight, Medal,
-  CheckCheck, Crown, ClipboardList, LayoutGrid, AlertTriangle,
+  CheckCheck, Crown, ClipboardList, LayoutGrid, AlertTriangle, Maximize2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -491,6 +491,21 @@ export default function AdminTournamentPage() {
             <div className="flex flex-col gap-3">
               {hasBracket ? (
                 <>
+                  {/* Abrir em tela cheia — primeiro na aba, em destaque */}
+                  <Link href={`/torneios/${id}/chave`} target="_blank" rel="noopener noreferrer">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold text-white transition hover:opacity-90 active:scale-[0.99]"
+                      style={{
+                        background: "var(--arena-primary)",
+                        boxShadow: "0 4px 14px color-mix(in srgb, var(--arena-primary) 30%, transparent)",
+                      }}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                      Abrir chave em tela cheia
+                    </button>
+                  </Link>
+
                   {/* Bracket inline com scroll horizontal */}
                   <GlassCard noPadding className="overflow-hidden">
                     <div className="overflow-x-auto p-3">
@@ -507,14 +522,6 @@ export default function AdminTournamentPage() {
                       />
                     </div>
                   </GlassCard>
-                  {/* Link para a página completa em tela cheia */}
-                  <Link href={`/torneios/${id}/chave`} target="_blank" rel="noopener noreferrer">
-                    <GlassCard noPadding className="group flex items-center gap-3 px-4 py-3 transition-all hover:scale-[1.005]">
-                      <Network className="h-4 w-4 text-(--arena-primary)" />
-                      <p className="flex-1 text-sm font-semibold text-(--arena-foreground)">Abrir chave em tela cheia</p>
-                      <ChevronRight className="h-4 w-4 text-(--arena-muted) transition group-hover:translate-x-0.5" />
-                    </GlassCard>
-                  </Link>
                 </>
               ) : (
                 <GlassCard className="flex flex-col items-center gap-3 py-12 text-center">

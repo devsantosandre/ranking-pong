@@ -4,8 +4,23 @@ import { notFound } from "next/navigation";
 import { BracketClientShell } from "./bracket-client-shell";
 import { DivisionSwitcher } from "@/components/tournaments/division-switcher";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
+import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+// Em mock (dev) o organizador edita direto; em supabase, exige role admin.
+async function isAdminServer(): Promise<boolean> {
+  if ((process.env.NEXT_PUBLIC_DATA_SOURCE ?? "mock") !== "supabase") return true;
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    const { data } = await supabase.from("users").select("role").eq("id", user.id).single();
+    return data?.role === "admin";
+  } catch {
+    return false;
+  }
+}
 
 export default async function ChavePage({
   params,
@@ -14,7 +29,7 @@ export default async function ChavePage({
 }) {
   const { id } = await params;
   const repo = await getTournamentRepo();
-  const tournament = await repo.getTournament(id);
+  const [tournament, admin] = await Promise.all([repo.getTournament(id), isAdminServer()]);
 
   if (!tournament) notFound();
 
@@ -36,6 +51,7 @@ export default async function ChavePage({
         participants={tournament.participants}
         isLive={tournament.status === "active"}
         bestOf={tournament.bestOf}
+        isAdmin={admin}
         initialStandings={standings}
       />
     </ArenaShell>
