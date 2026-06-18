@@ -37,6 +37,11 @@ function buildTabs(format: string): { id: Tab; label: string; Icon: typeof Users
     { id: "inscritos", label: "Inscritos", Icon: Users },
     { id: "seeding",   label: "Seeds",    Icon: ListOrdered },
   ];
+  // Round-robin: a classificação é a tabela única; sem chave/mata-mata.
+  if (format === "round_robin") {
+    base.push({ id: "grupos", label: "Tabela", Icon: LayoutGrid });
+    return base;
+  }
   if (FORMATS_WITH_GROUPS.has(format)) base.push({ id: "grupos", label: "Grupos", Icon: LayoutGrid });
   base.push({ id: "chave", label: "Chave", Icon: Network });
   base.push({ id: "placar", label: "Placar", Icon: Play });
@@ -85,7 +90,10 @@ export default function AdminTournamentPage() {
   const confirmed = tournament.participants.filter((p) => p.signupStatus === "confirmed");
   const seedingOrder = localParticipants ?? confirmed;
   const hasGroups = FORMATS_WITH_GROUPS.has(tournament.format);
+  const isRoundRobin = tournament.format === "round_robin";
   const groupMatches = tournament.matches.filter((m) => m.bracket === "group");
+  const rrDone = isRoundRobin && groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
+  const rrChampionId = rrDone ? (standings ?? [])[0]?.participantId ?? null : null;
   const knockoutMatches = tournament.matches.filter((m) => m.bracket !== "group");
   const hasBracket = knockoutMatches.length > 0;
   const allGroupMatchesDone = groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
@@ -96,14 +104,20 @@ export default function AdminTournamentPage() {
   const finishedMatches = tournament.matches.filter((m) => m.status === "finished" && (m.scoreA !== null || m.scoreB !== null) && m.bracket !== "group");
   const finalMatch = hasBracket && knockoutMatches.length > 0 ? knockoutMatches.reduce((b, m) => m.round < b.round ? m : b, knockoutMatches[0]!) : null;
   const hasFinalWinner = !!finalMatch?.winnerParticipantId;
-  const champion = hasFinalWinner ? tournament.participants.find((p) => p.id === finalMatch!.winnerParticipantId) : null;
+  // Round-robin encerra quando todas as partidas terminam (campeão = líder da tabela).
+  const canFinish = hasFinalWinner || (isRoundRobin && !!rrChampionId);
+  const champion = hasFinalWinner
+    ? tournament.participants.find((p) => p.id === finalMatch!.winnerParticipantId)
+    : isRoundRobin && rrChampionId
+      ? tournament.participants.find((p) => p.id === rrChampionId)
+      : null;
 
   async function handleGenerate() {
     startTransition(async () => {
       await generateBracket(id);
       setGenerateConfirmOpen(false);
       invalidate();
-      setTab("chave");
+      setTab(isRoundRobin ? "grupos" : "chave");
     });
   }
   async function handleRegenerate() {
@@ -114,10 +128,15 @@ export default function AdminTournamentPage() {
     });
   }
   async function handleFinish() {
-    const kMatches = tournament!.matches.filter((m) => m.bracket !== "group");
-    if (!kMatches.length) return;
-    const finalMatch = kMatches.reduce((best, m) => (m.round < best.round ? m : best), kMatches[0]!);
-    const winnerId = finalMatch?.winnerParticipantId;
+    let winnerId: string | null = null;
+    if (isRoundRobin) {
+      winnerId = rrChampionId; // líder da tabela
+    } else {
+      const kMatches = tournament!.matches.filter((m) => m.bracket !== "group");
+      if (!kMatches.length) return;
+      const finalMatch = kMatches.reduce((best, m) => (m.round < best.round ? m : best), kMatches[0]!);
+      winnerId = finalMatch?.winnerParticipantId ?? null;
+    }
     if (!winnerId) return;
     startTransition(async () => {
       await finishTournament(id, winnerId);
@@ -307,16 +326,16 @@ export default function AdminTournamentPage() {
                   </Link>
                   <button type="button"
                     onClick={() => setFinishConfirmOpen(true)}
-                    disabled={isPending || !hasFinalWinner}
-                    title={!hasFinalWinner ? "Jogue todas as partidas até a final primeiro" : "Encerrar torneio e registrar campeão"}
+                    disabled={isPending || !canFinish}
+                    title={!canFinish ? "Jogue todas as partidas primeiro" : "Encerrar torneio e registrar campeão"}
                     className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                    style={hasFinalWinner
+                    style={canFinish
                       ? { background: "color-mix(in srgb, var(--state-played) 12%, transparent)", color: "var(--state-played)", border: "1px solid color-mix(in srgb, var(--state-played) 25%, transparent)" }
                       : { background: "color-mix(in srgb, var(--arena-muted) 10%, transparent)", color: "var(--arena-muted)", border: "1px solid color-mix(in srgb, var(--arena-muted) 20%, transparent)" }
                     }
                   >
                     <Crown className="h-4 w-4" />
-                    {hasFinalWinner ? "Encerrar" : "Encerrar…"}
+                    {canFinish ? "Encerrar" : "Encerrar…"}
                   </button>
                 </>
               )}
@@ -482,15 +501,17 @@ export default function AdminTournamentPage() {
             </div>
           )}
 
-          {/* ── Tab: Grupos ── */}
-          {tab === "grupos" && hasGroups && (
+          {/* ── Tab: Grupos / Tabela ── */}
+          {tab === "grupos" && (hasGroups || isRoundRobin) && (
             <GroupsTab
               tournament={tournament}
               confirmed={confirmed}
               standings={standings ?? []}
               isPending={isPending}
+              isRoundRobin={isRoundRobin}
               onMatchClick={setSelectedMatch}
               onGroupsConfigured={invalidate}
+              onGenerate={handleGenerate}
             />
           )}
 
@@ -789,16 +810,9 @@ export default function AdminTournamentPage() {
         onClose={() => setFinishConfirmOpen(false)}
         onConfirm={handleFinish}
         title="Encerrar torneio"
-        description={(() => {
-          const kk = tournament.matches.filter((m) => m.bracket !== "group");
-          const finalMatch = kk.length > 0 ? kk.reduce((b, m) => m.round < b.round ? m : b, kk[0]!) : null;
-          const winnerId = finalMatch?.winnerParticipantId;
-          const champ = winnerId ? tournament.participants.find((p) => p.id === winnerId) : null;
-          if (champ) {
-            return `Campeão: ${champ.guestName ?? "Jogador"}. O torneio será encerrado e este resultado registrado permanentemente.`;
-          }
-          return "A final ainda não foi jogada. Jogue todas as partidas antes de encerrar.";
-        })()}
+        description={champion
+          ? `Campeão: ${champion.guestName ?? "Jogador"}. O torneio será encerrado e este resultado registrado permanentemente.`
+          : "Jogue todas as partidas antes de encerrar."}
         confirmText="Encerrar torneio"
         variant="danger"
         loading={isPending}
@@ -808,14 +822,16 @@ export default function AdminTournamentPage() {
 }
 
 function GroupsTab({
-  tournament, confirmed, standings, isPending, onMatchClick, onGroupsConfigured,
+  tournament, confirmed, standings, isPending, isRoundRobin, onMatchClick, onGroupsConfigured, onGenerate,
 }: {
   tournament: TournamentDetail;
   confirmed: TournamentParticipant[];
   standings: GroupStanding[];
   isPending: boolean;
+  isRoundRobin: boolean;
   onMatchClick: (m: TournamentMatch) => void;
   onGroupsConfigured: () => void;
+  onGenerate: () => void;
 }) {
   const groupIds = Array.from(new Set(tournament.participants.map((p) => p.groupId).filter(Boolean))) as string[];
   const groupMatches = tournament.matches.filter((m) => m.bracket === "group");
@@ -861,6 +877,36 @@ function GroupsTab({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Round-robin: gerar a tabela (todos contra todos) */}
+      {isRoundRobin && groupMatches.length === 0 && (
+        <GlassCard className="flex flex-col items-center gap-3 py-10 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl"
+            style={{ background: "color-mix(in srgb,var(--arena-primary) 12%,transparent)" }}>
+            <LayoutGrid className="h-6 w-6 text-(--arena-primary)" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-(--arena-foreground)">Tabela não gerada</p>
+            <p className="max-w-xs text-xs text-(--arena-muted)">
+              {confirmed.length < 2
+                ? "Adicione ao menos 2 jogadores"
+                : `Todos contra todos: ${confirmed.length} jogadores, ${(confirmed.length * (confirmed.length - 1)) / 2} partidas`}
+            </p>
+          </div>
+          {confirmed.length >= 2 && (
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={isPending}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
+              style={{ background: "var(--arena-primary)" }}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Gerar tabela
+            </button>
+          )}
+        </GlassCard>
+      )}
+
       {/* Classificação por grupo */}
       {groupIds.map((gId) => {
         const groupStandings = standings.filter((s) => s.groupId === gId).sort((a, b) => a.position - b.position);
@@ -872,12 +918,12 @@ function GroupsTab({
           <div key={gId} className="flex flex-col gap-2">
             <div className="flex items-center justify-between px-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
-                Grupo {gId}
+                {isRoundRobin ? "Classificação" : `Grupo ${gId}`}
               </p>
               {groupDone ? (
                 <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
                   style={{ background: "color-mix(in srgb,var(--state-played) 12%,transparent)", color: "var(--state-played)" }}>
-                  <CheckCheck className="h-3 w-3" /> Classificados no mata-mata
+                  <CheckCheck className="h-3 w-3" /> {isRoundRobin ? "Torneio concluído" : "Classificados no mata-mata"}
                 </span>
               ) : (
                 <span className="text-[10px] text-(--arena-muted)">
@@ -973,7 +1019,7 @@ function GroupsTab({
         );
       })}
 
-      {groupIds.length === 0 && groupMatches.length === 0 && (
+      {!isRoundRobin && groupIds.length === 0 && groupMatches.length === 0 && (
         <div className="flex flex-col gap-4">
           {/* Seletor de número de grupos */}
           <GlassCard className="flex flex-col gap-4">

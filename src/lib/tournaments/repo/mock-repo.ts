@@ -413,6 +413,32 @@ export const mockRepo: TournamentRepo = {
       return allMatches;
     }
 
+    // ── Round-robin puro: todos contra todos, classificação única (sem mata-mata) ──
+    if (t?.format === "round_robin") {
+      const list = participants.get(tournamentId) ?? [];
+      for (const p of list) {
+        if (p.signupStatus === "confirmed") p.groupId = "GERAL";
+      }
+      participants.set(tournamentId, [...list]);
+      const confirmedParts = list.filter((p) => p.signupStatus === "confirmed");
+      const rr: TournamentMatch[] = [];
+      let slot = 0;
+      for (let i = 0; i < confirmedParts.length; i++) {
+        for (let j = i + 1; j < confirmedParts.length; j++) {
+          rr.push({
+            id: uuid(), tournamentId, round: 100, bracket: "group", slot: slot++,
+            groupId: "GERAL", participantAId: confirmedParts[i]!.id, participantBId: confirmedParts[j]!.id,
+            scoreA: null, scoreB: null, sets: null, winnerParticipantId: null,
+            nextMatchId: null, nextMatchSlot: null, status: "pending",
+            deadlineAt: null, scheduledAt: null, tableNo: null, startedAt: null, finishedAt: null,
+          });
+        }
+      }
+      matches.set(tournamentId, rr);
+      if (t) tournaments.set(tournamentId, { ...t, status: "active" });
+      return rr;
+    }
+
     // ── Eliminatória simples ──
     // Ordena por força (seed do organizador; menor = mais forte) e posiciona no
     // bracket pela ordem espelhada — assim os BYEs caem distribuídos nos seeds

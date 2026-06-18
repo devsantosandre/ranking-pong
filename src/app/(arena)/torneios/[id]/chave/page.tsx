@@ -52,6 +52,7 @@ export default async function ChavePage({
         isLive={tournament.status === "active"}
         bestOf={tournament.bestOf}
         isAdmin={admin}
+        isRoundRobin={tournament.format === "round_robin"}
         initialStandings={standings}
       />
     </ArenaShell>

@@ -18,6 +18,7 @@ interface BracketClientShellProps {
   isLive: boolean;
   bestOf?: number;
   isAdmin?: boolean;
+  isRoundRobin?: boolean;
   initialStandings?: GroupStanding[];
 }
 
@@ -28,6 +29,7 @@ export function BracketClientShell({
   isLive,
   bestOf = 5,
   isAdmin = false,
+  isRoundRobin = false,
   initialStandings = [],
 }: BracketClientShellProps) {
   const { data } = useTournamentBracket(tournamentId, { live: isLive });
@@ -69,22 +71,22 @@ export function BracketClientShell({
   return (
     <div className="flex flex-col gap-6 px-4 py-4 sm:px-6">
 
-      {/* ── Fase de Grupos ── */}
+      {/* ── Fase de Grupos / Classificação ── */}
       {hasGroups && (
         <section className="flex flex-col gap-3">
           <p className="text-[11px] font-bold uppercase tracking-widest text-(--arena-muted)">
-            Fase de Grupos
+            {isRoundRobin ? "Classificação" : "Fase de Grupos"}
           </p>
           <StandingsTable
             standings={standings}
             participants={participants}
-            qualifyingSpots={qualifyingSpots}
+            qualifyingSpots={isRoundRobin ? 1 : qualifyingSpots}
           />
         </section>
       )}
 
-      {/* ── Separador Mata-mata ── */}
-      {hasGroups && (
+      {/* ── Separador Mata-mata (não há em round-robin) ── */}
+      {hasGroups && !isRoundRobin && (
         <div className="flex items-center gap-3">
           <div className="h-px flex-1" style={{ background: "var(--glass-border)" }} />
           <div className="flex items-center gap-2">
@@ -117,7 +119,7 @@ export function BracketClientShell({
             </p>
           )}
         </section>
-      ) : hasGroups ? (
+      ) : isRoundRobin ? null : hasGroups ? (
         <p className="py-8 text-center text-sm text-(--arena-muted)">
           Mata-mata será gerado ao encerrar a fase de grupos
         </p>
