@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
-import { reportResult } from "@/app/actions/tournaments";
+import { reportResult, revertResult } from "@/app/actions/tournaments";
 import type { TournamentMatch, TournamentParticipant } from "@/lib/tournaments/types";
 import { getSeedColor } from "@/lib/tournaments/seed-colors";
-import { ChevronRight, Minus, Plus, RotateCcw } from "lucide-react";
+import { ChevronRight, Minus, Plus, RotateCcw, Undo2 } from "lucide-react";
 
 interface ScoreSheetProps {
   match: TournamentMatch;
@@ -25,6 +25,7 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   const [scoreA, setScoreA] = useState(match.scoreA ?? 0);
   const [scoreB, setScoreB] = useState(match.scoreB ?? 0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [revertOpen, setRevertOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const partA = findParticipant(participants, match.participantAId);
@@ -55,6 +56,17 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
       onClose?.();
     });
   }
+
+  function handleRevert() {
+    startTransition(async () => {
+      await revertResult(match.id, tournamentId);
+      setRevertOpen(false);
+      onClose?.();
+    });
+  }
+
+  // Há fases seguintes que serão recalculadas ao desfazer?
+  const hasDownstream = match.nextMatchId !== null && match.winnerParticipantId !== null;
 
   return (
     <>
@@ -167,6 +179,23 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* Desfazer — só quando a partida já foi lançada */}
+        {isEditing && (
+          <button
+            type="button"
+            onClick={() => setRevertOpen(true)}
+            disabled={isPending}
+            className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition hover:opacity-90 disabled:opacity-40"
+            style={{
+              background: "color-mix(in srgb, var(--state-noshow) 8%, transparent)",
+              color: "var(--state-noshow)",
+            }}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Desfazer partida (voltar para não jogada)
+          </button>
+        )}
       </div>
 
       <ConfirmModal
@@ -182,6 +211,22 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
         }
         confirmText={isEditing ? "Salvar correção" : "Salvar resultado"}
         variant={winnerChanges ? "danger" : "default"}
+        loading={isPending}
+      />
+
+      <ConfirmModal
+        isOpen={revertOpen}
+        onClose={() => setRevertOpen(false)}
+        onConfirm={handleRevert}
+        title="Desfazer partida"
+        description={
+          `${nameA} × ${nameB} voltará a ficar como não jogada.` +
+          (hasDownstream
+            ? " As partidas seguintes que dependiam deste resultado também serão recalculadas."
+            : "")
+        }
+        confirmText="Desfazer"
+        variant="danger"
         loading={isPending}
       />
     </>
