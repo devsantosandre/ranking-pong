@@ -108,7 +108,7 @@ export function ConfirmModal({
 
       {/* Modal */}
       <div
-        className={`relative mx-4 w-full max-w-sm rounded-2xl bg-card p-6 shadow-xl transition-transform duration-150 ${
+        className={`relative mx-4 w-full max-w-sm rounded-2xl bg-popover p-6 shadow-xl transition-transform duration-150 ${
           isClosing ? "scale-95" : "scale-100"
         }`}
       >
