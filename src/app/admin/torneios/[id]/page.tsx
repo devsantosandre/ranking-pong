@@ -52,6 +52,7 @@ export default function AdminTournamentPage() {
   const [tab, setTab] = useState<Tab>("inscritos");
   const [isPending, startTransition] = useTransition();
   const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false);
+  const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [localParticipants, setLocalParticipants] = useState<TournamentParticipant[] | null>(null);
@@ -103,6 +104,13 @@ export default function AdminTournamentPage() {
       setGenerateConfirmOpen(false);
       invalidate();
       setTab("chave");
+    });
+  }
+  async function handleRegenerate() {
+    startTransition(async () => {
+      await generateBracket(id);
+      setRegenConfirmOpen(false);
+      invalidate();
     });
   }
   async function handleFinish() {
@@ -522,6 +530,18 @@ export default function AdminTournamentPage() {
                       />
                     </div>
                   </GlassCard>
+
+                  {/* Regerar chave (remonta do zero — útil após ajustar jogadores) */}
+                  <button
+                    type="button"
+                    onClick={() => setRegenConfirmOpen(true)}
+                    disabled={isPending}
+                    className="flex items-center justify-center gap-1.5 self-center rounded-xl px-3 py-2 text-xs font-semibold transition hover:opacity-90 disabled:opacity-40"
+                    style={{ background: "color-mix(in srgb, var(--arena-muted) 10%, transparent)", color: "var(--arena-muted)" }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Regerar chave
+                  </button>
                 </>
               ) : (
                 <GlassCard className="flex flex-col items-center gap-3 py-12 text-center">
@@ -752,6 +772,16 @@ export default function AdminTournamentPage() {
         description={`A chave será gerada com ${confirmed.length} participantes. Após gerar, os seeds não podem ser alterados.`}
         confirmText="Gerar chave"
         variant="warning"
+        loading={isPending}
+      />
+      <ConfirmModal
+        isOpen={regenConfirmOpen}
+        onClose={() => setRegenConfirmOpen(false)}
+        onConfirm={handleRegenerate}
+        title="Regerar chave"
+        description={`A chave será remontada do zero com ${confirmed.length} participantes. Todos os resultados já lançados serão apagados.`}
+        confirmText="Regerar"
+        variant="danger"
         loading={isPending}
       />
       <ConfirmModal
