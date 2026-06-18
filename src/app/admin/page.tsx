@@ -16,6 +16,7 @@ import {
   Tv,
   Medal,
   Trophy,
+  CalendarDays,
 } from "lucide-react";
 
 const adminSections = [
@@ -69,6 +70,14 @@ const adminSections = [
     icon: Trophy,
     description: "Criar e gerenciar torneios, seeds e resultados",
     color: "text-violet-600 bg-violet-100",
+    adminOnly: true,
+  },
+  {
+    href: "/admin/eventos",
+    label: "Eventos",
+    icon: CalendarDays,
+    description: "Varias divisoes no mesmo dia (A/B/C, Absoluto/Veteranos)",
+    color: "text-indigo-600 bg-indigo-100",
     adminOnly: true,
   },
   {

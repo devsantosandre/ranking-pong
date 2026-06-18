@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/client";
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEvent, TournamentEventDetail, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
+import type { Tournament, TournamentEventDetail, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
 import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow } from "../types";
 
 export const supabaseRepo: TournamentRepo = {

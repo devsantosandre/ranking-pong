@@ -1,5 +1,5 @@
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEvent, TournamentEventDetail, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
+import type { Tournament, TournamentEvent, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
 import { computeBracketLayout } from "../bracket-layout";
 import { standardSeeding, eloSeeding, sequentialSeeding, nextPowerOfTwo } from "../seeding";
 import { computeGroupStandings } from "../standings";
@@ -391,7 +391,7 @@ export const mockRepo: TournamentRepo = {
     }
 
     // ── Eliminatória simples ──
-    let seeded = method === "elo" ? eloSeeding(parts, new Map())
+    const seeded = method === "elo" ? eloSeeding(parts, new Map())
       : method === "sequential" ? sequentialSeeding(parts)
       : standardSeeding(parts);
 

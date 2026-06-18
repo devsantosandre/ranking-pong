@@ -2,6 +2,7 @@ import { ArenaShell } from "@/components/arena/arena-shell";
 import { getTournamentRepo } from "@/lib/tournaments/repo";
 import { notFound } from "next/navigation";
 import { BracketClientShell } from "./bracket-client-shell";
+import { DivisionSwitcher } from "@/components/tournaments/division-switcher";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,11 @@ export default async function ChavePage({
 
   return (
     <ArenaShell title={tournament.name} subtitle="Chave do torneio" showBack layoutWidth="full">
+      {tournament.eventId && (
+        <div className="px-4 pt-3 sm:px-6">
+          <DivisionSwitcher eventId={tournament.eventId} currentTournamentId={id} variant="public" />
+        </div>
+      )}
       <BracketClientShell
         tournamentId={id}
         initialMatches={tournament.matches}

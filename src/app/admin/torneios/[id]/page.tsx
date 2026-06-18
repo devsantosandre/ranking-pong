@@ -6,6 +6,7 @@ import { StatusPill } from "@/components/arena/status-pill";
 import { BracketCanvas } from "@/components/bracket/bracket-canvas";
 import { SeedingBoard } from "@/components/tournaments/seeding-board";
 import { GroupDistributionBoard } from "@/components/tournaments/group-distribution-board";
+import { DivisionSwitcher } from "@/components/tournaments/division-switcher";
 import { ScoreSheet } from "@/components/tournaments/score-sheet";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
@@ -312,6 +313,15 @@ export default function AdminTournamentPage() {
                 </>
               )}
             </div>
+          )}
+
+          {/* ── Seletor de divisão (quando o torneio pertence a um evento) ── */}
+          {tournament.eventId && (
+            <DivisionSwitcher
+              eventId={tournament.eventId}
+              currentTournamentId={tournament.id}
+              variant="admin"
+            />
           )}
 
           {/* ── Tabs ── */}
