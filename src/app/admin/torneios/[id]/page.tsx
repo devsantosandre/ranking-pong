@@ -498,7 +498,8 @@ export default function AdminTournamentPage() {
                         matches={tournament.matches}
                         participants={tournament.participants}
                         onMatchClick={(m) => {
-                          if (m.status !== "finished" && m.participantAId && m.participantBId) {
+                          // Permite lançar e também corrigir resultado já lançado.
+                          if (m.participantAId && m.participantBId) {
                             setSelectedMatch(m);
                           }
                         }}
@@ -869,8 +870,9 @@ function GroupsTab({
                   const done = m.status === "finished";
                   const isWinnerA = m.winnerParticipantId === m.participantAId;
                   return (
-                    <button key={m.id} type="button" onClick={() => !done && onMatchClick(m)}
-                      className={`w-full text-left ${!done ? "cursor-pointer" : "cursor-default"}`}>
+                    <button key={m.id} type="button" onClick={() => onMatchClick(m)}
+                      className="w-full cursor-pointer text-left"
+                      title={done ? "Toque para corrigir o resultado" : "Toque para lançar o resultado"}>
                       <GlassCard noPadding className="group flex items-center gap-3 px-3 py-2.5 transition-all hover:scale-[1.005]">
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
                           style={{ background: cA.bg, color: cA.color, border: `1px solid ${cA.border}`, opacity: done && !isWinnerA ? 0.45 : 1 }}>

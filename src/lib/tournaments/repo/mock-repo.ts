@@ -142,6 +142,26 @@ function autoAdvanceGroup(tournamentId: string, groupId: string) {
   if (changed) matches.set(tournamentId, [...ms]);
 }
 
+// Remove recursivamente o vencedor de `match` das partidas à frente (downstream),
+// resetando partidas que dependiam dele. Usado ao corrigir ou reverter um resultado.
+function clearMatchForward(list: TournamentMatch[], match: TournamentMatch) {
+  if (!match.nextMatchId) return;
+  const next = list.find((m) => m.id === match.nextMatchId);
+  const w = match.winnerParticipantId;
+  if (!next || !w) return;
+  let touched = false;
+  if (next.participantAId === w) { next.participantAId = null; touched = true; }
+  if (next.participantBId === w) { next.participantBId = null; touched = true; }
+  if (!touched) return;
+  // Se a próxima já tinha resultado, ela precisa ser refeita → limpa o downstream dela antes.
+  if (next.winnerParticipantId) {
+    clearMatchForward(list, next);
+    next.winnerParticipantId = null;
+    next.scoreA = null; next.scoreB = null; next.sets = null; next.finishedAt = null;
+  }
+  next.status = next.participantAId && next.participantBId ? "scheduled" : "pending";
+}
+
 function seedTournament(): Tournament {
   const id = "mock-tournament-1";
   if (!tournaments.has(id)) {
@@ -455,53 +475,56 @@ export const mockRepo: TournamentRepo = {
     }
     if (!foundMatch || !tournamentId) throw new Error("Partida não encontrada");
 
-    const winner = input.scoreA > input.scoreB
+    const list = matches.get(tournamentId) ?? [];
+    const newWinner = input.scoreA > input.scoreB
       ? foundMatch.participantAId
       : foundMatch.participantBId;
+    const oldWinner = foundMatch.winnerParticipantId;
+
+    // Correção: se já havia resultado e o vencedor mudou, limpa a propagação antiga
+    // (e tudo que dependia dela) antes de propagar o novo vencedor.
+    if (oldWinner && oldWinner !== newWinner) {
+      clearMatchForward(list, foundMatch);
+    }
 
     foundMatch.scoreA = input.scoreA;
     foundMatch.scoreB = input.scoreB;
     foundMatch.sets = input.sets ?? null;
-    foundMatch.winnerParticipantId = winner;
+    foundMatch.winnerParticipantId = newWinner;
     foundMatch.status = "finished";
     foundMatch.finishedAt = new Date().toISOString();
 
     // Propagar vencedor para a próxima partida (knockout)
-    if (foundMatch.nextMatchId) {
-      const list = matches.get(tournamentId) ?? [];
+    if (foundMatch.nextMatchId && newWinner) {
       const next = list.find((m) => m.id === foundMatch!.nextMatchId);
-      if (next && winner) {
-        if (foundMatch.nextMatchSlot === 0) next.participantAId = winner;
-        else next.participantBId = winner;
-        if (next.participantAId && next.participantBId) next.status = "scheduled";
+      if (next) {
+        if (foundMatch.nextMatchSlot === 0) next.participantAId = newWinner;
+        else next.participantBId = newWinner;
+        if (next.participantAId && next.participantBId && next.status === "pending") {
+          next.status = "scheduled";
+        }
       }
     }
 
-    // Auto-avanço dinâmico: quando um grupo termina, preenche os slots do mata-mata
+    // Auto-avanço dinâmico: quando um grupo termina, (re)preenche os slots do mata-mata
     if (foundMatch.bracket === "group" && foundMatch.groupId) {
       autoAdvanceGroup(tournamentId, foundMatch.groupId);
     }
 
+    matches.set(tournamentId, [...list]);
     return foundMatch;
   },
 
   async revertResult(matchId) {
-    for (const [, list] of matches) {
+    for (const [tid, list] of matches) {
       const m = list.find((m) => m.id === matchId);
       if (m) {
-        const winner = m.winnerParticipantId;
+        // Limpa recursivamente tudo que dependia do vencedor desta partida.
+        clearMatchForward(list, m);
         m.scoreA = null; m.scoreB = null; m.sets = null;
-        m.winnerParticipantId = null; m.status = "pending"; m.finishedAt = null;
-
-        // Limpar propagação
-        if (m.nextMatchId) {
-          const next = list.find((n) => n.id === m.nextMatchId);
-          if (next && winner) {
-            if (next.participantAId === winner) next.participantAId = null;
-            if (next.participantBId === winner) next.participantBId = null;
-            next.status = "pending";
-          }
-        }
+        m.winnerParticipantId = null; m.finishedAt = null;
+        m.status = m.participantAId && m.participantBId ? "scheduled" : "pending";
+        matches.set(tid, [...list]);
         return;
       }
     }

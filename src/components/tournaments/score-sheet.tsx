@@ -43,6 +43,11 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
     (winnerIsA || winnerIsB) &&
     !(winnerIsA && winnerIsB);
 
+  // Edição: partida já finalizada sendo corrigida.
+  const isEditing = match.status === "finished";
+  const newWinnerId = winnerIsA ? match.participantAId : winnerIsB ? match.participantBId : null;
+  const winnerChanges = isEditing && newWinnerId !== null && match.winnerParticipantId !== newWinnerId;
+
   function handleConfirm() {
     startTransition(async () => {
       await reportResult(match.id, { scoreA, scoreB });
@@ -54,6 +59,20 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   return (
     <>
       <div className="flex flex-col gap-5">
+        {/* Aviso de edição */}
+        {isEditing && (
+          <div
+            className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-bold"
+            style={{
+              background: "color-mix(in srgb, var(--state-scheduled) 12%, transparent)",
+              color: "var(--state-scheduled)",
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Corrigindo um resultado já lançado
+          </div>
+        )}
+
         {/* Subtítulo */}
         <p
           className="text-center text-[11px] font-semibold uppercase tracking-wider"
@@ -144,7 +163,7 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
               boxShadow: validResult ? "0 4px 14px color-mix(in srgb, var(--arena-primary) 35%, transparent)" : "none",
             }}
           >
-            Confirmar {scoreA}×{scoreB}
+            {isEditing ? "Salvar" : "Confirmar"} {scoreA}×{scoreB}
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -154,10 +173,15 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
-        title="Confirmar resultado"
-        description={`${nameA} ${scoreA} × ${scoreB} ${nameB} — o vencedor avançará automaticamente.`}
-        confirmText="Salvar resultado"
-        variant="default"
+        title={isEditing ? "Corrigir resultado" : "Confirmar resultado"}
+        description={
+          `${nameA} ${scoreA} × ${scoreB} ${nameB}.` +
+          (winnerChanges
+            ? " O vencedor mudou — as partidas seguintes que dependiam do resultado anterior serão recalculadas."
+            : " O vencedor avançará automaticamente.")
+        }
+        confirmText={isEditing ? "Salvar correção" : "Salvar resultado"}
+        variant={winnerChanges ? "danger" : "default"}
         loading={isPending}
       />
     </>
