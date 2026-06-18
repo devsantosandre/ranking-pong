@@ -94,7 +94,12 @@ export function BracketClientShell({
             matches={liveMatches}
             participants={participants}
             live={isLive}
-            onMatchClick={isAdmin ? setSelectedMatch : undefined}
+            onMatchClick={isAdmin
+              ? (m) => {
+                  // Só permite lançar/corrigir quando os dois jogadores já estão definidos.
+                  if (m.participantAId && m.participantBId) setSelectedMatch(m);
+                }
+              : undefined}
           />
           {isLive && (
             <p className="mt-3 text-center text-[11px] text-(--arena-muted)">

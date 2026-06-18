@@ -474,6 +474,9 @@ export const mockRepo: TournamentRepo = {
       if (m) { foundMatch = m; tournamentId = tid; break; }
     }
     if (!foundMatch || !tournamentId) throw new Error("Partida não encontrada");
+    if (!foundMatch.participantAId || !foundMatch.participantBId) {
+      throw new Error("Defina os dois jogadores antes de lançar o placar.");
+    }
 
     const list = matches.get(tournamentId) ?? [];
     const newWinner = input.scoreA > input.scoreB

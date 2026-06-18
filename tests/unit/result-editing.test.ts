@@ -85,6 +85,18 @@ describe("Correção de resultado lançado", () => {
     expect([final.participantAId, final.participantBId]).not.toContain(a);
   });
 
+  it("recusa lançar placar em partida sem os dois jogadores definidos", async () => {
+    const { tournamentId, matches } = await setupBracket();
+    const final = matches.find((m) => m.round === 1)!;
+    // A final ainda está com os dois lados "a definir" (semis não jogadas).
+    expect(final.participantAId).toBeNull();
+    await expect(mockRepo.reportResult(final.id, { scoreA: 1, scoreB: 0 })).rejects.toThrow();
+    // garante que nada foi gravado
+    const detail = await mockRepo.getTournament(tournamentId);
+    const finalAfter = detail!.matches.find((m) => m.id === final.id)!;
+    expect(finalAfter.status).not.toBe("finished");
+  });
+
   it("revertResult limpa a partida e a propagação à frente", async () => {
     const { tournamentId, matches } = await setupBracket();
     const semi = matches.find((m) => m.round === 2 && m.slot === 0)!;

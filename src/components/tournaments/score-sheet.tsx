@@ -39,7 +39,10 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   const winnerIsA = scoreA === winsNeeded;
   const winnerIsB = scoreB === winsNeeded;
   const totalSets = scoreA + scoreB;
+  // Só é possível lançar placar com os dois jogadores definidos.
+  const hasBothPlayers = !!match.participantAId && !!match.participantBId;
   const validResult =
+    hasBothPlayers &&
     totalSets <= bestOf &&
     (winnerIsA || winnerIsB) &&
     !(winnerIsA && winnerIsB);
