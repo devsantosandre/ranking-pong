@@ -68,17 +68,20 @@ Um **Torneio** contém uma ou mais **Categorias** (ex.: A/B/C por nível, ou Abs
 
 ---
 
-## 5. O que falta (backlog ordenado)
+## 5. O que falta
 
-| # | Item | Esforço | Observação |
-|---|---|---|---|
-| 1 | Aplicar migrations + validar `supabase-repo` contra **Supabase local** | médio | **Só o usuário** aplica; hoje só o mock roda. Inclui `20260618000000_tournament_events.sql` |
-| 2 | Toggle de **dark mode** Arena | baixo | Tokens já existem |
-| 3 | ~~Inscrição aberta por código/QR~~ ✅ **FEITO** | — | `/inscrever` + card admin "Compartilhe a inscrição" (link/copiar/share/QR) |
-| 4 | **E2E Playwright** dos fluxos de torneio | médio | DoD pede (criar→chave→placar→campeão). ⚠️ esbarra no login HML |
-| 5 | ~~Round-robin / scorecard~~ ✅ round-robin feito; scorecard descartado | — | Avançados (dupla elim., suíço, americano, liga) só sob demanda |
-| 6 | Auto-fit/zoom do bracket em tela cheia (hoje só pan) | médio | Tv-bracket-view tem auto-fit (com 1 warning de ref a sanar) |
-| 7 | Diferenciais F3 (palpites, recap narrado, ticker TV, zebra na TV) | alto | Pós-essencial |
+### 5.1 Depende de você (infra — não dá para fazer mock-first)
+- **Aplicar as migrations no Supabase** (HML→PROD) e trocar `NEXT_PUBLIC_DATA_SOURCE=supabase` para sair do mock. Migrations em `supabase/migrations/`: `20260617000000_tournaments`, `…000100_tournament_rpcs`, `…000200_tournament_realtime`, `20260618000000_tournament_events`. **Aplicar nessa ordem.** Depois validar o `supabase-repo` contra o banco.
+- **E2E Playwright** rodando — o app exige login HML; escrever os specs é possível, mas rodá-los autenticado depende do seu ambiente.
+
+### 5.2 Refinamentos futuros (sob demanda — não bloqueiam)
+- Toggle de **dark mode** (tokens já existem).
+- **Auto-fit/zoom** do bracket em tela cheia (hoje só pan).
+- Formatos avançados: dupla eliminação, suíço, americano, liga (F4).
+- Diferenciais F3: palpites, recap narrado, ticker TV, zebra na TV.
+
+### 5.3 Concluído nesta fase ✅
+Eliminatória simples (BYEs corretos), grupos+mata-mata, **round-robin**, rei da mesa; correção/desfazer/regerar de placar; chave que nunca quebra; Categorias unificadas; inscrição por link/QR; modais sólidos; contraste; realtime+polling.
 
 ---
 
