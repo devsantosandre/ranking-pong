@@ -5,7 +5,7 @@ import { createTournament, createEvent } from "@/app/actions/tournaments";
 import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
 import {
-  Loader2, Network, GitBranch, RotateCw,
+  Loader2, Network, RotateCw,
   Layers, Crown, Trophy, Check, AlertCircle, ListTree,
 } from "lucide-react";
 import type { TournamentFormat } from "@/lib/tournaments/types";
@@ -20,7 +20,6 @@ const FORMATS: {
   border: string;
 }[] = [
   { value: "single_elimination", label: "Eliminatória simples", description: "Eliminado na 1ª derrota",      Icon: Network,   color: "#a421d2", bg: "rgba(164,33,210,0.10)", border: "rgba(164,33,210,0.22)" },
-  { value: "double_elimination", label: "Eliminatória dupla",   description: "2 derrotas para ser eliminado", Icon: GitBranch, color: "#0891b2", bg: "rgba(8,145,178,0.10)",  border: "rgba(8,145,178,0.22)"  },
   { value: "round_robin",        label: "Round-robin",           description: "Todos jogam contra todos",      Icon: RotateCw,  color: "#059669", bg: "rgba(5,150,105,0.10)",  border: "rgba(5,150,105,0.22)"  },
   { value: "groups_knockout",    label: "Grupos + mata-mata",    description: "Fase de grupos + eliminação",   Icon: Layers,    color: "#d97706", bg: "rgba(217,119,6,0.10)",  border: "rgba(217,119,6,0.22)"  },
   { value: "king_of_table",      label: "Rei da Mesa",           description: "Desafiante enfrenta o líder",  Icon: Crown,     color: "#dc2626", bg: "rgba(220,38,38,0.10)",  border: "rgba(220,38,38,0.22)"  },
