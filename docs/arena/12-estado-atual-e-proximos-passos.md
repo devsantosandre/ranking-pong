@@ -54,8 +54,8 @@
 
 | # | Item | Esforço | Observação |
 |---|---|---|---|
-| 1 | **Divisões em torneios** | médio | Estudo pronto, decisões fechadas → ver §6 e `docs/ESTUDO_DIVISOES.md` |
-| 2 | Aplicar migrations + validar `supabase-repo` contra **Supabase local** | médio | Hoje só o mock roda; sair do mock exige isso |
+| 1 | ~~**Divisões em torneios**~~ ✅ **FEITO mock-first** (F1–F5) | médio | Evento agrupa divisões; hub admin, switcher, TV de evento, pública. Falta só a migration F6 (item 2) |
+| 2 | Aplicar migrations + validar `supabase-repo` contra **Supabase local** | médio | Hoje só o mock roda; inclui a migration de divisões (`20260618000000_tournament_events.sql`) |
 | 3 | Toggle de **dark mode** Arena | baixo | Tokens já existem |
 | 4 | Inscrição aberta por **código/QR** ponta a ponta | médio | Rota `/inscrever` existe — auditar fluxo completo |
 | 5 | E2E Playwright dos fluxos de torneio | médio | DoD pede (criar→chave→placar→campeão) |

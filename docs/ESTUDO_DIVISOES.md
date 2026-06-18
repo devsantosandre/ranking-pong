@@ -1,6 +1,6 @@
 # Estudo: Divisões em Torneios
 
-> **Status:** estudo / design — **não implementado**. Documento para discussão antes de codar.
+> **Status (2026-06-18):** ✅ **IMPLEMENTADO mock-first** (Opção B, fases F1–F5). Validado contra a indústria (§12.5). Migration F6 criada só em arquivo (`20260618000000_tournament_events.sql`), **não aplicada**. Falta só aplicar a migration + validar contra Supabase local. Este documento permanece como o design de referência.
 > **Data:** 2026-06-18
 > **Autor:** Claude (a pedido do organizador)
 > **Regra do projeto respeitada:** nenhuma migration foi aplicada; os SQLs abaixo são esboços ilustrativos.
