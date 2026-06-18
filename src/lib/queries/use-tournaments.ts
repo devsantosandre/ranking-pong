@@ -41,7 +41,7 @@ export function useTournament(id: string) {
   });
 }
 
-export function useTournamentBracket(id: string) {
+export function useTournamentBracket(id: string, opts?: { live?: boolean }) {
   return useQuery({
     queryKey: tournamentKeys.bracket(id),
     queryFn: async () => {
@@ -49,8 +49,12 @@ export function useTournamentBracket(id: string) {
       if (!res.ok) throw new Error("Falha ao buscar bracket");
       return res.json();
     },
-    staleTime: 10_000,
+    staleTime: 5_000,
     enabled: !!id,
+    // Quando ao vivo, faz polling como fallback de tempo real (cobre mock,
+    // múltiplas abas e complementa o realtime do Supabase).
+    refetchInterval: opts?.live ? 8_000 : false,
+    refetchOnWindowFocus: true,
   });
 }
 

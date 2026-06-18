@@ -3,10 +3,11 @@
 import { BracketCanvas } from "@/components/bracket/bracket-canvas";
 import { StandingsTable } from "@/components/tournaments/standings-table";
 import { useRealtimeBracket } from "@/lib/realtime/use-realtime-bracket";
-import { useTournamentBracket } from "@/lib/queries/use-tournaments";
+import { useTournamentBracket, tournamentKeys } from "@/lib/queries/use-tournaments";
+import { useQueryClient } from "@tanstack/react-query";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
 import type { TournamentMatch, TournamentParticipant, GroupStanding } from "@/lib/tournaments/types";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { ScoreSheet } from "@/components/tournaments/score-sheet";
 import { Network, X } from "lucide-react";
 
@@ -29,11 +30,20 @@ export function BracketClientShell({
   isAdmin = false,
   initialStandings = [],
 }: BracketClientShellProps) {
-  const { data } = useTournamentBracket(tournamentId);
+  const { data } = useTournamentBracket(tournamentId, { live: isLive });
   const liveMatches = data?.matches ?? initialMatches;
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
+  const queryClient = useQueryClient();
 
   useRealtimeBracket(isLive ? tournamentId : "");
+
+  // Após lançar/corrigir/desfazer, força a chave a refazer o fetch (atualização
+  // imediata mesmo sem realtime, ex.: modo mock).
+  const handleScoreClose = useCallback(() => {
+    setSelectedMatch(null);
+    queryClient.invalidateQueries({ queryKey: tournamentKeys.bracket(tournamentId) });
+    queryClient.invalidateQueries({ queryKey: tournamentKeys.standings(tournamentId) });
+  }, [queryClient, tournamentId]);
 
   const hasGroups = liveMatches.some((m: TournamentMatch) => m.bracket === "group");
   const knockoutMatches = liveMatches.filter((m: TournamentMatch) => m.bracket !== "group");
@@ -146,7 +156,7 @@ export function BracketClientShell({
               participants={participants}
               tournamentId={tournamentId}
               bestOf={bestOf}
-              onClose={() => setSelectedMatch(null)}
+              onClose={handleScoreClose}
             />
           </div>
         </div>

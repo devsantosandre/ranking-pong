@@ -29,7 +29,7 @@ export function TvBracketView({
   tournamentName,
   isActive,
 }: TvBracketViewProps) {
-  const { data } = useTournamentBracket(tournamentId);
+  const { data } = useTournamentBracket(tournamentId, { live: isActive });
   const liveMatches: TournamentMatch[] = (data?.matches ?? initialMatches) as TournamentMatch[];
   const participants: TournamentParticipant[] = (data?.participants ?? initialParticipants) as TournamentParticipant[];
 
