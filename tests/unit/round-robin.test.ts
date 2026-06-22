@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mockRepo } from "@/lib/tournaments/repo/mock-repo";
+import { mockRepo } from "../helpers/mock-repo";
 
 async function setup(numPlayers: number) {
   const t = await mockRepo.createTournament({

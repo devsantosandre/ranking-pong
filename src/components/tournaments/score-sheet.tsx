@@ -262,10 +262,8 @@ function PlayerScore({
       className="flex flex-1 flex-col items-center gap-3 rounded-2xl p-3 transition-all"
       style={{
         background: isWinner
-          ? `color-mix(in srgb, ${seedColor.color} 8%, #ffffff)`
-          : isLoser
-            ? "color-mix(in srgb, var(--arena-foreground) 3%, #ffffff)"
-            : "color-mix(in srgb, var(--arena-foreground) 3%, #ffffff)",
+          ? `color-mix(in srgb, ${seedColor.color} 12%, var(--arena-bg-2))`
+          : "color-mix(in srgb, var(--arena-foreground) 4%, var(--arena-bg-2))",
         border: isWinner
           ? `1.5px solid color-mix(in srgb, ${seedColor.color} 30%, transparent)`
           : "1.5px solid color-mix(in srgb, var(--arena-foreground) 8%, transparent)",

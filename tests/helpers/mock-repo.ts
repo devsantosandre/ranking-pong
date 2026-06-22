@@ -1,8 +1,9 @@
-import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
-import { computeBracketLayout } from "../bracket-layout";
-import { nextPowerOfTwo, buildStandardOrder } from "../seeding";
-import { computeGroupStandings } from "../standings";
+import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "@/lib/tournaments/repo/tournament-repo";
+import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "@/lib/tournaments/types";
+import { computeBracketLayout } from "@/lib/tournaments/bracket-layout";
+import { nextPowerOfTwo, buildStandardOrder } from "@/lib/tournaments/seeding";
+import { computeGroupStandings } from "@/lib/tournaments/standings";
+import { deriveEventStatus } from "@/lib/tournaments/event-status";
 
 function uuid() {
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -171,7 +172,7 @@ function seedTournament(): Tournament {
       verificationCode: null, maxParticipants: 8, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
-      eventId: null, divisionLabel: null, divisionOrder: 0,
+      eventId: null, divisionLabel: null, divisionOrder: 0, thirdPlaceMatch: true,
     });
     participants.set(id, [
       { id: "p1", tournamentId: id, userId: "u1", guestName: "Carlos Almeida",   seed: 1, groupId: null, pot: null, flag: "br", avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -192,7 +193,7 @@ function seedGroupTournament(): Tournament {
       verificationCode: null, maxParticipants: 6, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
-      eventId: null, divisionLabel: null, divisionOrder: 0,
+      eventId: null, divisionLabel: null, divisionOrder: 0, thirdPlaceMatch: true,
     });
     const gParts: TournamentParticipant[] = [
       { id: "g1", tournamentId: id, userId: null, guestName: "Felipe Torres",    seed: 1, groupId: "A", pot: null, flag: null, avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -243,7 +244,7 @@ function seedKingTournament(): Tournament {
       verificationCode: null, maxParticipants: null, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
-      eventId: null, divisionLabel: null, divisionOrder: 0,
+      eventId: null, divisionLabel: null, divisionOrder: 0, thirdPlaceMatch: true,
     });
     const kParts: TournamentParticipant[] = [
       { id: "k1", tournamentId: id, userId: null, guestName: "Rodrigo Costa",    seed: 1, groupId: null, pot: null, flag: null, avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -308,6 +309,7 @@ export const mockRepo: TournamentRepo = {
       eventId: input.eventId ?? null,
       divisionLabel: input.divisionLabel ?? null,
       divisionOrder: input.divisionOrder ?? 0,
+      thirdPlaceMatch: true,
     };
     tournaments.set(id, t);
     participants.set(id, []);
@@ -529,6 +531,11 @@ export const mockRepo: TournamentRepo = {
     if (!foundMatch.participantAId || !foundMatch.participantBId) {
       throw new Error("Defina os dois jogadores antes de lançar o placar.");
     }
+    if (input.scoreA === input.scoreB) {
+      throw new Error("Empate não é permitido no tênis de mesa.");
+    }
+    const t = tournaments.get(tournamentId);
+    if (t?.status === "finished") throw new Error("Torneio já encerrado. Reabra antes de editar.");
 
     const list = matches.get(tournamentId) ?? [];
     const newWinner = input.scoreA > input.scoreB
@@ -536,10 +543,27 @@ export const mockRepo: TournamentRepo = {
       : foundMatch.participantBId;
     const oldWinner = foundMatch.winnerParticipantId;
 
-    // Correção: se já havia resultado e o vencedor mudou, limpa a propagação antiga
-    // (e tudo que dependia dela) antes de propagar o novo vencedor.
+    // Se já havia resultado e o vencedor mudou, limpa a propagação antiga.
     if (oldWinner && oldWinner !== newWinner) {
       clearMatchForward(list, foundMatch);
+      // Para partidas de grupo: limpa todos os slots do mata-mata associados a este grupo,
+      // incluindo resultados de knockout já jogados com o classificado antigo.
+      if (foundMatch.bracket === "group" && foundMatch.groupId) {
+        const slotEntries = (groupSlotMap.get(tournamentId) ?? []).filter((e) => e.groupId === foundMatch!.groupId);
+        for (const entry of slotEntries) {
+          const m = list.find((mm) => mm.id === entry.matchId);
+          if (!m) continue;
+          // Se o knockout já tem resultado, limpa para frente antes de remover o participante.
+          if (m.winnerParticipantId) {
+            clearMatchForward(list, m);
+            m.winnerParticipantId = null;
+            m.scoreA = null; m.scoreB = null; m.sets = null; m.finishedAt = null;
+          }
+          if (entry.matchSlot === 0) { m.participantAId = null; }
+          else { m.participantBId = null; }
+          m.status = "pending";
+        }
+      }
     }
 
     foundMatch.scoreA = input.scoreA;
@@ -586,7 +610,18 @@ export const mockRepo: TournamentRepo = {
   },
 
   async walkover(matchId, winnerParticipantId) {
-    return this.reportResult(matchId, { scoreA: 0, scoreB: 0 });
+    let foundMatch: TournamentMatch | undefined;
+    for (const list of matches.values()) {
+      const m = list.find((m) => m.id === matchId);
+      if (m) { foundMatch = m; break; }
+    }
+    if (!foundMatch) throw new Error("Partida não encontrada");
+    if (foundMatch.participantAId !== winnerParticipantId && foundMatch.participantBId !== winnerParticipantId) {
+      throw new Error("Vencedor não está nesta partida");
+    }
+    const scoreA = foundMatch.participantAId === winnerParticipantId ? 1 : 0;
+    const scoreB = scoreA === 1 ? 0 : 1;
+    return this.reportResult(matchId, { scoreA, scoreB });
   },
 
   async getStandings(tournamentId) {
@@ -652,6 +687,7 @@ export const mockRepo: TournamentRepo = {
           categoriesCount: cats.length,
           firstCategoryId: cats[0]?.id ?? null,
           hasLiveMatch: hasLive,
+          status: deriveEventStatus(cats.map((c) => c.status), hasLive),
         };
       });
   },
@@ -698,7 +734,7 @@ export const mockRepo: TournamentRepo = {
       verificationCode: null, maxParticipants: null, seasonId: ev.seasonId,
       championUserId: null, championName: null, branding: ev.branding,
       createdBy: ev.createdBy, createdAt: new Date().toISOString(), finishedAt: null,
-      eventId, divisionLabel: input.label, divisionOrder: existing.length,
+      eventId, divisionLabel: input.label, divisionOrder: existing.length, thirdPlaceMatch: true,
     };
     tournaments.set(id, t);
     participants.set(id, []);
@@ -711,6 +747,14 @@ export const mockRepo: TournamentRepo = {
       const t = tournaments.get(o.tournamentId);
       if (t && t.eventId === eventId) tournaments.set(o.tournamentId, { ...t, divisionOrder: o.divisionOrder });
     }
+  },
+
+  async setThirdPlaceMatch(id, enabled) {
+    const t = tournaments.get(id);
+    if (!t) throw new Error("Torneio não encontrado");
+    const updated = { ...t, thirdPlaceMatch: enabled };
+    tournaments.set(id, updated);
+    return updated;
   },
 };
 
@@ -749,7 +793,7 @@ function seedEventDemo(): TournamentEvent {
       verificationCode: null, maxParticipants: null, seasonId: null,
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
-      eventId, divisionLabel: label, divisionOrder: order,
+      eventId, divisionLabel: label, divisionOrder: order, thirdPlaceMatch: true,
     });
   };
 

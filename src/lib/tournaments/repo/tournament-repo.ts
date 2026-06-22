@@ -16,6 +16,8 @@ export interface CreateTournamentInput {
   name: string;
   format: TournamentFormat;
   bestOf: number;
+  /** Eliminatórias: disputa de 3º lugar. Default true. */
+  thirdPlaceMatch?: boolean;
   seedingMethod: SeedingMethod;
   registrationMode: RegistrationMode;
   maxParticipants?: number;
@@ -69,6 +71,8 @@ export interface TournamentRepo {
   getTournament(id: string): Promise<TournamentDetail | null>;
   createTournament(input: CreateTournamentInput): Promise<Tournament>;
   updateTournament(id: string, patch: Partial<Pick<Tournament, "name" | "status" | "bestOf" | "branding">>): Promise<Tournament>;
+  /** Liga/desliga a disputa de 3º lugar (eliminatórias). Permitido até as semis acabarem. */
+  setThirdPlaceMatch(tournamentId: string, enabled: boolean): Promise<Tournament>;
 
   addParticipants(tournamentId: string, items: AddParticipantInput[]): Promise<TournamentParticipant[]>;
   removeParticipant(participantId: string): Promise<void>;

@@ -75,8 +75,8 @@ function SeedRow({ participant: p, seed, disabled }: { participant: TournamentPa
         transform: CSS.Transform.toString(transform),
         transition,
         background: isDragging
-          ? "color-mix(in srgb, var(--arena-primary) 6%, #ffffff)"
-          : "color-mix(in srgb, var(--arena-foreground) 3%, #ffffff)",
+          ? "color-mix(in srgb, var(--arena-primary) 10%, var(--arena-bg-2))"
+          : "color-mix(in srgb, var(--arena-foreground) 4%, var(--arena-bg-2))",
         border: isDragging
           ? "1.5px solid color-mix(in srgb, var(--arena-primary) 35%, transparent)"
           : "1.5px solid color-mix(in srgb, var(--arena-foreground) 8%, transparent)",

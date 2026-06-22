@@ -7,9 +7,6 @@ import { createClient } from "@/utils/supabase/server";
 import type { SeedingMethod } from "@/lib/tournaments/types";
 
 async function assertAdmin() {
-  if ((process.env.NEXT_PUBLIC_DATA_SOURCE ?? "mock") !== "supabase") {
-    return { id: "mock-admin", email: "admin@mock.dev" };
-  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado");
@@ -38,6 +35,7 @@ const createTournamentSchema = z.object({
   name: z.string().min(2).max(100),
   format: z.enum(["single_elimination","double_elimination","round_robin","groups_knockout","swiss","scorecard","americano","king_of_table","league"]),
   bestOf: z.number().int().refine((n) => [1,3,5,7].includes(n), "Deve ser 1, 3, 5 ou 7"),
+  thirdPlaceMatch: z.boolean().optional().default(true),
   seedingMethod: z.enum(["standard","pots","sequential","manual","elo"]).default("standard"),
   registrationMode: z.enum(["invite","open"]).default("invite"),
   maxParticipants: z.number().int().min(2).max(256).optional(),
@@ -78,6 +76,16 @@ const addParticipantsSchema = z.array(
     avatarUrl: z.string().url().optional(),
   }).refine((i) => i.userId || i.guestName, "userId ou guestName obrigatório")
 );
+
+export async function setThirdPlaceMatch(tournamentId: string, enabled: boolean) {
+  await assertAdmin();
+  const repo = await getTournamentRepo();
+  const tournament = await repo.setThirdPlaceMatch(tournamentId, enabled);
+  await logAdmin("tournament_third_place_match", { tournament_id: tournamentId, enabled });
+  invalidateTournament(tournamentId);
+  revalidatePath("/torneios");
+  return { tournament };
+}
 
 export async function addParticipants(tournamentId: string, rawItems: unknown) {
   await assertAdmin();
@@ -127,6 +135,9 @@ const reportResultSchema = z.object({
   scoreA: z.number().int().min(0),
   scoreB: z.number().int().min(0),
   sets: z.array(z.tuple([z.number(), z.number()])).optional(),
+}).refine((r) => r.scoreA !== r.scoreB, {
+  message: "Placar não pode terminar empatado.",
+  path: ["scoreB"],
 });
 
 export async function reportResult(matchId: string, rawInput: unknown) {

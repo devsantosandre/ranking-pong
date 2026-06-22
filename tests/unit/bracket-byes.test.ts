@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mockRepo } from "@/lib/tournaments/repo/mock-repo";
+import { mockRepo } from "../helpers/mock-repo";
 import type { TournamentMatch } from "@/lib/tournaments/types";
 
 async function generate(numPlayers: number): Promise<TournamentMatch[]> {

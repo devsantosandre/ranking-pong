@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mockRepo } from "@/lib/tournaments/repo/mock-repo";
+import { mockRepo } from "../helpers/mock-repo";
 
 // Monta um torneio de eliminatória simples com 4 jogadores e gera a chave.
 async function setupBracket() {

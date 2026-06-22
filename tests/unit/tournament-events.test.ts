@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mockRepo } from "@/lib/tournaments/repo/mock-repo";
+import { mockRepo } from "../helpers/mock-repo";
 
 describe("Eventos / Divisões (Opção B) — mock-repo", () => {
   it("evento demo agrupa 3 divisões ordenadas por divisionOrder", async () => {
