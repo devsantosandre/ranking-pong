@@ -1,7 +1,8 @@
 import { createClient } from "@/utils/supabase/client";
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "../types";
-import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow } from "../types";
+import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, TournamentStatus } from "../types";
+import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow, standingFromRow } from "../types";
+import { deriveEventStatus } from "../event-status";
 
 export const supabaseRepo: TournamentRepo = {
   async listTournaments(filter) {
@@ -32,6 +33,7 @@ export const supabaseRepo: TournamentRepo = {
     const client = createClient();
     const { data, error } = await client.from("tournaments").insert({
       name: input.name, format: input.format, best_of: input.bestOf,
+      third_place_match: input.thirdPlaceMatch ?? true,
       seeding_method: input.seedingMethod, registration_mode: input.registrationMode,
       max_participants: input.maxParticipants ?? null, season_id: input.seasonId ?? null,
       created_by: input.createdBy,
@@ -55,11 +57,27 @@ export const supabaseRepo: TournamentRepo = {
     return tournamentFromRow(data as Record<string, unknown>);
   },
 
+  async setThirdPlaceMatch(tournamentId, enabled) {
+    const client = createClient();
+    // Atualiza o flag. A criação/remoção da partida 'placement' no bracket é
+    // tratada pelo lado do banco (RPC generate_bracket / migration) — ver
+    // supabase/migrations do third_place_match.
+    const { data, error } = await client
+      .from("tournaments")
+      .update({ third_place_match: enabled })
+      .eq("id", tournamentId)
+      .select()
+      .single();
+    if (error) throw error;
+    return tournamentFromRow(data as Record<string, unknown>);
+  },
+
   async addParticipants(tournamentId, items: AddParticipantInput[]) {
     const client = createClient();
     const rows = items.map((i) => ({
       tournament_id: tournamentId, user_id: i.userId ?? null, guest_name: i.guestName ?? null,
       flag: i.flag ?? null, avatar_url: i.avatarUrl ?? null, color: i.color ?? null,
+      signup_status: "confirmed" as const,
     }));
     const { data, error } = await client.from("tournament_participants").insert(rows).select();
     if (error) throw error;
@@ -75,11 +93,14 @@ export const supabaseRepo: TournamentRepo = {
   async saveSeeding(tournamentId, order: SaveSeedingInput[]) {
     const client = createClient();
     await Promise.all(
-      order.map((s) =>
-        client.from("tournament_participants")
-          .update({ seed: s.seed, group_id: s.groupId ?? null, pot: s.pot ?? null })
-          .eq("id", s.participantId)
-      )
+      order.map((s) => {
+        // Só atualiza grupo/pote quando enviados — reordenar seeds não pode
+        // zerar o group_id (quebraria a tabela de pontos corridos / grupos).
+        const upd: Record<string, unknown> = { seed: s.seed };
+        if (s.groupId !== undefined) upd.group_id = s.groupId;
+        if (s.pot !== undefined) upd.pot = s.pot;
+        return client.from("tournament_participants").update(upd).eq("id", s.participantId);
+      })
     );
   },
 
@@ -123,7 +144,7 @@ export const supabaseRepo: TournamentRepo = {
       .select("*")
       .eq("tournament_id", tournamentId);
     if (error) throw error;
-    return (data ?? []) as GroupStanding[];
+    return (data ?? []).map((r: Record<string, unknown>) => standingFromRow(r));
   },
 
   async closeGroupStage(tournamentId) {
@@ -172,15 +193,17 @@ export const supabaseRepo: TournamentRepo = {
     return Promise.all(
       evs.map(async (ev: TournamentEvent): Promise<EventListItem> => {
         const [cats, live] = await Promise.all([
-          client.from("tournaments").select("id").eq("event_id", ev.id).order("division_order", { ascending: true }),
+          client.from("tournaments").select("id, status").eq("event_id", ev.id).order("division_order", { ascending: true }),
           client.from("tournaments").select("id, tournament_matches!inner(id)").eq("event_id", ev.id).eq("tournament_matches.status", "in_progress"),
         ]);
-        const ids = (cats.data ?? []) as { id: string }[];
+        const ids = (cats.data ?? []) as { id: string; status: TournamentStatus }[];
+        const hasLive = (live.data ?? []).length > 0;
         return {
           ...ev,
           categoriesCount: ids.length,
           firstCategoryId: ids[0]?.id ?? null,
-          hasLiveMatch: (live.data ?? []).length > 0,
+          hasLiveMatch: hasLive,
+          status: deriveEventStatus(ids.map((c) => c.status), hasLive),
         };
       }),
     );

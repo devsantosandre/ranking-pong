@@ -21,6 +21,8 @@ export interface Tournament {
   name: string;
   format: TournamentFormat;
   bestOf: number;
+  /** Eliminatórias: true = disputa de 3º lugar (padrão ITTF); false = dois terceiros. */
+  thirdPlaceMatch: boolean;
   status: TournamentStatus;
   seedingMethod: SeedingMethod;
   registrationMode: RegistrationMode;
@@ -77,6 +79,8 @@ export interface EventListItem extends TournamentEvent {
   categoriesCount: number;
   firstCategoryId: string | null;
   hasLiveMatch: boolean;
+  /** Status predominante das divisões (ver deriveEventStatus). */
+  status: TournamentStatus;
 }
 
 export interface TournamentParticipant {
@@ -154,6 +158,7 @@ export function tournamentFromRow(row: Record<string, unknown>): Tournament {
     name: row.name as string,
     format: row.format as TournamentFormat,
     bestOf: row.best_of as number,
+    thirdPlaceMatch: (row.third_place_match as boolean | null) ?? true,
     status: row.status as TournamentStatus,
     seedingMethod: row.seeding_method as SeedingMethod,
     registrationMode: row.registration_mode as RegistrationMode,
@@ -199,6 +204,19 @@ export function participantFromRow(row: Record<string, unknown>): TournamentPart
     color: (row.color as string | null) ?? null,
     signupStatus: row.signup_status as SignupStatus,
     partnerParticipantId: (row.partner_participant_id as string | null) ?? null,
+  };
+}
+
+export function standingFromRow(row: Record<string, unknown>): GroupStanding {
+  return {
+    participantId: row.participant_id as string,
+    groupId: row.group_id as string,
+    wins: row.wins as number,
+    losses: row.losses as number,
+    setsWon: row.sets_won as number,
+    setsLost: row.sets_lost as number,
+    points: row.points as number,
+    position: row.position as number,
   };
 }
 
