@@ -122,103 +122,138 @@
   }
 }
 
-/* ========================================
-   ARENA — Design System Tokens
-   Ativados pela classe .arena no layout
-   ======================================== */
+/* ============================================================================
+   ARENA — Design System Tokens (FONTE DA VERDADE do design do app)
+   Documentação completa do padrão: skill `arena-design-pattern`.
+   ----------------------------------------------------------------------------
+   CONTRATO (não quebrar):
+   • UM knob por tenant = `--brand`. Todas as superfícies (bg, texto, vidro,
+     bordas) são DERIVADAS dele via color-mix — no light (`.arena`) e no dark
+     (`.arena.dark, .dark .arena`). Trocar `--brand` recolore o app inteiro.
+   • Dark liga com `.dark` no <html> (toggle: src/lib/use-theme.ts). No dark a
+     marca é clareada (`color-mix(var(--brand) 72%, #fff)`) para contraste.
+   • Em JS/JSX use SEMPRE `var(--token)` — nunca hex de marca/estado, nunca
+     paleta crua do Tailwind, nunca `#ffffff`/`bg-white` como base de superfície
+     (quebra white-label e dark). Notação Tailwind v4: `text-(--arena-foreground)`.
+   • Superfícies: canvas de página/modal = `--arena-bg-1`; cards = `--glass-*`;
+     `--popover` é SÓ para menus/dropdowns (sólido). Modais portados (Radix)
+     precisam de `className="arena"`.
+   • Tokens novos: adicione em AMBOS os blocos (.arena e o dark) e derive de
+     `--brand`/`--arena-*`. Estados (active/scheduled/played/noshow/tbd) são
+     semânticos e ~constantes entre marcas.
+   ============================================================================ */
 
 .arena {
-  /* Palco — light (off-white neutro, sem tint colorido) */
-  --arena-bg-1: #fafafa;
-  --arena-bg-2: #f5f5f5;
-  --arena-vignette: #eeeeee;
+  /* ── ÚNICO knob por tenant (white-label): a cor de marca ──
+     Todas as superfícies (light + dark) são derivadas daqui via color-mix.
+     Trocar só esta variável recolore o app inteiro de forma coesa. */
+  --brand: #a421d2;
 
-  /* Vidro — frosted white glass */
+  /* Palco — light: off-white com um leve tom da marca */
+  --arena-bg-1: color-mix(in srgb, var(--brand) 3%, #fafafa);
+  --arena-bg-2: color-mix(in srgb, var(--brand) 5%, #f4f4f5);
+  --arena-vignette: color-mix(in srgb, var(--brand) 6%, #ececec);
+
+  /* Vidro — frosted white glass (borda tingida da marca) */
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-bg-nav: rgba(255, 255, 255, 0.85);
   --glass-bg-hover: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(164, 33, 210, 0.12);
-  --glass-border-strong: rgba(164, 33, 210, 0.22);
+  --glass-border: color-mix(in srgb, var(--brand) 12%, transparent);
+  --glass-border-strong: color-mix(in srgb, var(--brand) 22%, transparent);
+  --glass-border-nav-top: var(--glass-border);
+  --glass-border-nav-side: var(--glass-border-strong);
+  --glass-border-nav-bottom: var(--glass-border-strong);
   --glass-blur: 16px;
+  --glass-blur-nav: 14px;
 
   /* Marca */
-  --arena-primary: #a421d2;
-  --arena-primary-glow: rgba(164, 33, 210, 0.20);
+  --arena-primary: var(--brand);
+  --arena-primary-glow: color-mix(in srgb, var(--brand) 20%, transparent);
 
-  /* Estados — saturados para contraste no fundo claro */
+  /* Estados — semânticos, ~constantes entre marcas */
   --state-active: #0891b2;
-  --state-active-glow: rgba(8, 145, 178, 0.15);
+  --state-active-glow: color-mix(in srgb, var(--state-active) 15%, transparent);
   --state-scheduled: #d97706;
-  --state-scheduled-glow: rgba(217, 119, 6, 0.15);
+  --state-scheduled-glow: color-mix(in srgb, var(--state-scheduled) 15%, transparent);
   --state-played: #059669;
-  --state-played-glow: rgba(5, 150, 105, 0.15);
+  --state-played-glow: color-mix(in srgb, var(--state-played) 15%, transparent);
   --state-noshow: #dc2626;
-  --state-noshow-glow: rgba(220, 38, 38, 0.15);
+  --state-noshow-glow: color-mix(in srgb, var(--state-noshow) 15%, transparent);
   --state-tbd: #6b7280;
 
-  /* Texto */
-  --arena-foreground: #1a0026;
-  --arena-muted: #6b3980;
+  /* Texto — quase preto com um toque da marca */
+  --arena-foreground: color-mix(in srgb, var(--brand) 18%, #131016);
+  --arena-muted: color-mix(in srgb, var(--brand) 40%, #645f6b);
   --arena-radius: 0.9rem;
   color: var(--arena-foreground);
 
   /* Sombra de card */
-  --shadow-card: 0 2px 16px rgba(120, 0, 200, 0.07), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 2px 16px color-mix(in srgb, var(--brand) 9%, transparent), 0 1px 4px rgba(0, 0, 0, 0.04);
 
   /* Easings */
   --ease-arena: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-arena-inout: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* Sobrescreve tokens globais dentro do Arena */
-  --background: #fafafa;
-  --foreground: #1a0026;
-  --card: rgba(255, 255, 255, 0.8);
-  --card-foreground: #1a0026;
+  --background: var(--arena-bg-1);
+  --foreground: var(--arena-foreground);
+  --card: var(--glass-bg-strong);
+  --card-foreground: var(--arena-foreground);
   /* Superfície sólida para modais/menus (popover) — sem transparência */
   --popover: #ffffff;
-  --popover-foreground: #1a0026;
-  --border: rgba(164, 33, 210, 0.12);
-  --muted-foreground: #6b3980;
-  --primary: #a421d2;
+  --popover-foreground: var(--arena-foreground);
+  --border: var(--glass-border);
+  --muted-foreground: var(--arena-muted);
+  --primary: var(--arena-primary);
   --primary-foreground: #ffffff;
   --radius: 0.9rem;
 }
 
-/* Dark mode — preservado para toggle futuro */
-.arena.dark {
-  --arena-bg-1: #0b0612;
-  --arena-bg-2: #150a22;
-  --arena-vignette: #050208;
+/* Dark mode — ativa com a classe `.dark` no ancestral (ex.: <html class="dark">)
+   ou no próprio nó (ex.: TV usa `arena dark`). Superfícies derivadas da marca:
+   o preto carrega um leve tom de --brand → coeso para qualquer cor de tenant. */
+.arena.dark,
+.dark .arena {
+  --arena-bg-1: color-mix(in srgb, var(--brand) 8%, #08070b);
+  --arena-bg-2: color-mix(in srgb, var(--brand) 13%, #0d0b13);
+  --arena-vignette: color-mix(in srgb, var(--brand) 6%, #050308);
   --glass-bg: color-mix(in srgb, #fff 4%, transparent);
   --glass-bg-strong: color-mix(in srgb, #fff 7%, transparent);
+  --glass-bg-nav: color-mix(in srgb, #fff 7%, transparent);
   --glass-bg-hover: color-mix(in srgb, #fff 6%, transparent);
   --glass-border: rgba(255, 255, 255, 0.10);
   --glass-border-strong: rgba(255, 255, 255, 0.18);
-  --arena-primary: #c04bff;
-  --arena-primary-glow: rgba(192, 75, 255, 0.30);
+  --glass-border-nav-top: rgba(255, 255, 255, 0.1);
+  --glass-border-nav-side: rgba(255, 255, 255, 1);
+  --glass-border-nav-bottom: rgb(255, 255, 255);
+  --glass-blur-nav: 14px;
+  /* Marca clareada para manter contraste sobre o fundo escuro */
+  --arena-primary: color-mix(in srgb, var(--brand) 72%, #ffffff);
+  --arena-primary-glow: color-mix(in srgb, var(--arena-primary) 30%, transparent);
   --state-active: #22d3ee;
-  --state-active-glow: rgba(34, 211, 238, 0.25);
+  --state-active-glow: color-mix(in srgb, var(--state-active) 25%, transparent);
   --state-scheduled: #f5a524;
-  --state-scheduled-glow: rgba(245, 165, 36, 0.25);
+  --state-scheduled-glow: color-mix(in srgb, var(--state-scheduled) 25%, transparent);
   --state-played: #2dd4a7;
-  --state-played-glow: rgba(45, 212, 167, 0.25);
+  --state-played-glow: color-mix(in srgb, var(--state-played) 25%, transparent);
   --state-noshow: #f43f5e;
-  --state-noshow-glow: rgba(244, 63, 94, 0.25);
+  --state-noshow-glow: color-mix(in srgb, var(--state-noshow) 25%, transparent);
   --state-tbd: #8b8197;
-  --arena-foreground: #f3ecff;
-  --arena-muted: #b6a8c9;
+  --arena-foreground: color-mix(in srgb, var(--brand) 12%, #ffffff);
+  --arena-muted: color-mix(in srgb, var(--brand) 22%, #9b95a6);
   color: var(--arena-foreground);
   --shadow-card: 0 2px 24px rgba(0, 0, 0, 0.5);
-  --background: #0b0612;
-  --foreground: #f3ecff;
-  --card: color-mix(in srgb, #fff 4%, transparent);
-  --card-foreground: #f3ecff;
+  --background: var(--arena-bg-1);
+  --foreground: var(--arena-foreground);
+  --card: var(--glass-bg-strong);
+  --card-foreground: var(--arena-foreground);
   /* Superfície sólida para modais/menus (popover) — sem transparência */
-  --popover: #1c0b2b;
-  --popover-foreground: #f3ecff;
+  --popover: color-mix(in srgb, var(--brand) 12%, #140e1c);
+  --popover-foreground: var(--arena-foreground);
   --border: rgba(255, 255, 255, 0.10);
-  --muted-foreground: #b6a8c9;
-  --primary: #c04bff;
+  --muted-foreground: var(--arena-muted);
+  --primary: var(--arena-primary);
   --primary-foreground: #0b0612;
   --radius: 0.9rem;
 }
@@ -245,8 +280,14 @@
 
 .glow-active {
   box-shadow:
-    0 0 0 1px var(--state-active-glow),
-    0 8px 32px var(--state-active-glow);
+    0 0 0 1px color-mix(in srgb, var(--state-active) 12%, transparent),
+    0 4px 20px color-mix(in srgb, var(--state-active) 10%, transparent);
+}
+
+.glow-scheduled {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--state-scheduled) 12%, transparent),
+    0 4px 20px color-mix(in srgb, var(--state-scheduled) 10%, transparent);
 }
 
 .glow-primary {

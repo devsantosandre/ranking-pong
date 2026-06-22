@@ -151,9 +151,12 @@ export function ArenaShell({
       <nav
         className="fixed inset-x-0 bottom-0 z-50"
         style={{
-          background: "var(--glass-bg-strong)",
-          backdropFilter: "blur(var(--glass-blur))",
-          borderTop: "1px solid var(--glass-border)",
+          background: "var(--glass-bg-nav)",
+          backdropFilter: "blur(var(--glass-blur-nav))",
+          borderTop: "1px solid var(--glass-border-nav-top)",
+          borderBottom: "0px solid var(--glass-border-nav-bottom)",
+          borderColor:
+            "var(--glass-border-nav-top) var(--glass-border-nav-side) var(--glass-border-nav-bottom)",
         }}
       >
         <div className="mx-auto flex w-full max-w-[440px] items-center justify-between px-3 py-3 sm:px-5">
@@ -175,7 +178,7 @@ export function ArenaShell({
                 <span className="relative">
                   <Icon className="h-5 w-5" />
                   {item.href === "/partidas" && pendingActionsCount > 0 && (
-                    <span className="absolute -right-2 -top-2 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    <span className="absolute -right-2 -top-2 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-(--state-noshow) px-1 text-[10px] font-bold text-white">
                       {pendingActionsCount > 99 ? "99+" : pendingActionsCount}
                     </span>
                   )}
@@ -187,14 +190,14 @@ export function ArenaShell({
         </div>
       </nav>
 
-      {/* FAB registrar jogo */}
-      {pathname !== "/registrar-jogo" && (
+      {/* FAB registrar jogo — oculto no admin (ação de usuário, não de gestão) */}
+      {pathname !== "/registrar-jogo" && !pathname.startsWith("/admin") && (
         <Link
           href="/registrar-jogo"
           className="fixed bottom-20 left-1/2 z-[60] inline-flex -translate-x-1/2 items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl transition hover:scale-[1.03] sm:bottom-16"
           style={{
             background: "var(--arena-primary)",
-            boxShadow: "0 8px 24px rgba(164,33,210,0.35)",
+            boxShadow: "0 8px 24px color-mix(in srgb, var(--arena-primary) 35%, transparent)",
           }}
         >
           <CirclePlus className="h-5 w-5" />

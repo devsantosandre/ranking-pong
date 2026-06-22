@@ -13,7 +13,9 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
   addParticipants, removeParticipant, saveSeeding,
   generateBracket, openRegistration, closeRegistration, finishTournament, configureGroups,
+  setThirdPlaceMatch,
 } from "@/app/actions/tournaments";
+import { finishedSemisCount } from "@/lib/tournaments/placement";
 import { getSeedColor } from "@/lib/tournaments/seed-colors";
 import { FORMAT_META } from "@/lib/tournaments/format-meta";
 import { useTournament, useTournamentStandings, tournamentKeys } from "@/lib/queries/use-tournaments";
@@ -60,6 +62,7 @@ export default function AdminTournamentPage() {
   const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false);
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
+  const [thirdPlaceConfirmOpen, setThirdPlaceConfirmOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [localParticipants, setLocalParticipants] = useState<TournamentParticipant[] | null>(null);
 
@@ -92,11 +95,22 @@ export default function AdminTournamentPage() {
   const seedingOrder = localParticipants ?? confirmed;
   const hasGroups = FORMATS_WITH_GROUPS.has(tournament.format);
   const isRoundRobin = tournament.format === "round_robin";
+  // Pontos corridos não tem "chave" — o artefato gerado é a "tabela".
+  const bracketWord = isRoundRobin ? "tabela" : "chave";
   const groupMatches = tournament.matches.filter((m) => m.bracket === "group");
   const rrDone = isRoundRobin && groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
   const rrChampionId = rrDone ? (standings ?? [])[0]?.participantId ?? null : null;
-  const knockoutMatches = tournament.matches.filter((m) => m.bracket !== "group");
+  // Exclui a disputa de 3º (placement): ela é round 1 igual à final e atrapalharia
+  // a detecção da final / do campeão. É gerenciada à parte (card + aba placar).
+  const knockoutMatches = tournament.matches.filter((m) => m.bracket !== "group" && m.bracket !== "placement");
   const hasBracket = knockoutMatches.length > 0;
+  // "Gerado" cobre tanto a chave (eliminatória) quanto a tabela (pontos corridos =
+  // partidas bracket "group").
+  const isGenerated = hasBracket || groupMatches.length > 0;
+  // Seeds só travam quando JÁ HÁ jogo lançado (conta qualquer bracket, inclusive
+  // group). Antes disso, reordenar é permitido — salvar refaz a tabela/chave.
+  const playedCount = tournament.matches.filter((m) => m.status === "finished").length;
+  const seedsLocked = playedCount > 0;
   const allGroupMatchesDone = groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
   const TABS = buildTabs(tournament.format);
   const pendingMatches = tournament.matches.filter(
@@ -112,6 +126,26 @@ export default function AdminTournamentPage() {
     : isRoundRobin && rrChampionId
       ? tournament.participants.find((p) => p.id === rrChampionId)
       : null;
+
+  // Disputa de 3º lugar: só faz sentido em eliminatória simples; trava quando as
+  // duas semifinais já terminaram (a forma do pódio passa a estar decidida).
+  const supportsThirdPlace = tournament.format === "single_elimination";
+  const thirdPlaceLocked = finishedSemisCount(tournament.matches) >= 2;
+  const placementMatch = tournament.matches.find((m) => m.bracket === "placement") ?? null;
+  const nameOfParticipant = (pid: string | null) =>
+    pid ? (tournament.participants.find((p) => p.id === pid)?.guestName ?? "Jogador") : "A definir";
+
+  function handleToggleThirdPlace() {
+    startTransition(async () => {
+      try {
+        await setThirdPlaceMatch(id, !tournament!.thirdPlaceMatch);
+      } catch {
+        // A trava é garantida no servidor; a UI já desabilita o controle.
+      }
+      setThirdPlaceConfirmOpen(false);
+      invalidate();
+    });
+  }
 
   async function handleGenerate() {
     startTransition(async () => {
@@ -133,7 +167,7 @@ export default function AdminTournamentPage() {
     if (isRoundRobin) {
       winnerId = rrChampionId; // líder da tabela
     } else {
-      const kMatches = tournament!.matches.filter((m) => m.bracket !== "group");
+      const kMatches = tournament!.matches.filter((m) => m.bracket !== "group" && m.bracket !== "placement");
       if (!kMatches.length) return;
       const finalMatch = kMatches.reduce((best, m) => (m.round < best.round ? m : best), kMatches[0]!);
       winnerId = finalMatch?.winnerParticipantId ?? null;
@@ -149,6 +183,9 @@ export default function AdminTournamentPage() {
   async function handleSaveSeeding() {
     startTransition(async () => {
       await saveSeeding(id, seedingOrder.map((p, i) => ({ participantId: p.id, seed: i + 1 })));
+      // Se a tabela/chave já existe e nenhum jogo foi lançado, refaz a estrutura
+      // com a nova ordem (senão a chave/tabela ficaria fora de sincronia).
+      if (isGenerated) await generateBracket(id);
       setLocalParticipants(null);
       invalidate();
     });
@@ -219,11 +256,11 @@ export default function AdminTournamentPage() {
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
-                style={{ background: "radial-gradient(ellipse 120% 80% at 50% 50%, rgba(217,119,6,0.10) 0%, transparent 70%)" }}
+                style={{ background: "radial-gradient(ellipse 120% 80% at 50% 50%, color-mix(in srgb, var(--state-scheduled) 10%, transparent) 0%, transparent 70%)" }}
               />
               <div className="relative flex flex-col items-center gap-2 py-2 text-center">
-                <Crown className="h-8 w-8" style={{ color: "#d97706" }} />
-                <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#d97706" }}>
+                <Crown className="h-8 w-8" style={{ color: "var(--state-scheduled)" }} />
+                <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--state-scheduled)" }}>
                   Campeão
                 </p>
                 <p className="text-xl font-black text-(--arena-foreground)" style={{ fontFamily: "var(--font-display)" }}>
@@ -286,8 +323,8 @@ export default function AdminTournamentPage() {
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
                     style={{ background: "var(--arena-primary)", boxShadow: "0 4px 12px color-mix(in srgb, var(--arena-primary) 30%, transparent)" }}
                   >
-                    <Network className="h-4 w-4" />
-                    Gerar chave
+                    {isRoundRobin ? <ListOrdered className="h-4 w-4" /> : <Network className="h-4 w-4" />}
+                    Gerar {bracketWord}
                   </button>
                 )}
 
@@ -340,6 +377,37 @@ export default function AdminTournamentPage() {
                   </button>
                 </>
               )}
+            </div>
+          )}
+
+          {/* ── Disputa de 3º lugar (eliminatória simples) ── */}
+          {tournament.status !== "finished" && supportsThirdPlace && (
+            <div
+              className="flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}
+            >
+              <Medal className="h-5 w-5 shrink-0" style={{ color: "var(--state-played)" }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-(--arena-foreground)">Disputa de 3º lugar</p>
+                <p className="text-[11px] text-(--arena-muted)">
+                  {thirdPlaceLocked
+                    ? "Semifinais encerradas — configuração travada."
+                    : tournament.thirdPlaceMatch
+                      ? "Perdedores das semis jogam pelo bronze (3º × 4º)."
+                      : "Sem disputa: os dois semifinalistas ficam em 3º."}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isPending || thirdPlaceLocked}
+                onClick={() => setThirdPlaceConfirmOpen(true)}
+                className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                style={tournament.thirdPlaceMatch
+                  ? { background: "color-mix(in srgb, var(--state-played) 12%, transparent)", color: "var(--state-played)", border: "1px solid color-mix(in srgb, var(--state-played) 25%, transparent)" }
+                  : { background: "color-mix(in srgb, var(--arena-primary) 10%, transparent)", color: "var(--arena-primary)", border: "1px solid color-mix(in srgb, var(--arena-primary) 25%, transparent)" }}
+              >
+                {tournament.thirdPlaceMatch ? "Desativar" : "Ativar"}
+              </button>
             </div>
           )}
 
@@ -469,8 +537,13 @@ export default function AdminTournamentPage() {
               <SeedingBoard
                 participants={seedingOrder}
                 onChange={setLocalParticipants}
-                disabled={isPending || hasBracket}
+                disabled={isPending || seedsLocked}
               />
+              {isGenerated && !seedsLocked && (
+                <p className="px-1 text-center text-[11px] text-(--arena-muted)">
+                  Nenhum jogo lançado ainda — ao salvar, a {isRoundRobin ? "tabela" : "chave"} é refeita com a nova ordem.
+                </p>
+              )}
               {localParticipants && (
                 <div className="flex gap-2">
                   <button
@@ -498,9 +571,9 @@ export default function AdminTournamentPage() {
                   </button>
                 </div>
               )}
-              {hasBracket && (
+              {seedsLocked && (
                 <p className="text-center text-xs text-(--arena-muted)">
-                  Chave já gerada — seeds bloqueados.
+                  Já há jogos lançados — seeds bloqueados. Para mudar, regere a {isRoundRobin ? "tabela" : "chave"} (apaga os resultados).
                 </p>
               )}
             </div>
@@ -517,6 +590,7 @@ export default function AdminTournamentPage() {
               onMatchClick={setSelectedMatch}
               onGroupsConfigured={invalidate}
               onGenerate={handleGenerate}
+              onRegenerate={() => setRegenConfirmOpen(true)}
             />
           )}
 
@@ -540,11 +614,11 @@ export default function AdminTournamentPage() {
                     </button>
                   </Link>
 
-                  {/* Bracket inline com scroll horizontal */}
+                  {/* Bracket inline com scroll horizontal (sem a disputa de 3º) */}
                   <GlassCard noPadding className="overflow-hidden">
                     <div className="overflow-x-auto p-3">
                       <BracketCanvas
-                        matches={tournament.matches}
+                        matches={tournament.matches.filter((m) => m.bracket !== "placement")}
                         participants={tournament.participants}
                         onMatchClick={(m) => {
                           // Permite lançar e também corrigir resultado já lançado.
@@ -556,6 +630,36 @@ export default function AdminTournamentPage() {
                       />
                     </div>
                   </GlassCard>
+
+                  {/* Disputa de 3º lugar — fora do bracket, clicável p/ lançar placar */}
+                  {placementMatch && (
+                    <GlassCard
+                      noPadding
+                      role={placementMatch.participantAId && placementMatch.participantBId ? "button" : undefined}
+                      onClick={
+                        placementMatch.participantAId && placementMatch.participantBId
+                          ? () => setSelectedMatch(placementMatch)
+                          : undefined
+                      }
+                      className={`flex flex-col gap-1.5 px-4 py-3 ${placementMatch.participantAId && placementMatch.participantBId ? "cursor-pointer hover:scale-[1.01]" : ""}`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Medal className="h-3.5 w-3.5" style={{ color: "var(--state-played)" }} />
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-(--arena-muted)">Disputa de 3º lugar</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-(--arena-foreground)">{nameOfParticipant(placementMatch.participantAId)}</span>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-(--arena-foreground)">{placementMatch.scoreA ?? "–"}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-(--arena-foreground)">{nameOfParticipant(placementMatch.participantBId)}</span>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-(--arena-foreground)">{placementMatch.scoreB ?? "–"}</span>
+                      </div>
+                      {!(placementMatch.participantAId && placementMatch.participantBId) && (
+                        <p className="text-[10px] text-(--arena-muted)">Aguardando o fim das semifinais</p>
+                      )}
+                    </GlassCard>
+                  )}
 
                   {/* Regerar chave (remonta do zero — útil após ajustar jogadores) */}
                   <button
@@ -590,11 +694,11 @@ export default function AdminTournamentPage() {
                           <div
                             className="w-full rounded-xl px-3 py-2.5 text-left"
                             style={{
-                              background: "color-mix(in srgb, #f5a524 12%, transparent)",
-                              border: "1px solid color-mix(in srgb, #f5a524 30%, transparent)",
+                              background: "color-mix(in srgb, var(--state-scheduled) 12%, transparent)",
+                              border: "1px solid color-mix(in srgb, var(--state-scheduled) 30%, transparent)",
                             }}
                           >
-                            <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "#b45309" }}>
+                            <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "var(--state-scheduled)" }}>
                               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                               {byes} jogador{byes > 1 ? "es" : ""} avança{byes > 1 ? "m" : ""} sem jogar a 1ª rodada
                             </p>
@@ -739,7 +843,7 @@ export default function AdminTournamentPage() {
               )}
               {hasFinalWinner && champion && (
                 <GlassCard className="flex items-center gap-3">
-                  <Medal className="h-6 w-6 shrink-0" style={{ color: "#d97706" }} />
+                  <Medal className="h-6 w-6 shrink-0" style={{ color: "var(--state-scheduled)" }} />
                   <div>
                     <p className="text-sm font-bold text-(--arena-foreground)">{champion.guestName} venceu!</p>
                     <p className="text-xs text-(--arena-muted)">Acesse as ações acima para encerrar o torneio.</p>
@@ -754,15 +858,15 @@ export default function AdminTournamentPage() {
       {/* Score Sheet Modal */}
       {selectedMatch && (
         <div
-          className="fixed inset-0 z-50 flex items-end bg-black/50 backdrop-blur-sm sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
           onClick={() => setSelectedMatch(null)}
         >
           <div
-            className="arena w-full max-w-sm rounded-t-3xl p-5 sm:rounded-3xl"
+            className="arena w-full max-h-[92dvh] overflow-y-auto rounded-t-3xl p-5 sm:max-w-sm sm:rounded-3xl"
             style={{
-              background: "var(--popover)",
+              background: "var(--arena-bg-1)",
               border: "1px solid var(--glass-border)",
-              boxShadow: "0 -8px 40px rgba(100,0,160,0.15)",
+              boxShadow: "0 -8px 40px color-mix(in srgb, var(--arena-primary) 15%, transparent)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -794,9 +898,11 @@ export default function AdminTournamentPage() {
         isOpen={generateConfirmOpen}
         onClose={() => setGenerateConfirmOpen(false)}
         onConfirm={handleGenerate}
-        title="Gerar chave do torneio"
-        description={`A chave será gerada com ${confirmed.length} participantes. Após gerar, os seeds não podem ser alterados.`}
-        confirmText="Gerar chave"
+        title={`Gerar ${bracketWord} do torneio`}
+        description={isRoundRobin
+          ? `A tabela de jogos será gerada com ${confirmed.length} participantes (todos contra todos).`
+          : `A chave será gerada com ${confirmed.length} participantes. Após gerar, os seeds não podem ser alterados.`}
+        confirmText={`Gerar ${bracketWord}`}
         variant="warning"
         loading={isPending}
       />
@@ -804,8 +910,8 @@ export default function AdminTournamentPage() {
         isOpen={regenConfirmOpen}
         onClose={() => setRegenConfirmOpen(false)}
         onConfirm={handleRegenerate}
-        title="Regerar chave"
-        description={`A chave será remontada do zero com ${confirmed.length} participantes. Todos os resultados já lançados serão apagados.`}
+        title={`Regerar ${bracketWord}`}
+        description={`A ${bracketWord} será remontada do zero com ${confirmed.length} participantes. Todos os resultados já lançados serão apagados.`}
         confirmText="Regerar"
         variant="danger"
         loading={isPending}
@@ -822,12 +928,24 @@ export default function AdminTournamentPage() {
         variant="danger"
         loading={isPending}
       />
+      <ConfirmModal
+        isOpen={thirdPlaceConfirmOpen}
+        onClose={() => setThirdPlaceConfirmOpen(false)}
+        onConfirm={handleToggleThirdPlace}
+        title={tournament.thirdPlaceMatch ? "Desativar disputa de 3º lugar" : "Ativar disputa de 3º lugar"}
+        description={tournament.thirdPlaceMatch
+          ? "A partida de 3º lugar será removida. Os dois semifinalistas ficarão empatados em 3º."
+          : "Será criada uma partida extra entre os perdedores das semifinais (3º × 4º)."}
+        confirmText={tournament.thirdPlaceMatch ? "Desativar" : "Ativar"}
+        variant="warning"
+        loading={isPending}
+      />
     </>
   );
 }
 
 function GroupsTab({
-  tournament, confirmed, standings, isPending, isRoundRobin, onMatchClick, onGroupsConfigured, onGenerate,
+  tournament, confirmed, standings, isPending, isRoundRobin, onMatchClick, onGroupsConfigured, onGenerate, onRegenerate,
 }: {
   tournament: TournamentDetail;
   confirmed: TournamentParticipant[];
@@ -837,6 +955,7 @@ function GroupsTab({
   onMatchClick: (m: TournamentMatch) => void;
   onGroupsConfigured: () => void;
   onGenerate: () => void;
+  onRegenerate: () => void;
 }) {
   const groupIds = Array.from(new Set(tournament.participants.map((p) => p.groupId).filter(Boolean))) as string[];
   const groupMatches = tournament.matches.filter((m) => m.bracket === "group");
@@ -1024,6 +1143,28 @@ function GroupsTab({
         );
       })}
 
+      {/* Pontos corridos com tabela já gerada: regerar (remonta o todos-contra-todos
+          e recupera o vínculo de grupo, ex.: se os seeds tiverem sido mexidos). */}
+      {isRoundRobin && groupMatches.length > 0 && (
+        <div className="flex flex-col items-center gap-1.5">
+          {groupIds.length === 0 && (
+            <p className="text-center text-xs text-(--arena-muted)">
+              A tabela perdeu o vínculo dos jogadores. Regere para reconstruí-la.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onRegenerate}
+            disabled={isPending}
+            className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition hover:opacity-90 disabled:opacity-40"
+            style={{ background: "color-mix(in srgb, var(--arena-muted) 10%, transparent)", color: "var(--arena-muted)" }}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Regerar tabela
+          </button>
+        </div>
+      )}
+
       {!isRoundRobin && groupIds.length === 0 && groupMatches.length === 0 && (
         <div className="flex flex-col gap-4">
           {/* Seletor de número de grupos */}
@@ -1071,7 +1212,7 @@ function GroupsTab({
 
                       let bg: string, fg: string;
                       if (isSelected) {
-                        bg = valid ? "var(--arena-primary)" : "#b45309";
+                        bg = valid ? "var(--arena-primary)" : "var(--state-scheduled)";
                         fg = "#fff";
                       } else {
                         bg = "color-mix(in srgb,var(--arena-muted) 10%,transparent)";
@@ -1101,13 +1242,13 @@ function GroupsTab({
                           {/* Badge verde: todos os grupos com o mesmo número de jogadores */}
                           {equal && (
                             <span className="absolute -left-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full"
-                              style={{ background: "#22c55e" }}>
+                              style={{ background: "var(--state-played)" }}>
                               <CheckCircle className="h-2.5 w-2.5 text-white" />
                             </span>
                           )}
                           {/* Badge laranja: número de classificados incompatível com o mata-mata */}
                           {!valid && (
-                            <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-amber-500">
+                            <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-(--state-scheduled)">
                               <AlertTriangle className="h-2 w-2 text-white" />
                             </span>
                           )}
@@ -1119,21 +1260,21 @@ function GroupsTab({
                   {/* Legenda compacta */}
                   <div className="flex items-center gap-4 text-[10px] text-(--arena-muted)">
                     <span className="flex items-center gap-1 whitespace-nowrap">
-                      <CheckCircle className="h-3 w-3 shrink-0" style={{ color: "#22c55e" }} />
+                      <CheckCircle className="h-3 w-3 shrink-0" style={{ color: "var(--state-played)" }} />
                       grupos iguais
                     </span>
                     <span className="flex items-center gap-1 whitespace-nowrap">
-                      <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" />
+                      <AlertTriangle className="h-3 w-3 shrink-0 text-(--state-scheduled)" />
                       mata-mata incompleto
                     </span>
                   </div>
 
                   {/* Descrição do estado atual */}
                   {!validSel ? (
-                    <div className="flex items-start gap-2 rounded-xl p-3" style={{ background: "color-mix(in srgb,#b45309 10%,transparent)", border: "1px solid color-mix(in srgb,#b45309 30%,transparent)" }}>
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#b45309" }} />
+                    <div className="flex items-start gap-2 rounded-xl p-3" style={{ background: "color-mix(in srgb,var(--state-scheduled) 10%,transparent)", border: "1px solid color-mix(in srgb,var(--state-scheduled) 30%,transparent)" }}>
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "var(--state-scheduled)" }} />
                       <div>
-                        <p className="text-[11px] font-bold" style={{ color: "#b45309" }}>
+                        <p className="text-[11px] font-bold" style={{ color: "var(--state-scheduled)" }}>
                           Esta divisão deixa o mata-mata incompleto
                         </p>
                         <p className="text-[11px] text-(--arena-muted) mt-0.5">
@@ -1145,7 +1286,7 @@ function GroupsTab({
                       </div>
                     </div>
                   ) : equalSel ? (
-                    <p className="text-[11px]" style={{ color: "#22c55e" }}>
+                    <p className="text-[11px]" style={{ color: "var(--state-played)" }}>
                       {numGroups} grupos de {Math.floor(confirmed.length / numGroups)} jogadores cada —{" "}
                       {totalSel} avançam para o mata-mata. Divisão perfeita.
                     </p>

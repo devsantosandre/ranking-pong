@@ -1,6 +1,7 @@
 "use client";
 
 import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useAuth } from "@/lib/auth-store";
 import { useNews, useSeasonNewsPosts, type NewsItem, type SeasonNewsPost } from "@/lib/queries";
 import { queryKeys } from "@/lib/queries/query-keys";
@@ -109,7 +110,7 @@ export default function NoticiasPage() {
   if (error) {
     return (
       <ArenaShell title="Notícias" subtitle="Feed de resultados e destaques" showBack>
-        <p className="py-8 text-center text-sm text-red-500">
+        <p className="py-8 text-center text-sm text-(--state-noshow)">
           Erro ao carregar notícias. Tente novamente.
         </p>
       </ArenaShell>
@@ -120,7 +121,7 @@ export default function NoticiasPage() {
     <ArenaShell title="Notícias" subtitle="Feed de resultados e destaques" showBack>
       <div className="space-y-4">
         {merged.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="py-8 text-center text-sm text-(--arena-muted)">
             Nenhum resultado registrado ainda. Jogue partidas para ver o feed!
           </p>
         ) : (
@@ -128,17 +129,24 @@ export default function NoticiasPage() {
             {merged.map((item) => {
               if (item._kind === "temporada") {
                 return (
-                  <article
+                  <GlassCard
                     key={`season-${item.id}`}
-                    className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 shadow-sm"
+                    glow="scheduled"
+                    style={{
+                      background: "color-mix(in srgb, var(--state-scheduled) 10%, var(--glass-bg))",
+                      borderColor: "color-mix(in srgb, var(--state-scheduled) 30%, transparent)",
+                    }}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-[11px] font-semibold text-yellow-700">
+                      <span
+                        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold"
+                        style={{ background: "color-mix(in srgb, var(--state-scheduled) 18%, transparent)", color: "var(--state-scheduled)" }}
+                      >
                         <Trophy className="h-3 w-3" />
                         Temporada
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-(--arena-muted)">
                           {formatTimeAgo(item.createdAt)}
                         </span>
                         {canAccessAdmin && (
@@ -151,7 +159,7 @@ export default function NoticiasPage() {
                                 title: item.title,
                               })
                             }
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-yellow-600/60 transition hover:bg-yellow-200 hover:text-red-600"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-(--arena-muted) transition hover:bg-(--state-noshow)/15 hover:text-(--state-noshow)"
                             aria-label="Remover notícia"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -159,26 +167,23 @@ export default function NoticiasPage() {
                         )}
                       </div>
                     </div>
-                    <p className="font-semibold text-foreground">{item.title}</p>
+                    <p className="font-semibold text-(--arena-foreground)">{item.title}</p>
                     {item.resumo && (
-                      <p className="mt-1 text-sm text-muted-foreground">{item.resumo}</p>
+                      <p className="mt-1 text-sm text-(--arena-muted)">{item.resumo}</p>
                     )}
-                  </article>
+                  </GlassCard>
                 );
               }
 
               // item._kind === "resultado"
               return (
-                <article
-                  key={item.id}
-                  className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-                >
+                <GlassCard key={item.id} className="space-y-3">
                   {/* Header */}
                   <div className="flex items-center justify-between">
-                    <span className="rounded-full bg-primary/15 px-3 py-1 text-[11px] font-semibold text-primary">
+                    <span className="rounded-full bg-(--arena-primary)/15 px-3 py-1 text-[11px] font-semibold text-(--arena-primary)">
                       Resultado
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-(--arena-muted)">
                       {formatTimeAgo(item.createdAt)}
                     </span>
                   </div>
@@ -186,28 +191,28 @@ export default function NoticiasPage() {
                   {/* Confronto */}
                   <div className="flex items-center justify-between">
                     <div className="flex-1 text-center">
-                      <p className="text-sm font-semibold text-green-600">{item.winner.name}</p>
-                      <p className="text-[11px] text-muted-foreground">Vencedor</p>
+                      <p className="text-sm font-semibold text-(--state-played)">{item.winner.name}</p>
+                      <p className="text-[11px] text-(--arena-muted)">Vencedor</p>
                     </div>
                     <div className="px-4">
-                      <p className="text-2xl font-bold text-primary">{item.score}</p>
+                      <p className="text-2xl font-bold text-(--arena-primary)">{item.score}</p>
                     </div>
                     <div className="flex-1 text-center">
-                      <p className="text-sm font-semibold text-red-500">{item.loser.name}</p>
-                      <p className="text-[11px] text-muted-foreground">Perdedor</p>
+                      <p className="text-sm font-semibold text-(--state-noshow)">{item.loser.name}</p>
+                      <p className="text-[11px] text-(--arena-muted)">Perdedor</p>
                     </div>
                   </div>
 
                   {/* Pontuação */}
-                  <div className="flex items-center justify-center gap-6 rounded-xl bg-muted/60 p-2">
+                  <div className="flex items-center justify-center gap-6 rounded-xl bg-(--glass-bg) p-2">
                     <div className="text-center">
-                      <p className="text-[11px] text-muted-foreground">Pts ganhos</p>
-                      <p className="text-sm font-semibold text-green-600">+{Math.abs(item.pointsWinner)} pts</p>
+                      <p className="text-[11px] text-(--arena-muted)">Pts ganhos</p>
+                      <p className="text-sm font-semibold text-(--state-played)">+{Math.abs(item.pointsWinner)} pts</p>
                     </div>
-                    <div className="h-6 w-px bg-border" />
+                    <div className="h-6 w-px bg-(--glass-border)" />
                     <div className="text-center">
-                      <p className="text-[11px] text-muted-foreground">Pts perdidos</p>
-                      <p className="text-sm font-semibold text-red-500">-{Math.abs(item.pointsLoser)} pts</p>
+                      <p className="text-[11px] text-(--arena-muted)">Pts perdidos</p>
+                      <p className="text-sm font-semibold text-(--state-noshow)">-{Math.abs(item.pointsLoser)} pts</p>
                     </div>
                   </div>
 
@@ -228,7 +233,7 @@ export default function NoticiasPage() {
                       )
                     }
                   />
-                </article>
+                </GlassCard>
               );
             })}
 

@@ -15,7 +15,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -75,28 +76,34 @@ function MetricCard({
   title,
   value,
   description,
-  tone,
+  token,
   actionHref,
   actionLabel,
 }: {
   title: string;
   value: string;
   description: string;
-  tone: string;
+  token: string;
   actionHref?: string;
   actionLabel?: string;
 }) {
   return (
-    <article className={`flex h-full flex-col rounded-2xl border p-4 shadow-sm ${tone}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    <article
+      className="flex h-full flex-col rounded-2xl border p-4"
+      style={{
+        borderColor: `color-mix(in srgb, ${token} 35%, transparent)`,
+        background: `color-mix(in srgb, ${token} 8%, var(--glass-bg))`,
+      }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
         {title}
       </p>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-2 text-xs text-muted-foreground">{description}</p>
+      <p className="mt-3 text-2xl font-semibold text-(--arena-foreground)">{value}</p>
+      <p className="mt-2 text-xs text-(--arena-muted)">{description}</p>
       {actionHref && actionLabel ? (
         <Link
           href={actionHref}
-          className="mt-3 inline-flex items-center text-xs font-semibold text-primary underline-offset-4 hover:underline"
+          className="mt-3 inline-flex items-center text-xs font-semibold text-(--arena-primary) underline-offset-4 hover:underline"
         >
           {actionLabel}
         </Link>
@@ -117,18 +124,19 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <GlassCard>
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-          <Icon className="h-5 w-5 text-primary" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)" }}>
+          <Icon className="h-5 w-5 text-(--arena-primary)" />
         </div>
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <h2 className="text-sm font-semibold text-(--arena-foreground)">{title}</h2>
+          <p className="text-xs text-(--arena-muted)">{description}</p>
         </div>
       </div>
       <div className="mt-4">{children}</div>
-    </section>
+    </GlassCard>
   );
 }
 
@@ -165,7 +173,7 @@ function MetricBarRow({
   const unresolved = registrations - validated;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/25">
+    <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg)">
       <button
         type="button"
         onClick={() => onToggle(detailKey)}
@@ -173,97 +181,97 @@ function MetricBarRow({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">{label}</p>
-            <p className="text-[11px] text-muted-foreground">{secondaryLabel}</p>
+            <p className="text-sm font-semibold text-(--arena-foreground)">{label}</p>
+            <p className="text-[11px] text-(--arena-muted)">{secondaryLabel}</p>
           </div>
           <div className="flex shrink-0 items-start gap-2">
             <div className="text-right">
-              <p className="text-sm font-semibold text-sky-700">
+              <p className="text-sm font-semibold text-(--state-active)">
                 {formatNumber(registrations)}
               </p>
-              <p className="text-[11px] text-emerald-700">
+              <p className="text-[11px] text-(--state-played)">
                 {formatNumber(validated)} validadas
               </p>
             </div>
             {expanded ? (
-              <ChevronUp className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              <ChevronUp className="mt-0.5 h-4 w-4 text-(--arena-muted)" />
             ) : (
-              <ChevronDown className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="mt-0.5 h-4 w-4 text-(--arena-muted)" />
             )}
           </div>
         </div>
 
-        <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
+        <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-(--state-tbd)/25">
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-sky-300"
+            className="absolute inset-y-0 left-0 rounded-full bg-(--state-active)"
             style={{ width: `${registrationsWidth}%` }}
           />
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-emerald-500"
+            className="absolute inset-y-0 left-0 rounded-full bg-(--state-played)"
             style={{ width: `${validatedWidth}%` }}
           />
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="mt-2 flex items-center justify-between text-[11px] text-(--arena-muted)">
           <span>{formatNumber(uniquePlayers)} jogador(es) ativos</span>
           <span>Toque para detalhar</span>
         </div>
       </button>
 
       {expanded ? (
-        <div className="border-t border-border/70 px-3 pb-3 pt-3">
+        <div className="border-t border-(--glass-border) px-3 pb-3 pt-3">
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-background px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="rounded-lg bg-(--glass-bg-strong) px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                 Registros
               </p>
-              <p className="mt-1 text-sm font-semibold text-sky-700">
+              <p className="mt-1 text-sm font-semibold text-(--state-active)">
                 {formatNumber(registrations)}
               </p>
             </div>
-            <div className="rounded-lg bg-background px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="rounded-lg bg-(--glass-bg-strong) px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                 Validadas
               </p>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">
+              <p className="mt-1 text-sm font-semibold text-(--state-played)">
                 {formatNumber(validated)}
               </p>
             </div>
-            <div className="rounded-lg bg-background px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="rounded-lg bg-(--glass-bg-strong) px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                 Pendentes
               </p>
-              <p className="mt-1 text-sm font-semibold text-amber-700">
+              <p className="mt-1 text-sm font-semibold text-(--state-scheduled)">
                 {formatNumber(pending)}
               </p>
             </div>
-            <div className="rounded-lg bg-background px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="rounded-lg bg-(--glass-bg-strong) px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                 Contestadas
               </p>
-              <p className="mt-1 text-sm font-semibold text-blue-700">
+              <p className="mt-1 text-sm font-semibold text-(--state-active)">
                 {formatNumber(edited)}
               </p>
             </div>
-            <div className="rounded-lg bg-background px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="rounded-lg bg-(--glass-bg-strong) px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                 Canceladas
               </p>
-              <p className="mt-1 text-sm font-semibold text-rose-700">
+              <p className="mt-1 text-sm font-semibold text-(--state-noshow)">
                 {formatNumber(canceled)}
               </p>
             </div>
-            <div className="rounded-lg bg-background px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="rounded-lg bg-(--glass-bg-strong) px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                 Não validadas
               </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
+              <p className="mt-1 text-sm font-semibold text-(--arena-foreground)">
                 {formatNumber(unresolved)}
               </p>
             </div>
           </div>
 
-          <p className="mt-3 text-[11px] text-muted-foreground">
+          <p className="mt-3 text-[11px] text-(--arena-muted)">
             Azul mostra todos os registros. Verde mostra apenas as partidas validadas.
             O restante aparece separado acima.
           </p>
@@ -289,17 +297,17 @@ function TopPlayerRow({
   uniqueOpponents: number;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/20 p-3">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+    <div className="flex items-center gap-3 rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-(--arena-primary)/10 text-sm font-semibold text-(--arena-primary)">
         {position}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="truncate text-sm font-semibold text-(--arena-foreground)">{name}</p>
+        <p className="text-[11px] text-(--arena-muted)">
           {formatNumber(registrations)} registros, {formatNumber(validated)} validadas
         </p>
       </div>
-      <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+      <div className="shrink-0 text-right text-[11px] text-(--arena-muted)">
         <p>{formatNumber(wins)} vitórias</p>
         <p>{formatNumber(uniqueOpponents)} adversários</p>
       </div>
@@ -319,12 +327,12 @@ function TopPlayersGroup({
   emptyMessage: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+    <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
       <div className="mb-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
           {title}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        <p className="mt-1 text-xs text-(--arena-muted)">{description}</p>
       </div>
 
       <div className="space-y-3">
@@ -358,15 +366,15 @@ function RivalryRow({
   validated: number;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+    <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold leading-snug break-words text-foreground">
+          <p className="text-sm font-semibold leading-snug break-words text-(--arena-foreground)">
             {name}
           </p>
-          <p className="text-[11px] text-muted-foreground">Par mais recorrente no mês</p>
+          <p className="text-[11px] text-(--arena-muted)">Par mais recorrente no mês</p>
         </div>
-        <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+        <div className="shrink-0 text-right text-[11px] text-(--arena-muted)">
           <p>{formatNumber(registrations)} registros</p>
           <p>{formatNumber(validated)} validadas</p>
         </div>
@@ -378,20 +386,20 @@ function RivalryRow({
 function LoadingState() {
   return (
     <div className="space-y-4">
-      <div className="h-24 animate-pulse rounded-2xl bg-muted/70" />
+      <div className="h-24 animate-pulse rounded-2xl bg-(--glass-bg)" />
       <div className="grid grid-cols-2 gap-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-2xl bg-muted/60" />
+          <div key={index} className="h-28 animate-pulse rounded-2xl bg-(--glass-bg)" />
         ))}
       </div>
-      <div className="h-64 animate-pulse rounded-2xl bg-muted/60" />
+      <div className="h-64 animate-pulse rounded-2xl bg-(--glass-bg)" />
     </div>
   );
 }
 
 function EmptyList({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-muted/15 p-4 text-sm text-muted-foreground">
+    <div className="rounded-xl border border-dashed border-(--glass-border) bg-(--glass-bg) p-4 text-sm text-(--arena-muted)">
       {message}
     </div>
   );
@@ -420,17 +428,17 @@ function InfoModal({
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className="relative mx-4 w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+      <div className="relative mx-4 w-full max-w-md rounded-2xl border border-(--glass-border) bg-(--glass-bg-strong) p-5 shadow-xl">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
+          className="absolute right-4 top-4 text-(--arena-muted) hover:text-(--arena-foreground)"
         >
           <X className="h-4 w-4" />
         </button>
         <div className="pr-8">
-          <h3 className="text-base font-semibold text-foreground">{title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <h3 className="text-base font-semibold text-(--arena-foreground)">{title}</h3>
+          <p className="mt-1 text-sm text-(--arena-muted)">{description}</p>
         </div>
         <div className="mt-4">{children}</div>
       </div>
@@ -538,32 +546,32 @@ export default function AdminMetricasPage() {
     );
 
     return (
-      <div key={item.month} className="rounded-xl border border-border/70 bg-muted/20 p-3">
+      <div key={item.month} className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-(--arena-foreground)">
               {index === analytics!.trend.length - 1
                 ? `${capitalizeLabel(item.label)} (mês atual)`
                 : capitalizeLabel(item.label)}
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[11px] text-(--arena-muted)">
               {formatNumber(item.activePlayers)} jogadores ativos, {formatNumber(item.newUsers)}{" "}
               cadastro(s)
             </p>
           </div>
-          <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+          <div className="shrink-0 text-right text-[11px] text-(--arena-muted)">
             <p>{formatNumber(item.registrations)} registros</p>
             <p>{formatNumber(item.validated)} validadas</p>
           </div>
         </div>
 
-        <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
+        <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-(--state-tbd)/25">
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-sky-300"
+            className="absolute inset-y-0 left-0 rounded-full bg-(--state-active)"
             style={{ width: `${registrationsWidth}%` }}
           />
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-emerald-500"
+            className="absolute inset-y-0 left-0 rounded-full bg-(--state-played)"
             style={{ width: `${validatedWidth}%` }}
           />
         </div>
@@ -595,43 +603,44 @@ export default function AdminMetricasPage() {
 
       return (
         <div key={item.date} className="space-y-3">
-          {shouldRenderDivider ? <div className="border-t border-dashed border-border/70" /> : null}
+          {shouldRenderDivider ? <div className="border-t border-dashed border-(--glass-border)" /> : null}
           {renderDayRow(item)}
         </div>
       );
     });
 
   return (
-    <AppShell
+    <ArenaShell
       title="Métricas"
       subtitle="Uso registrado do app, jogos e status das partidas"
       showBack
     >
-      <div className="space-y-4">
-        <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+      <div className="flex flex-col gap-4">
+        <GlassCard variant="strong" glow="primary">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-              <ShieldCheck className="h-5 w-5 text-primary" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)" }}>
+              <ShieldCheck className="h-5 w-5 text-(--arena-primary)" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-(--arena-foreground)">
                 Leitura do app com base nos dados já registrados
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-(--arena-muted)">
                 Este painel reúne registros de partidas, confirmações, cadastros,
                 pendências e ações administrativas. Ele mostra como o app está sendo
                 usado na escola com base no que já foi registrado no sistema.
               </p>
             </div>
           </div>
-        </section>
+        </GlassCard>
 
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <GlassCard>
           <div className="flex flex-col items-stretch gap-3">
             <div className="flex-1">
               <label
                 htmlFor="analytics-month"
-                className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+                className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-(--arena-muted)"
               >
                 Mês analisado
               </label>
@@ -657,21 +666,21 @@ export default function AdminMetricasPage() {
             </Button>
           </div>
           {analytics ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Leitura focada em <span className="font-medium text-foreground">
+            <p className="mt-3 text-xs text-(--arena-muted)">
+              Leitura focada em <span className="font-medium text-(--arena-foreground)">
                 {capitalizeLabel(analytics.selectedMonthLabel)}
               </span>
               {analytics.isFirstAvailableMonth ? (
                 <>
                   . Início do histórico do app em{" "}
-                  <span className="font-medium text-foreground">
+                  <span className="font-medium text-(--arena-foreground)">
                     {capitalizeLabel(analytics.firstAvailableMonthLabel)}
                   </span>
                   .
                 </>
               ) : (
                 <>
-                  . Comparativos usam <span className="font-medium text-foreground">
+                  . Comparativos usam <span className="font-medium text-(--arena-foreground)">
                     {capitalizeLabel(analytics.previousMonthLabel)}
                   </span>
                   .
@@ -679,10 +688,17 @@ export default function AdminMetricasPage() {
               )}
             </p>
           ) : null}
-        </section>
+        </GlassCard>
 
         {error ? (
-          <div className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:flex-row sm:items-center">
+          <div
+            className="flex flex-col gap-3 rounded-2xl border p-4 text-sm sm:flex-row sm:items-center"
+            style={{
+              borderColor: "color-mix(in srgb, var(--state-noshow) 30%, transparent)",
+              background: "color-mix(in srgb, var(--state-noshow) 10%, transparent)",
+              color: "var(--state-noshow)",
+            }}
+          >
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <div className="min-w-0 flex-1">{error}</div>
             <Button
@@ -690,7 +706,8 @@ export default function AdminMetricasPage() {
               size="sm"
               variant="outline"
               onClick={handleRefresh}
-              className="w-full border-red-200 bg-white sm:w-auto"
+              className="w-full sm:w-auto"
+              style={{ borderColor: "color-mix(in srgb, var(--state-noshow) 30%, transparent)" }}
             >
               Tentar de novo
             </Button>
@@ -701,7 +718,7 @@ export default function AdminMetricasPage() {
           <LoadingState />
         ) : analytics ? (
           <Tabs defaultValue="resumo" className="space-y-4">
-            <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-muted p-1">
+            <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-(--glass-bg) p-1">
               <TabsTrigger value="resumo" className="px-2 py-2 text-[11px] sm:px-3 sm:text-xs">
                 Resumo do mês
               </TabsTrigger>
@@ -723,13 +740,13 @@ export default function AdminMetricasPage() {
                     analytics.previousMonthLabel,
                     !analytics.isFirstAvailableMonth
                   )}
-                  tone="border-sky-200 bg-sky-50"
+                  token="var(--state-active)"
                 />
                 <MetricCard
                   title="Validadas"
                   value={formatNumber(analytics.summary.validated)}
                   description={`${formatPercentage(analytics.summary.validationRate)} do total do mês`}
-                  tone="border-emerald-200 bg-emerald-50"
+                  token="var(--state-played)"
                 />
                 <MetricCard
                   title="Jogadores ativos"
@@ -737,7 +754,7 @@ export default function AdminMetricasPage() {
                   description={`${formatPercentage(analytics.summary.participationRate)} da base ativa (${formatNumber(
                     analytics.summary.activeAccounts
                   )})`}
-                  tone="border-violet-200 bg-violet-50"
+                  token="var(--arena-primary)"
                 />
                 <MetricCard
                   title="Média por dia"
@@ -749,7 +766,7 @@ export default function AdminMetricasPage() {
                         : `${formatHours(analytics.summary.hoursSinceLastRegistration)} h já passadas sem registros no mês`
                       : `${formatHours(analytics.summary.longestGapWithoutRegistrations)} h no maior intervalo sem registros`
                   }
-                  tone="border-amber-200 bg-amber-50"
+                  token="var(--state-scheduled)"
                 />
                 <MetricCard
                   title="Novos cadastros"
@@ -759,13 +776,13 @@ export default function AdminMetricasPage() {
                     analytics.previousMonthLabel,
                     !analytics.isFirstAvailableMonth
                   )}
-                  tone="border-blue-200 bg-blue-50"
+                  token="var(--state-active)"
                 />
                 <MetricCard
                   title="Pendências abertas"
                   value={formatNumber(analytics.summary.openPending)}
                   description="Jogos aguardando acompanhamento do admin"
-                  tone="border-rose-200 bg-rose-50"
+                  token="var(--state-noshow)"
                   actionHref="/admin/pendencias"
                   actionLabel="Abrir pendências"
                 />
@@ -780,7 +797,7 @@ export default function AdminMetricasPage() {
                   {analytics.insights.map((insight) => (
                     <div
                       key={insight}
-                      className="rounded-xl border border-border/70 bg-muted/20 p-3 text-sm text-foreground"
+                      className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3 text-sm text-(--arena-foreground)"
                     >
                       {insight}
                     </div>
@@ -797,14 +814,14 @@ export default function AdminMetricasPage() {
                   {analytics.statusBreakdown.map((status) => (
                     <div key={status.key} className="space-y-1.5">
                       <div className="flex items-center justify-between gap-3 text-sm">
-                        <span className="font-medium text-foreground">{status.label}</span>
-                        <span className="text-muted-foreground">
+                        <span className="font-medium text-(--arena-foreground)">{status.label}</span>
+                        <span className="text-(--arena-muted)">
                           {formatNumber(status.count)} ({formatPercentage(status.percentage)})
                         </span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div className="h-2 overflow-hidden rounded-full bg-(--state-tbd)/25">
                         <div
-                          className="h-full rounded-full bg-primary"
+                          className="h-full rounded-full bg-(--arena-primary)"
                           style={{ width: `${status.percentage}%` }}
                         />
                       </div>
@@ -813,53 +830,53 @@ export default function AdminMetricasPage() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                       Pendentes no mês
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-foreground">
+                    <p className="mt-2 text-lg font-semibold text-(--arena-foreground)">
                       {formatNumber(statusSummary.pending)}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-(--arena-muted)">
                       Jogos ainda aguardando confirmação
                     </p>
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                       Contestadas no mês
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-foreground">
+                    <p className="mt-2 text-lg font-semibold text-(--arena-foreground)">
                       {formatNumber(statusSummary.edited)}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-(--arena-muted)">
                       Jogos que voltaram para revisão
                     </p>
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                       Canceladas no mês
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-foreground">
+                    <p className="mt-2 text-lg font-semibold text-(--arena-foreground)">
                       {formatNumber(statusSummary.canceled)}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-(--arena-muted)">
                       Registros que foram invalidados
                     </p>
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                       Ações do admin no mês
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-foreground">
+                    <p className="mt-2 text-lg font-semibold text-(--arena-foreground)">
                       {formatNumber(analytics.summary.adminActions)}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-(--arena-muted)">
                       Atuações manuais registradas pelo admin no período
                     </p>
                     <button
                       type="button"
                       onClick={() => setAdminActionsModalOpen(true)}
-                      className="mt-3 text-xs font-semibold text-primary underline-offset-4 hover:underline"
+                      className="mt-3 text-xs font-semibold text-(--arena-primary) underline-offset-4 hover:underline"
                     >
                       Ver detalhamento
                     </button>
@@ -938,16 +955,16 @@ export default function AdminMetricasPage() {
                 title="Como interpretar"
                 description="Leitura recomendada para o admin usar este painel no dia a dia."
               >
-                <div className="space-y-3 text-sm text-foreground">
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                <div className="space-y-3 text-sm text-(--arena-foreground)">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
                     Compare registros com validadas para entender se o app está sendo usado
                     e se as partidas estão sendo concluídas sem atrito.
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
                     Use a aba do mês para identificar em quais dias vale
                     reforçar divulgação, torneios internos ou lembretes de confirmação.
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                  <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) p-3">
                     Use as abas de resumo, mês e jogadores para acompanhar frequência de uso,
                     concentração dos jogos e quem mais movimenta o ranking na escola.
                   </div>
@@ -973,16 +990,16 @@ export default function AdminMetricasPage() {
                 {analytics.adminActionBreakdown.map((item) => (
                   <div
                     key={item.key}
-                    className="rounded-xl border border-border/70 bg-muted/20 px-3 py-2"
+                    className="rounded-xl border border-(--glass-border) bg-(--glass-bg) px-3 py-2"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm text-foreground">{item.label}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        <p className="text-sm text-(--arena-foreground)">{item.label}</p>
+                        <p className="mt-0.5 text-[11px] text-(--arena-muted)">
                           {item.description}
                         </p>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold text-foreground">
+                      <span className="shrink-0 text-sm font-semibold text-(--arena-foreground)">
                         {formatNumber(item.count)}
                       </span>
                     </div>
@@ -993,6 +1010,6 @@ export default function AdminMetricasPage() {
           </InfoModal>
         ) : null}
       </div>
-    </AppShell>
+    </ArenaShell>
   );
 }

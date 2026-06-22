@@ -35,7 +35,8 @@ export default function InscreverPage() {
     );
   }
 
-  if (!tournament) {
+  // Rascunho não existe para o jogador — o admin ainda está configurando.
+  if (!tournament || tournament.status === "draft") {
     return (
       <ArenaShell title="Torneio" showBack>
         <p className="py-12 text-center text-sm text-(--arena-muted)">Torneio não encontrado.</p>

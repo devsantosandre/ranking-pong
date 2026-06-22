@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
 import {
   Loader2, Network, RotateCw,
-  Layers, Crown, Trophy, Check, AlertCircle, ListTree,
+  Layers, Crown, Trophy, Check, AlertCircle, ListTree, Medal,
 } from "lucide-react";
 import type { TournamentFormat } from "@/lib/tournaments/types";
 
@@ -19,10 +19,10 @@ const FORMATS: {
   bg: string;
   border: string;
 }[] = [
-  { value: "single_elimination", label: "Eliminatória simples", description: "Eliminado na 1ª derrota",      Icon: Network,   color: "#a421d2", bg: "rgba(164,33,210,0.10)", border: "rgba(164,33,210,0.22)" },
-  { value: "round_robin",        label: "Round-robin",           description: "Todos jogam contra todos",      Icon: RotateCw,  color: "#059669", bg: "rgba(5,150,105,0.10)",  border: "rgba(5,150,105,0.22)"  },
-  { value: "groups_knockout",    label: "Grupos + mata-mata",    description: "Fase de grupos + eliminação",   Icon: Layers,    color: "#d97706", bg: "rgba(217,119,6,0.10)",  border: "rgba(217,119,6,0.22)"  },
-  { value: "king_of_table",      label: "Rei da Mesa",           description: "Desafiante enfrenta o líder",  Icon: Crown,     color: "#dc2626", bg: "rgba(220,38,38,0.10)",  border: "rgba(220,38,38,0.22)"  },
+  { value: "single_elimination", label: "Eliminatória simples", description: "Eliminado na 1ª derrota",      Icon: Network,   color: "var(--arena-primary)",   bg: "color-mix(in srgb, var(--arena-primary) 10%, transparent)",   border: "color-mix(in srgb, var(--arena-primary) 22%, transparent)" },
+  { value: "round_robin",        label: "Pontos corridos",       description: "Todos jogam contra todos",      Icon: RotateCw,  color: "var(--state-played)",    bg: "color-mix(in srgb, var(--state-played) 10%, transparent)",    border: "color-mix(in srgb, var(--state-played) 22%, transparent)"  },
+  { value: "groups_knockout",    label: "Grupos + mata-mata",    description: "Fase de grupos + eliminação",   Icon: Layers,    color: "var(--state-scheduled)", bg: "color-mix(in srgb, var(--state-scheduled) 10%, transparent)", border: "color-mix(in srgb, var(--state-scheduled) 22%, transparent)" },
+  { value: "king_of_table",      label: "Rei da Mesa",           description: "Desafiante enfrenta o líder",  Icon: Crown,     color: "var(--state-noshow)",    bg: "color-mix(in srgb, var(--state-noshow) 10%, transparent)",    border: "color-mix(in srgb, var(--state-noshow) 22%, transparent)"  },
 ];
 
 const BEST_OF_OPTIONS = [1, 3, 5, 7] as const;
@@ -34,6 +34,7 @@ export default function CriarTorneioPage() {
   const [name, setName] = useState("");
   const [format, setFormat] = useState<TournamentFormat>("single_elimination");
   const [bestOf, setBestOf] = useState(3);
+  const [thirdPlace, setThirdPlace] = useState(true);
   const [multiCategory, setMultiCategory] = useState(false);
 
   const selectedFormat = FORMATS.find((f) => f.value === format)!;
@@ -49,7 +50,10 @@ export default function CriarTorneioPage() {
           const result = await createEvent({ name: name.trim() });
           if (result?.event?.id) router.push(`/admin/eventos/${result.event.id}`);
         } else {
-          const result = await createTournament({ name: name.trim(), format, bestOf });
+          const result = await createTournament({
+            name: name.trim(), format, bestOf,
+            thirdPlaceMatch: format === "single_elimination" ? thirdPlace : false,
+          });
           if (result?.tournament?.id) router.push(`/admin/torneios/${result.tournament.id}`);
         }
       } catch (err) {
@@ -234,6 +238,35 @@ export default function CriarTorneioPage() {
             })}
           </div>
         </div>
+
+        {/* Disputa de 3º lugar (só eliminatória simples) */}
+        {format === "single_elimination" && (
+          <div
+            className="flex items-center gap-3 rounded-2xl px-4 py-3"
+            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}
+          >
+            <Medal className="h-5 w-5 shrink-0" style={{ color: "var(--state-played)" }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-(--arena-foreground)">Disputa de 3º lugar</p>
+              <p className="text-[11px] text-(--arena-muted)">
+                {thirdPlace
+                  ? "Perdedores das semis jogam pelo bronze (3º × 4º)."
+                  : "Sem disputa: os dois semifinalistas ficam em 3º."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setThirdPlace((v) => !v)}
+              disabled={isPending}
+              className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-90 disabled:opacity-40"
+              style={thirdPlace
+                ? { background: "color-mix(in srgb, var(--state-played) 12%, transparent)", color: "var(--state-played)", border: "1px solid color-mix(in srgb, var(--state-played) 25%, transparent)" }
+                : { background: "color-mix(in srgb, var(--arena-muted) 10%, transparent)", color: "var(--arena-muted)", border: "1px solid color-mix(in srgb, var(--arena-muted) 22%, transparent)" }}
+            >
+              {thirdPlace ? "Ativada" : "Desativada"}
+            </button>
+          </div>
+        )}
           </>
         )}
 

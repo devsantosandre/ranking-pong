@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GlassCard } from "@/components/arena/glass-card";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/lib/auth-store";
 import { Loader2 } from "lucide-react";
@@ -85,36 +86,62 @@ export default function LoginPage() {
 
   if (shouldShowPostLoginTransition) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/90 to-primary p-4">
-        <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/20 px-6 py-5 text-white shadow-lg">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <p className="text-sm font-medium">Entrando na aplicação...</p>
-        </div>
+      <main
+        className="arena relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4"
+        style={{ background: "var(--arena-bg-1)" }}
+      >
+        <BrandGlow />
+        <GlassCard
+          variant="elevated"
+          className="relative flex flex-col items-center gap-3 text-center"
+        >
+          <Loader2 className="h-6 w-6 animate-spin text-(--arena-primary)" />
+          <p className="text-sm font-medium text-(--arena-foreground)">
+            Entrando na aplicação...
+          </p>
+        </GlassCard>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/90 to-primary p-4">
-      <div className="w-full max-w-[380px] space-y-6">
+    <main
+      className="arena relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4"
+      style={{ background: "var(--arena-bg-1)" }}
+    >
+      <BrandGlow />
+      <div className="relative w-full max-w-[380px] space-y-6">
         {/* Logo / Branding */}
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-48 w-48 items-center justify-center rounded-2xl bg-white/20 shadow-lg overflow-hidden p-4">
+          <div
+            className="mx-auto mb-4 flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl p-4"
+            style={{
+              background: "var(--glass-bg)",
+              border: "1px solid var(--glass-border)",
+              boxShadow: "var(--shadow-card)",
+            }}
+          >
             <Image
               src="/smash-pong-logo.png"
               alt="Smash Pong App Logo"
-              width={152}
-              height={152}
+              width={120}
+              height={120}
               className="object-contain"
             />
           </div>
-          <p className="mt-1 text-sm text-white/70">
-            Entre na sua conta
+          <h1
+            className="text-xl font-bold text-(--arena-foreground)"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Bem-vindo de volta
+          </h1>
+          <p className="mt-1 text-sm text-(--arena-muted)">
+            Entre na sua conta para continuar
           </p>
         </div>
 
         {/* Card de autenticação */}
-        <div className="rounded-3xl bg-white p-6 shadow-2xl">
+        <GlassCard variant="elevated" noPadding className="p-6">
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -144,13 +171,25 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+              <div
+                className="rounded-xl p-3 text-sm"
+                style={{
+                  background: "color-mix(in srgb, var(--state-noshow) 12%, transparent)",
+                  color: "var(--state-noshow)",
+                }}
+              >
                 {error}
               </div>
             )}
 
             {message && (
-              <div className="rounded-xl bg-green-500/10 p-3 text-sm text-green-600">
+              <div
+                className="rounded-xl p-3 text-sm"
+                style={{
+                  background: "color-mix(in srgb, var(--state-played) 12%, transparent)",
+                  color: "var(--state-played)",
+                }}
+              >
                 {message}
               </div>
             )}
@@ -160,14 +199,27 @@ export default function LoginPage() {
               Entrar
             </Button>
           </form>
-
-        </div>
+        </GlassCard>
 
         {/* Footer */}
-        <p className="text-center text-xs text-white/50">
+        <p className="text-center text-xs text-(--arena-muted)">
           © {new Date().getFullYear()} Smash Pong App. Todos os direitos reservados.
         </p>
       </div>
     </main>
+  );
+}
+
+/** Brilho de marca no topo do canvas (mesmo recurso da Home). */
+function BrandGlow() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0"
+      style={{
+        background:
+          "radial-gradient(ellipse 90% 55% at 50% -5%, var(--arena-primary-glow) 0%, transparent 60%)",
+      }}
+    />
   );
 }

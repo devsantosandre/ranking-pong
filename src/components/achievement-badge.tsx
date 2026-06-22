@@ -87,7 +87,7 @@ export function AchievementBadge({
               </p>
             )}
             {!unlocked && (
-              <p className="text-[9px] text-amber-600 mt-1 border-t pt-1 font-medium">
+              <p className="text-[9px] text-(--state-scheduled) mt-1 border-t pt-1 font-medium">
                 Bloqueada
               </p>
             )}

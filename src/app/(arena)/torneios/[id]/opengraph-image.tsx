@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getTournamentRepo } from "@/lib/tournaments/repo";
+import { FORMAT_META } from "@/lib/tournaments/format-meta";
 
 export const runtime = "edge";
 export const contentType = "image/png";
@@ -31,7 +32,7 @@ export default async function TournamentOGImage({
 
   const name = tournament?.name ?? "Torneio";
   const status = tournament?.status ?? "draft";
-  const format = tournament?.format.replace(/_/g, " ") ?? "";
+  const format = tournament ? FORMAT_META[tournament.format].full : "";
   const bestOf = tournament?.bestOf ?? 3;
   const participants = tournament?.participants.filter((p) => p.signupStatus === "confirmed").length ?? 0;
   const champion = tournament?.championName;

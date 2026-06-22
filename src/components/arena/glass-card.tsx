@@ -11,8 +11,7 @@ const glowClasses: Record<NonNullable<GlassCardProps["glow"]>, string> = {
   none: "",
   primary: "glow-primary",
   active: "glow-active",
-  scheduled:
-    "shadow-[0_0_0_1px_color-mix(in_srgb,var(--state-scheduled)_30%,transparent),0_8px_32px_color-mix(in_srgb,var(--state-scheduled)_15%,transparent)]",
+  scheduled: "glow-scheduled",
   played:
     "shadow-[0_0_0_1px_color-mix(in_srgb,var(--state-played)_30%,transparent),0_8px_32px_color-mix(in_srgb,var(--state-played)_15%,transparent)]",
 };

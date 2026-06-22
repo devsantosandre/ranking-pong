@@ -1,6 +1,7 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useAuth } from "@/lib/auth-store";
 import Link from "next/link";
 import {
@@ -18,140 +19,221 @@ import {
   Trophy,
 } from "lucide-react";
 
-const adminSections = [
+type AdminItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  description: string;
+  token: string;
+  adminOnly?: boolean;
+  openInNewTab?: boolean;
+};
+
+type AdminGroup = {
+  id: string;
+  label: string;
+  highlight?: boolean;
+  adminOnly?: boolean;
+  items: AdminItem[];
+};
+
+const adminGroups: AdminGroup[] = [
   {
-    href: "/admin/pendencias",
-    label: "Pendencias",
-    icon: ShieldAlert,
-    description: "Jogos abertos antes da confirmação automática",
-    color: "text-amber-700 bg-amber-100",
+    id: "operacoes",
+    label: "Operações",
+    items: [
+      {
+        href: "/admin/pendencias",
+        label: "Pendências",
+        icon: ShieldAlert,
+        description: "Jogos abertos antes da confirmação automática",
+        token: "var(--state-scheduled)",
+      },
+      {
+        href: "/admin/partidas",
+        label: "Partidas",
+        icon: Gamepad2,
+        description: "Gerenciar e cancelar partidas",
+        token: "var(--state-active)",
+      },
+      {
+        href: "/admin/jogadores",
+        label: "Jogadores",
+        icon: Users,
+        description: "Adicionar jogadores, resetar senhas",
+        token: "var(--state-played)",
+      },
+    ],
   },
   {
-    href: "/admin/partidas",
-    label: "Partidas",
-    icon: Gamepad2,
-    description: "Gerenciar e cancelar partidas",
-    color: "text-blue-600 bg-blue-100",
-  },
-  {
-    href: "/admin/jogadores",
-    label: "Jogadores",
-    icon: Users,
-    description: "Adicionar jogadores, resetar senhas",
-    color: "text-green-600 bg-green-100",
-  },
-  {
-    href: "/admin/metricas",
-    label: "Metricas",
-    icon: BarChart3,
-    description: "Frequencia, engajamento e status do app",
-    color: "text-cyan-700 bg-cyan-100",
-  },
-  {
-    href: "/admin/configuracoes",
-    label: "Configuracoes",
-    icon: Settings,
-    description: "Regras de pontuacao e limites",
-    color: "text-orange-600 bg-orange-100",
+    id: "competicoes",
+    label: "Competições",
+    highlight: true,
     adminOnly: true,
+    items: [
+      {
+        href: "/admin/temporadas",
+        label: "Temporadas",
+        icon: Medal,
+        description: "Criar, encerrar e reabrir temporadas",
+        token: "var(--state-scheduled)",
+      },
+      {
+        href: "/admin/torneios",
+        label: "Torneios",
+        icon: Trophy,
+        description: "Criar e gerenciar torneios, seeds e resultados",
+        token: "var(--arena-primary)",
+      },
+    ],
   },
   {
-    href: "/admin/temporadas",
-    label: "Temporadas",
-    icon: Medal,
-    description: "Criar, encerrar e reabrir temporadas",
-    color: "text-yellow-600 bg-yellow-100",
-    adminOnly: true,
-  },
-  {
-    href: "/admin/torneios",
-    label: "Torneios",
-    icon: Trophy,
-    description: "Criar e gerenciar torneios, seeds e resultados",
-    color: "text-violet-600 bg-violet-100",
-    adminOnly: true,
-  },
-  {
-    href: "/admin/logs",
-    label: "Historico",
-    icon: History,
-    description: "Ver acoes administrativas",
-    color: "text-purple-600 bg-purple-100",
-  },
-  {
-    href: "/tv",
-    label: "Painel TV",
-    icon: Tv,
-    description: "Abrir placar ao vivo em nova aba",
-    color: "text-fuchsia-600 bg-fuchsia-100",
-    openInNewTab: true,
+    id: "app",
+    label: "App",
+    items: [
+      {
+        href: "/admin/metricas",
+        label: "Métricas",
+        icon: BarChart3,
+        description: "Frequência, engajamento e status do app",
+        token: "var(--state-active)",
+      },
+      {
+        href: "/admin/configuracoes",
+        label: "Configurações",
+        icon: Settings,
+        description: "Regras de pontuação e limites",
+        token: "var(--arena-primary)",
+        adminOnly: true,
+      },
+      {
+        href: "/admin/logs",
+        label: "Histórico",
+        icon: History,
+        description: "Ver ações administrativas",
+        token: "var(--state-tbd)",
+      },
+      {
+        href: "/tv",
+        label: "Painel TV",
+        icon: Tv,
+        description: "Abrir placar ao vivo em nova aba",
+        token: "var(--arena-primary)",
+        openInNewTab: true,
+      },
+    ],
   },
 ];
+
+function AdminItem({ section }: { section: AdminItem }) {
+  const Icon = section.icon;
+  return (
+    <Link
+      href={section.href}
+      target={section.openInNewTab ? "_blank" : undefined}
+      rel={section.openInNewTab ? "noopener noreferrer" : undefined}
+    >
+      <GlassCard noPadding className="group flex items-center justify-between gap-3 px-3 py-3 transition-all hover:scale-[1.01]">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+            style={{
+              background: `color-mix(in srgb, ${section.token} 14%, transparent)`,
+              color: section.token,
+            }}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-(--arena-foreground)">
+              {section.label}
+            </p>
+            <p className="truncate text-xs text-(--arena-muted)">
+              {section.description}
+            </p>
+          </div>
+        </div>
+        {section.openInNewTab ? (
+          <ExternalLink className="h-5 w-5 shrink-0 text-(--arena-muted)" />
+        ) : (
+          <ChevronRight className="h-5 w-5 shrink-0 text-(--arena-muted) transition group-hover:translate-x-0.5" />
+        )}
+      </GlassCard>
+    </Link>
+  );
+}
 
 export default function AdminPage() {
   const { user, isAdmin } = useAuth();
 
   return (
-    <AppShell
+    <ArenaShell
       title="Admin"
       subtitle={`Logado como ${isAdmin ? "Administrador" : "Moderador"}`}
     >
-      <div className="space-y-4">
-        {/* Header com role */}
-        <div className="flex items-center gap-3 rounded-xl bg-primary/10 p-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
-            <Shield className="h-5 w-5 text-primary" />
+      <div className="flex flex-col gap-4">
+        {/* Cartão de identidade do operador */}
+        <GlassCard variant="strong" glow="primary" className="flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-full"
+            style={{ background: "color-mix(in srgb, var(--arena-primary) 18%, transparent)" }}
+          >
+            <Shield className="h-5 w-5 text-(--arena-primary)" />
           </div>
-          <div>
-            <p className="font-semibold text-foreground">{user?.name}</p>
-            <p className="text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <p
+              className="truncate font-semibold text-(--arena-foreground)"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {user?.name}
+            </p>
+            <p className="text-xs text-(--arena-muted)">
               {isAdmin ? "Admin Completo" : "Moderador"}
             </p>
           </div>
-        </div>
+        </GlassCard>
 
-        {/* Secoes */}
-        <div className="space-y-3">
-          {adminSections.map((section) => {
-            // Pular configuracoes se nao for admin
-            if (section.adminOnly && !isAdmin) {
-              return null;
-            }
+        {/* Grupos de seções */}
+        {adminGroups.map((group) => {
+          if (group.adminOnly && !isAdmin) return null;
+          const visibleItems = group.items.filter((item) => !item.adminOnly || isAdmin);
+          if (visibleItems.length === 0) return null;
 
-            const Icon = section.icon;
+          if (group.highlight) {
             return (
-              <Link
-                key={section.href}
-                href={section.href}
-                target={section.openInNewTab ? "_blank" : undefined}
-                rel={section.openInNewTab ? "noopener noreferrer" : undefined}
-                className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary hover:shadow-md"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full ${section.color}`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">
-                      {section.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {section.description}
-                    </p>
-                  </div>
+              <div key={group.id} className="flex flex-col gap-2">
+                <p className="px-1 text-xs font-semibold uppercase tracking-wider text-(--arena-primary)">
+                  {group.label}
+                </p>
+                <div
+                  className="flex flex-col gap-2 rounded-2xl p-2"
+                  style={{
+                    background: "color-mix(in srgb, var(--arena-primary) 6%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--arena-primary) 22%, transparent)",
+                  }}
+                >
+                  {visibleItems.map((item) => (
+                    <AdminItem key={item.href} section={item} />
+                  ))}
                 </div>
-                {section.openInNewTab ? (
-                  <ExternalLink className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                )}
-              </Link>
+              </div>
             );
-          })}
-        </div>
+          }
+
+          return (
+            <div key={group.id} className="flex flex-col gap-2">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wider text-(--arena-muted)">
+                {group.label}
+              </p>
+              <div className="flex flex-col gap-2">
+                {visibleItems.map((item) => (
+                  <AdminItem key={item.href} section={item} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </AppShell>
+    </ArenaShell>
   );
 }

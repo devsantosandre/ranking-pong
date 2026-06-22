@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-store";
 import { clearClientSessionData } from "@/lib/client-session-cleanup";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpen, LogOut, Medal, Shield, Tv, UserCircle } from "lucide-react";
+import { BookOpen, History, LogOut, Medal, Shield, Tv, UserCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,12 @@ const menuItems: MenuCard[] = [
     label: "Temporadas",
     description: "Ranking e Hall da Fama",
     icon: Medal,
+  },
+  {
+    href: "/torneios/historico",
+    label: "Histórico de torneios",
+    description: "Campeões e finais",
+    icon: History,
   },
   {
     href: "/perfil",
@@ -103,30 +109,30 @@ export default function MaisPage() {
                 href={item.href}
                 className={`flex flex-col items-start gap-3 rounded-2xl border p-4 shadow-sm transition active:scale-[0.98] ${
                   isAdmin
-                    ? "border-orange-200 bg-orange-50 hover:border-orange-400"
+                    ? "border-(--state-scheduled)/30 bg-(--state-scheduled)/10 hover:border-(--state-scheduled)/40"
                     : "border-border bg-card hover:border-primary"
                 }`}
               >
                 <div
                   className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                    isAdmin ? "bg-orange-100" : "bg-primary/10"
+                    isAdmin ? "bg-(--state-scheduled)/15" : "bg-primary/10"
                   }`}
                 >
                   <Icon
-                    className={`h-5 w-5 ${isAdmin ? "text-orange-600" : "text-primary"}`}
+                    className={`h-5 w-5 ${isAdmin ? "text-(--state-scheduled)" : "text-primary"}`}
                   />
                 </div>
                 <div className="min-w-0">
                   <p
                     className={`text-sm font-semibold ${
-                      isAdmin ? "text-orange-800" : "text-foreground"
+                      isAdmin ? "text-(--state-scheduled)" : "text-foreground"
                     }`}
                   >
                     {item.label}
                   </p>
                   <p
                     className={`text-xs ${
-                      isAdmin ? "text-orange-600/80" : "text-muted-foreground"
+                      isAdmin ? "text-(--state-scheduled)/80" : "text-muted-foreground"
                     }`}
                   >
                     {item.description}
@@ -140,7 +146,7 @@ export default function MaisPage() {
         {/* Sair */}
         <button
           onClick={() => setLogoutConfirmOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-600 transition hover:bg-red-100 active:scale-[0.99]"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 p-3 text-sm font-semibold text-(--state-noshow) transition hover:bg-(--state-noshow)/15 active:scale-[0.99]"
         >
           <LogOut className="h-4 w-4" />
           Sair da conta

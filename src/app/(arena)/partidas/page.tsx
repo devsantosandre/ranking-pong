@@ -21,10 +21,10 @@ import { PendingMatchListSkeleton } from "@/components/skeletons";
 import { useAchievementToast } from "@/components/achievement-unlock-toast";
 
 const statusBadge: Record<string, { label: string; className: string }> = {
-  pendente: { label: "Aguardando confirmação", className: "bg-amber-100 text-amber-700" },
-  edited: { label: "Placar ajustado", className: "bg-orange-100 text-orange-600" },
-  validado: { label: "Validado", className: "bg-emerald-100 text-emerald-700" },
-  cancelado: { label: "Cancelado", className: "bg-red-100 text-red-600" },
+  pendente: { label: "Aguardando confirmação", className: "bg-(--state-scheduled)/15 text-(--state-scheduled)" },
+  edited: { label: "Placar ajustado", className: "bg-(--state-scheduled)/15 text-(--state-scheduled)" },
+  validado: { label: "Validado", className: "bg-(--state-played)/15 text-(--state-played)" },
+  cancelado: { label: "Cancelado", className: "bg-(--state-noshow)/15 text-(--state-noshow)" },
 };
 
 function getRecentMatchBadge(match: MatchWithUsers, euVenci: boolean) {
@@ -33,7 +33,7 @@ function getRecentMatchBadge(match: MatchWithUsers, euVenci: boolean) {
       label: match.cancellation_reason === "nonexistent" ? "Jogo inexistente" : "Cancelado",
       className:
         match.cancellation_reason === "nonexistent"
-          ? "bg-red-100 text-red-700"
+          ? "bg-(--state-noshow)/15 text-(--state-noshow)"
           : "bg-muted text-muted-foreground",
     };
   }
@@ -41,13 +41,13 @@ function getRecentMatchBadge(match: MatchWithUsers, euVenci: boolean) {
   if (match.status === "validado" && match.aprovado_por === null) {
     return {
       label: "Validado pelo sistema",
-      className: "bg-emerald-100 text-emerald-700",
+      className: "bg-(--state-played)/15 text-(--state-played)",
     };
   }
 
   return {
     label: euVenci ? "Vitória" : "Derrota",
-    className: euVenci ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600",
+    className: euVenci ? "bg-(--state-played)/15 text-(--state-played)" : "bg-(--state-noshow)/15 text-(--state-noshow)",
   };
 }
 
@@ -123,24 +123,24 @@ function getDeadlineHighlight(deadlineAt: string | null) {
 
   if (remainingMs <= 0) {
     return {
-      containerClassName: "border-red-200 bg-red-50 text-red-700",
-      iconClassName: "text-red-600",
+      containerClassName: "border-(--state-noshow)/30 bg-(--state-noshow)/10 text-(--state-noshow)",
+      iconClassName: "text-(--state-noshow)",
       label: "Prazo encerrado",
     };
   }
 
   if (remainingMs <= 60 * 60 * 1000) {
     return {
-      containerClassName: "border-amber-200 bg-amber-50 text-amber-800",
-      iconClassName: "text-amber-700",
+      containerClassName: "border-(--state-scheduled)/30 bg-(--state-scheduled)/10 text-(--state-scheduled)",
+      iconClassName: "text-(--state-scheduled)",
       label: "Menos de 1h restante",
     };
   }
 
   if (remainingMs <= 3 * 60 * 60 * 1000) {
     return {
-      containerClassName: "border-orange-200 bg-orange-50 text-orange-800",
-      iconClassName: "text-orange-700",
+      containerClassName: "border-(--state-scheduled)/30 bg-(--state-scheduled)/10 text-(--state-scheduled)",
+      iconClassName: "text-(--state-scheduled)",
       label: "Prazo se aproximando",
     };
   }
@@ -429,7 +429,7 @@ export default function PartidasPage() {
   if (dashboardError || recentError) {
     return (
       <ArenaShell title="Partidas" subtitle="Recentes e Pendentes" showBack>
-        <p className="py-8 text-center text-sm text-red-500">
+        <p className="py-8 text-center text-sm text-(--state-noshow)">
           Erro ao carregar partidas. Tente novamente.
         </p>
       </ArenaShell>
@@ -466,7 +466,7 @@ export default function PartidasPage() {
         {showRegistrationBanner && (
           <div
             role="status"
-            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+            className="flex items-center justify-between gap-3 rounded-xl border border-(--state-played)/30 bg-(--state-played)/10 px-3 py-2 text-sm text-(--state-played)"
           >
             <p className="flex items-start gap-2 font-medium">
               <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -477,7 +477,7 @@ export default function PartidasPage() {
             </p>
             <button
               onClick={() => setRegistrationBannerDismissed(true)}
-              className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+              className="shrink-0 rounded-full border border-(--state-played)/30 bg-transparent px-3 py-1 text-xs font-semibold text-(--state-played) transition hover:bg-(--state-played)/15"
             >
               OK
             </button>
@@ -487,7 +487,7 @@ export default function PartidasPage() {
         {confirmFeedback && (
           <div
             role="status"
-            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+            className="flex items-center justify-between gap-3 rounded-xl border border-(--state-played)/30 bg-(--state-played)/10 px-3 py-2 text-sm text-(--state-played)"
           >
             <p className="flex items-center gap-2 font-medium">
               <CheckCircle className="h-4 w-4 shrink-0" />
@@ -499,7 +499,7 @@ export default function PartidasPage() {
                   clearTimeout(confirmFeedbackTimerRef.current);
                 setConfirmFeedback(null);
               }}
-              className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+              className="shrink-0 rounded-full border border-(--state-played)/30 bg-transparent px-3 py-1 text-xs font-semibold text-(--state-played) transition hover:bg-(--state-played)/15"
             >
               OK
             </button>
@@ -509,7 +509,7 @@ export default function PartidasPage() {
         {visibleActionError && (
           <div
             role="alert"
-            className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            className="flex items-center justify-between gap-3 rounded-xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 px-3 py-2 text-sm text-(--state-noshow)"
           >
             <p className="flex items-center gap-2 font-medium">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -523,7 +523,7 @@ export default function PartidasPage() {
                   setPreviewAlertDismissed(true);
                 }
               }}
-              className="rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+              className="rounded-full border border-(--state-noshow)/30 bg-transparent px-3 py-1 text-xs font-semibold text-(--state-noshow) transition hover:bg-(--state-noshow)/15"
             >
               Fechar
             </button>
@@ -722,7 +722,7 @@ function PendingMatchCard({
       <div className="space-y-2 rounded-xl border border-border/70 bg-card/80 p-3">
         <p
           className={`text-xs font-semibold ${
-            iWon ? "text-emerald-700" : opponentWon ? "text-amber-700" : "text-foreground"
+            iWon ? "text-(--state-played)" : opponentWon ? "text-(--state-scheduled)" : "text-foreground"
           }`}
         >
           {resultSummary}
@@ -732,7 +732,7 @@ function PendingMatchCard({
           <div
             className={`rounded-lg border px-2 py-2 ${
               iWon
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
                 : "border-border bg-background text-foreground"
             }`}
           >
@@ -747,7 +747,7 @@ function PendingMatchCard({
           <div
             className={`rounded-lg border px-2 py-2 text-right ${
               opponentWon
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
                 : "border-border bg-background text-foreground"
             }`}
           >
@@ -852,7 +852,7 @@ function PendingMatchCard({
                   onClick={() => onConfirm(match.id)}
                   disabled={isThisLoading}
                   aria-label="Confirmar cancelamento"
-                  className="min-h-11 whitespace-nowrap rounded-full border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                  className="min-h-11 whitespace-nowrap rounded-full border border-(--state-noshow)/30 px-3 py-2 text-sm font-semibold text-(--state-noshow) transition hover:border-(--state-noshow)/30 hover:bg-(--state-noshow)/10 disabled:opacity-50"
                 >
                   {isConfirmLoading ? (
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
@@ -892,7 +892,7 @@ function PendingMatchCard({
                         : "O adversário já informou que este jogo existiu. Confirme ou conteste o placar."
                       : undefined
                   }
-                  className="rounded-full border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-full border border-(--state-noshow)/30 px-3 py-2 text-sm font-semibold text-(--state-noshow) transition hover:border-(--state-noshow)/30 hover:bg-(--state-noshow)/10 disabled:opacity-50"
                 >
                   {isReportDidNotHappenLoading ? (
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
@@ -901,7 +901,7 @@ function PendingMatchCard({
                   )}
                 </button>
                 {isNonexistentRejected ? (
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 sm:col-span-3">
+                  <p className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 px-3 py-2 text-left text-xs text-(--state-scheduled) sm:col-span-3">
                     {iRejectedNonexistent
                       ? "Você já respondeu que o jogo existiu. Para encerrar a pendência, confirme o placar ou conteste informando o resultado correto."
                       : "O adversário já respondeu que o jogo existiu. Para encerrar a pendência, confirme o placar ou conteste informando o resultado correto."}
@@ -963,8 +963,8 @@ function RecentMatchCard({
   const pointsClassName =
     typeof meusPoints === "number"
       ? meusPoints >= 0
-        ? "text-green-600"
-        : "text-red-600"
+        ? "text-(--state-played)"
+        : "text-(--state-noshow)"
       : "";
   const resultSummary = isCancelled
     ? match.cancellation_reason === "nonexistent"
@@ -1000,7 +1000,7 @@ function RecentMatchCard({
           <div
             className={`rounded-lg border px-2 py-2 ${
               !isCancelled && euVenci
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
                 : "border-border bg-background text-foreground"
             }`}
           >
@@ -1013,7 +1013,7 @@ function RecentMatchCard({
           <div
             className={`rounded-lg border px-2 py-2 text-right ${
               !isCancelled && !euVenci
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
                 : "border-border bg-background text-foreground"
             }`}
           >
@@ -1026,14 +1026,14 @@ function RecentMatchCard({
       </div>
 
       {match.status === "validado" && match.aprovado_por === null ? (
-        <p className="text-xs font-medium text-emerald-700">
+        <p className="text-xs font-medium text-(--state-played)">
           Esta partida foi validada automaticamente pelo sistema após o prazo de
           resposta.
         </p>
       ) : null}
 
       {cancellationMessage ? (
-        <p className="text-xs font-medium text-red-700">{cancellationMessage}</p>
+        <p className="text-xs font-medium text-(--state-noshow)">{cancellationMessage}</p>
       ) : null}
 
       {!isCancelled && pointsLabel ? (

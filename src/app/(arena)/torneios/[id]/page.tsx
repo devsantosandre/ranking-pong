@@ -2,9 +2,13 @@ import { ArenaShell } from "@/components/arena/arena-shell";
 import { GlassCard } from "@/components/arena/glass-card";
 import { StatusPill } from "@/components/arena/status-pill";
 import { getTournamentRepo } from "@/lib/tournaments/repo";
+import { getTournamentRecap } from "@/lib/tournaments/recap";
+import { TournamentPodium, ChampionCampaign } from "@/components/tournaments/tournament-recap";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Trophy, Users, Network, ChevronRight, LayoutGrid } from "lucide-react";
+import { Trophy, Network, ChevronRight, LayoutGrid, CalendarCheck } from "lucide-react";
+import { isAdminServer } from "@/lib/admin";
+import { FORMAT_META } from "@/lib/tournaments/format-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -15,15 +19,20 @@ export default async function TournamentPage({
 }) {
   const { id } = await params;
   const repo = await getTournamentRepo();
-  const tournament = await repo.getTournament(id);
+  const [tournament, admin] = await Promise.all([repo.getTournament(id), isAdminServer()]);
 
   if (!tournament) notFound();
+
+  // Rascunho é bastidor do admin: invisível para o jogador (mesmo com link direto).
+  if (tournament.status === "draft" && !admin) notFound();
 
   const confirmedParticipants = tournament.participants.filter(
     (p) => p.signupStatus === "confirmed",
   );
   const hasBracket = tournament.matches.some((m) => m.bracket !== "group");
   const hasGroupStage = tournament.matches.some((m) => m.bracket === "group");
+  const isFinished = tournament.status === "finished";
+  const recap = isFinished ? getTournamentRecap(tournament) : null;
 
   return (
     <ArenaShell title={tournament.name} showBack>
@@ -57,24 +66,20 @@ export default async function TournamentPage({
                 {tournament.name}
               </h1>
               <p className="mt-1 text-sm text-(--arena-muted)">
-                {tournament.format.replace(/_/g, " ")} · MD{tournament.bestOf}
+                {FORMAT_META[tournament.format].full} · MD{tournament.bestOf}
               </p>
+              {tournament.status === "finished" && tournament.finishedAt && (
+                <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-(--arena-muted)">
+                  <CalendarCheck className="h-3.5 w-3.5" style={{ color: "var(--state-played)" }} />
+                  Encerrado em {new Date(tournament.finishedAt).toLocaleDateString("pt-BR")}
+                </p>
+              )}
             </div>
-            {tournament.championName && (
-              <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--state-played)_25%,transparent)] bg-[color-mix(in_srgb,var(--state-played)_8%,transparent)] px-3 py-2">
-                <span className="text-lg">🏆</span>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-(--state-played)">
-                    Campeão
-                  </p>
-                  <p className="text-sm font-bold text-(--arena-foreground)">
-                    {tournament.championName}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </GlassCard>
+
+        {/* Recap do torneio finalizado */}
+        {recap && <TournamentPodium recap={recap} />}
 
         {/* Stats rápidos */}
         <div className="grid grid-cols-2 gap-2">
@@ -93,6 +98,9 @@ export default async function TournamentPage({
             <p className="text-[11px] text-(--arena-muted)">Partidas jogadas</p>
           </GlassCard>
         </div>
+
+        {/* Campanha do campeão */}
+        {recap && <ChampionCampaign recap={recap} />}
 
         {/* Ações */}
         {hasGroupStage && (

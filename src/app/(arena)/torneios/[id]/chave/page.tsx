@@ -4,23 +4,9 @@ import { notFound } from "next/navigation";
 import { BracketClientShell } from "./bracket-client-shell";
 import { DivisionSwitcher } from "@/components/tournaments/division-switcher";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
-import { createClient } from "@/utils/supabase/server";
+import { isAdminServer } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
-
-// Em mock (dev) o organizador edita direto; em supabase, exige role admin.
-async function isAdminServer(): Promise<boolean> {
-  if ((process.env.NEXT_PUBLIC_DATA_SOURCE ?? "mock") !== "supabase") return true;
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-    const { data } = await supabase.from("users").select("role").eq("id", user.id).single();
-    return data?.role === "admin";
-  } catch {
-    return false;
-  }
-}
 
 export default async function ChavePage({
   params,
@@ -32,6 +18,9 @@ export default async function ChavePage({
   const [tournament, admin] = await Promise.all([repo.getTournament(id), isAdminServer()]);
 
   if (!tournament) notFound();
+
+  // Rascunho só é visível para o admin (organizador ainda configurando).
+  if (tournament.status === "draft" && !admin) notFound();
 
   const hasGroups = tournament.matches.some((m) => m.bracket === "group");
   const standings = hasGroups
@@ -51,7 +40,9 @@ export default async function ChavePage({
         participants={tournament.participants}
         isLive={tournament.status === "active"}
         bestOf={tournament.bestOf}
-        isAdmin={admin}
+        // Torneio encerrado é histórico: somente leitura para todos, inclusive admin.
+        // A correção de um resultado passado é feita pelo painel admin (reabrir torneio).
+        isAdmin={admin && tournament.status !== "finished"}
         isRoundRobin={tournament.format === "round_robin"}
         initialStandings={standings}
       />

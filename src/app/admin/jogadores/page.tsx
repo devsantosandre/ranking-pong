@@ -1,6 +1,7 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useAuth } from "@/lib/auth-store";
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,11 +48,17 @@ const roleLabels: Record<string, string> = {
   admin: "Admin",
 };
 
-const roleColors: Record<string, string> = {
-  player: "bg-gray-100 text-gray-700",
-  moderator: "bg-blue-100 text-blue-700",
-  admin: "bg-purple-100 text-purple-700",
+// Token de cor por perfil (themable / dark).
+const roleToken: Record<string, string> = {
+  player: "var(--state-tbd)",
+  moderator: "var(--state-active)",
+  admin: "var(--arena-primary)",
 };
+
+function roleBadgeStyle(role: string) {
+  const token = roleToken[role] ?? "var(--state-tbd)";
+  return { background: `color-mix(in srgb, ${token} 15%, transparent)`, color: token };
+}
 
 const statusFilters = [
   { value: "todos", label: "Todos" },
@@ -552,8 +559,8 @@ export default function AdminJogadoresPage() {
   };
 
   return (
-    <AppShell title="Jogadores" subtitle="Gerenciar jogadores" showBack>
-      <div className="space-y-4">
+    <ArenaShell title="Jogadores" subtitle="Gerenciar jogadores" showBack>
+      <div className="flex flex-col gap-4">
         {/* Botao Adicionar */}
         <Button
           onClick={() => setShowAddForm(true)}
@@ -564,16 +571,16 @@ export default function AdminJogadoresPage() {
           Adicionar Jogador
         </Button>
 
-        <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4 shadow-sm">
+        <GlassCard variant="strong" glow="primary">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <ShieldCheck className="h-5 w-5 text-primary" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-(--arena-primary)/12">
+              <ShieldCheck className="h-5 w-5 text-(--arena-primary)" />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-(--arena-foreground)">
                 Perfis e permissões do sistema
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-(--arena-muted)">
                 Veja a diferença entre Jogador, Moderador e Admin, incluindo o que é
                 perfil e o que é apenas estado da conta, como Observador e Inativo.
               </p>
@@ -582,17 +589,17 @@ export default function AdminJogadoresPage() {
 
           <Link
             href="/admin/jogadores/perfis"
-            className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-(--glass-border) bg-(--glass-bg-strong) px-4 py-2 text-sm font-semibold text-(--arena-foreground) transition hover:border-(--arena-primary) hover:text-(--arena-primary)"
           >
             Comparar permissões
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
-        </section>
+        </GlassCard>
 
         {/* Formulario Adicionar */}
         {showAddForm && (
-          <div className="space-y-3 rounded-xl border border-primary bg-primary/5 p-4">
-            <h3 className="font-semibold">Novo Jogador</h3>
+          <div className="space-y-3 rounded-xl border border-(--arena-primary)/40 bg-(--arena-primary)/5 p-4">
+            <h3 className="font-semibold text-(--arena-foreground)">Novo Jogador</h3>
             <div>
               <Input
                 placeholder="Nome completo"
@@ -601,10 +608,10 @@ export default function AdminJogadoresPage() {
                   setNewUser({ ...newUser, name: e.target.value });
                   if (addErrors.name) setAddErrors({ ...addErrors, name: "" });
                 }}
-                className={addErrors.name ? "border-red-500" : ""}
+                className={addErrors.name ? "border-(--state-noshow)" : ""}
               />
               {addErrors.name && (
-                <p className="mt-1 text-xs text-red-500">{addErrors.name}</p>
+                <p className="mt-1 text-xs text-(--state-noshow)">{addErrors.name}</p>
               )}
             </div>
             <div>
@@ -616,10 +623,10 @@ export default function AdminJogadoresPage() {
                   setNewUser({ ...newUser, email: e.target.value });
                   if (addErrors.email) setAddErrors({ ...addErrors, email: "" });
                 }}
-                className={addErrors.email ? "border-red-500" : ""}
+                className={addErrors.email ? "border-(--state-noshow)" : ""}
               />
               {addErrors.email && (
-                <p className="mt-1 text-xs text-red-500">{addErrors.email}</p>
+                <p className="mt-1 text-xs text-(--state-noshow)">{addErrors.email}</p>
               )}
             </div>
             <div>
@@ -631,10 +638,10 @@ export default function AdminJogadoresPage() {
                   setNewUser({ ...newUser, password: e.target.value });
                   if (addErrors.password) setAddErrors({ ...addErrors, password: "" });
                 }}
-                className={addErrors.password ? "border-red-500" : ""}
+                className={addErrors.password ? "border-(--state-noshow)" : ""}
               />
               {addErrors.password && (
-                <p className="mt-1 text-xs text-red-500">{addErrors.password}</p>
+                <p className="mt-1 text-xs text-(--state-noshow)">{addErrors.password}</p>
               )}
             </div>
             <div className="flex gap-2">
@@ -664,7 +671,7 @@ export default function AdminJogadoresPage() {
 
         {/* Busca */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-(--arena-muted)" />
           <Input
             placeholder="Buscar jogador (min. 2 letras)..."
             value={searchInput}
@@ -674,17 +681,17 @@ export default function AdminJogadoresPage() {
           {searchInput && (
             <button
               onClick={() => setSearchInput("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-full"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-(--glass-bg) rounded-full"
               type="button"
             >
-              <X className="h-4 w-4 text-muted-foreground" />
+              <X className="h-4 w-4 text-(--arena-muted)" />
             </button>
           )}
         </div>
 
         {/* Indicador de busca */}
         {isSearching && (
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-xs text-(--arena-muted) text-center">
             {searchLoading ? "Buscando..." : `${displayUsers.length} resultado(s) para "${searchInput}"`}
           </p>
         )}
@@ -693,8 +700,8 @@ export default function AdminJogadoresPage() {
           <div
             className={`rounded-xl border px-3 py-2 text-sm font-medium ${
               actionMessage.type === "success"
-                ? "border-green-200 bg-green-50 text-green-700"
-                : "border-red-200 bg-red-50 text-red-700"
+                ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
+                : "border-(--state-noshow)/30 bg-(--state-noshow)/10 text-(--state-noshow)"
             }`}
           >
             {actionMessage.text}
@@ -711,8 +718,8 @@ export default function AdminJogadoresPage() {
                 onClick={() => setStatusFilter(filter.value)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   statusFilter === filter.value
-                    ? "border-primary bg-primary/15 text-primary"
-                    : "border-border bg-card text-foreground hover:border-primary/50"
+                    ? "border-(--arena-primary) bg-(--arena-primary)/15 text-(--arena-primary)"
+                    : "border-(--glass-border) bg-(--glass-bg-strong) text-(--arena-foreground) hover:border-(--arena-primary)/50"
                 }`}
               >
                 {filter.label}
@@ -728,8 +735,8 @@ export default function AdminJogadoresPage() {
                 onClick={() => setRoleFilter(filter.value)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   roleFilter === filter.value
-                    ? "border-primary bg-primary/15 text-primary"
-                    : "border-border bg-card text-foreground hover:border-primary/50"
+                    ? "border-(--arena-primary) bg-(--arena-primary)/15 text-(--arena-primary)"
+                    : "border-(--glass-border) bg-(--glass-bg-strong) text-(--arena-foreground) hover:border-(--arena-primary)/50"
                 }`}
               >
                 {filter.label}
@@ -742,7 +749,7 @@ export default function AdminJogadoresPage() {
         {loading && !isSearching ? (
           <PlayerListSkeleton count={6} />
         ) : displayUsers.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="py-8 text-center text-sm text-(--arena-muted)">
             {isSearching
               ? searchLoading
                 ? "Buscando..."
@@ -750,19 +757,24 @@ export default function AdminJogadoresPage() {
               : "Nenhum jogador encontrado"}
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-2">
             {displayUsers.map((player) => {
               const isExpanded = expandedUser === player.id;
               const isCurrentUser = currentUser?.id === player.id;
 
               return (
-                <article
+                <GlassCard
                   key={player.id}
-                  className={`rounded-2xl border bg-card shadow-sm transition ${
+                  noPadding
+                  className="transition"
+                  style={
                     !player.is_active
-                      ? "border-red-200 bg-red-50/50"
-                      : "border-border"
-                  }`}
+                      ? {
+                          borderColor: "color-mix(in srgb, var(--state-noshow) 30%, transparent)",
+                          background: "color-mix(in srgb, var(--state-noshow) 8%, transparent)",
+                        }
+                      : undefined
+                  }
                 >
                   {/* Header clicavel */}
                   <button
@@ -775,8 +787,8 @@ export default function AdminJogadoresPage() {
                       <div
                         className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${
                           player.is_active
-                            ? "bg-primary/10 text-primary"
-                            : "bg-red-100 text-red-600"
+                            ? "bg-(--arena-primary)/10 text-(--arena-primary)"
+                            : "bg-(--state-noshow)/15 text-(--state-noshow)"
                         }`}
                       >
                         {(player.full_name || player.name || "?")
@@ -787,26 +799,25 @@ export default function AdminJogadoresPage() {
                         <p className="font-semibold">
                           {player.full_name || player.name}
                           {isCurrentUser && (
-                            <span className="ml-1 text-xs text-muted-foreground">
+                            <span className="ml-1 text-xs text-(--arena-muted)">
                               (voce)
                             </span>
                           )}
                         </p>
                         <div className="flex items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              roleColors[player.role]
-                            }`}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                            style={roleBadgeStyle(player.role)}
                           >
                             {roleLabels[player.role]}
                           </span>
                           {!player.is_active && (
-                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                            <span className="rounded-full bg-(--state-noshow)/15 px-2 py-0.5 text-[10px] font-semibold text-(--state-noshow)">
                               Inativo
                             </span>
                           )}
                           {player.hide_from_ranking && (
-                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-600">
+                            <span className="rounded-full bg-(--arena-primary)/15 px-2 py-0.5 text-[10px] font-semibold text-(--arena-primary)">
                               Observador
                             </span>
                           )}
@@ -815,25 +826,25 @@ export default function AdminJogadoresPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <p className="font-bold text-primary">
+                        <p className="font-bold text-(--arena-primary)">
                           {player.rating_atual} pts
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[10px] text-(--arena-muted)">
                           {player.vitorias}V / {player.derrotas}D
                         </p>
                       </div>
                       {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                        <ChevronUp className="h-5 w-5 text-(--arena-muted)" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                        <ChevronDown className="h-5 w-5 text-(--arena-muted)" />
                       )}
                     </div>
                   </button>
 
                   {/* Acoes expandidas */}
                   {isExpanded && (
-                    <div className="border-t border-border p-4 space-y-3">
-                      <p className="text-xs text-muted-foreground">
+                    <div className="border-t border-(--glass-border) p-4 space-y-3">
+                      <p className="text-xs text-(--arena-muted)">
                         {player.email}
                       </p>
 
@@ -849,10 +860,10 @@ export default function AdminJogadoresPage() {
                                 setNewPassword(e.target.value);
                                 setPasswordError("");
                               }}
-                              className={passwordError ? "border-red-500" : ""}
+                              className={passwordError ? "border-(--state-noshow)" : ""}
                             />
                             {passwordError && (
-                              <p className="mt-1 text-xs text-red-500">
+                              <p className="mt-1 text-xs text-(--state-noshow)">
                                 {passwordError}
                               </p>
                             )}
@@ -913,10 +924,10 @@ export default function AdminJogadoresPage() {
                                       setNameErrors((prev) => ({ ...prev, name: "" }));
                                     }
                                   }}
-                                  className={nameErrors.name ? "border-red-500" : ""}
+                                  className={nameErrors.name ? "border-(--state-noshow)" : ""}
                                 />
                                 {nameErrors.name && (
-                                  <p className="mt-1 text-xs text-red-500">{nameErrors.name}</p>
+                                  <p className="mt-1 text-xs text-(--state-noshow)">{nameErrors.name}</p>
                                 )}
                               </div>
                               <div>
@@ -929,10 +940,10 @@ export default function AdminJogadoresPage() {
                                       setNameErrors((prev) => ({ ...prev, reason: "" }));
                                     }
                                   }}
-                                  className={nameErrors.reason ? "border-red-500" : ""}
+                                  className={nameErrors.reason ? "border-(--state-noshow)" : ""}
                                 />
                                 {nameErrors.reason && (
-                                  <p className="mt-1 text-xs text-red-500">{nameErrors.reason}</p>
+                                  <p className="mt-1 text-xs text-(--state-noshow)">{nameErrors.reason}</p>
                                 )}
                               </div>
                               <div className="flex gap-2">
@@ -990,10 +1001,10 @@ export default function AdminJogadoresPage() {
                                     if (ratingErrors.rating)
                                       setRatingErrors({ ...ratingErrors, rating: "" });
                                   }}
-                                  className={ratingErrors.rating ? "border-red-500" : ""}
+                                  className={ratingErrors.rating ? "border-(--state-noshow)" : ""}
                                 />
                                 {ratingErrors.rating && (
-                                  <p className="mt-1 text-xs text-red-500">
+                                  <p className="mt-1 text-xs text-(--state-noshow)">
                                     {ratingErrors.rating}
                                   </p>
                                 )}
@@ -1007,10 +1018,10 @@ export default function AdminJogadoresPage() {
                                     if (ratingErrors.reason)
                                       setRatingErrors({ ...ratingErrors, reason: "" });
                                   }}
-                                  className={ratingErrors.reason ? "border-red-500" : ""}
+                                  className={ratingErrors.reason ? "border-(--state-noshow)" : ""}
                                 />
                                 {ratingErrors.reason && (
-                                  <p className="mt-1 text-xs text-red-500">
+                                  <p className="mt-1 text-xs text-(--state-noshow)">
                                     {ratingErrors.reason}
                                   </p>
                                 )}
@@ -1065,8 +1076,8 @@ export default function AdminJogadoresPage() {
                             variant="outline"
                             className={`w-full ${
                               player.is_active
-                                ? "text-red-600 hover:bg-red-50"
-                                : "text-green-600 hover:bg-green-50"
+                                ? "text-(--state-noshow)"
+                                : "text-(--state-played)"
                             }`}
                             onClick={() => handleToggleStatusClick(player)}
                           >
@@ -1080,8 +1091,8 @@ export default function AdminJogadoresPage() {
                             variant="outline"
                             className={`w-full ${
                               player.hide_from_ranking
-                                ? "text-purple-600 hover:bg-purple-50"
-                                : "text-blue-600 hover:bg-blue-50"
+                                ? "text-(--arena-primary)"
+                                : "text-(--state-active)"
                             }`}
                             onClick={() => handleToggleHideFromRankingClick(player)}
                           >
@@ -1097,7 +1108,7 @@ export default function AdminJogadoresPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="w-full text-orange-600 hover:bg-orange-50"
+                            className="w-full text-(--state-scheduled)"
                             onClick={() => handleResetStatsClick(player)}
                           >
                             <RotateCcw className="mr-2 h-4 w-4" />
@@ -1107,7 +1118,7 @@ export default function AdminJogadoresPage() {
                           {/* Alterar Role */}
                           {!isCurrentUser && (
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold text-muted-foreground">
+                              <p className="text-xs font-semibold text-(--arena-muted)">
                                 Alterar Permissao
                               </p>
                               <div className="flex gap-2">
@@ -1139,7 +1150,7 @@ export default function AdminJogadoresPage() {
                       )}
                     </div>
                   )}
-                </article>
+                </GlassCard>
               );
             })}
 
@@ -1167,6 +1178,6 @@ export default function AdminJogadoresPage() {
         variant={getConfirmModalProps().variant}
         loading={confirmLoading}
       />
-    </AppShell>
+    </ArenaShell>
   );
 }

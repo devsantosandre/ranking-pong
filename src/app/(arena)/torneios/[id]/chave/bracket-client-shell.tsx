@@ -6,10 +6,12 @@ import { useRealtimeBracket } from "@/lib/realtime/use-realtime-bracket";
 import { useTournamentBracket, tournamentKeys } from "@/lib/queries/use-tournaments";
 import { useQueryClient } from "@tanstack/react-query";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
+import { participantName } from "@/lib/tournaments/recap";
+import { GlassCard } from "@/components/arena/glass-card";
 import type { TournamentMatch, TournamentParticipant, GroupStanding } from "@/lib/tournaments/types";
 import { useState, useMemo, useCallback } from "react";
 import { ScoreSheet } from "@/components/tournaments/score-sheet";
-import { Network, X } from "lucide-react";
+import { Network, X, Medal } from "lucide-react";
 
 interface BracketClientShellProps {
   tournamentId: string;
@@ -48,8 +50,12 @@ export function BracketClientShell({
   }, [queryClient, tournamentId]);
 
   const hasGroups = liveMatches.some((m: TournamentMatch) => m.bracket === "group");
-  const knockoutMatches = liveMatches.filter((m: TournamentMatch) => m.bracket !== "group");
-  const hasBracket = knockoutMatches.length > 0;
+  // A disputa de 3º (placement) é renderizada à parte — não entra no canvas
+  // (senão ela ficaria sobreposta à final, ambas no round 1).
+  const placementMatch = liveMatches.find((m: TournamentMatch) => m.bracket === "placement") ?? null;
+  const canvasMatches = liveMatches.filter((m: TournamentMatch) => m.bracket !== "placement");
+  const bracketMatches = canvasMatches.filter((m: TournamentMatch) => m.bracket !== "group");
+  const hasBracket = bracketMatches.length > 0;
 
   // Recalcula standings com os dados ao vivo
   const standings = useMemo(() => {
@@ -103,7 +109,7 @@ export function BracketClientShell({
       {hasBracket ? (
         <section>
           <BracketCanvas
-            matches={liveMatches}
+            matches={canvasMatches}
             participants={participants}
             live={isLive}
             onMatchClick={isAdmin
@@ -129,16 +135,41 @@ export function BracketClientShell({
         </p>
       )}
 
+      {/* ── Disputa de 3º lugar (renderizada fora do canvas) ── */}
+      {placementMatch && (
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1" style={{ background: "var(--glass-border)" }} />
+            <div className="flex items-center gap-2">
+              <Medal className="h-3.5 w-3.5" style={{ color: "var(--state-played)" }} />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-(--arena-muted)">
+                Disputa de 3º lugar
+              </p>
+            </div>
+            <div className="h-px flex-1" style={{ background: "var(--glass-border)" }} />
+          </div>
+          <PlacementCard
+            match={placementMatch}
+            participants={participants}
+            onClick={
+              isAdmin && placementMatch.participantAId && placementMatch.participantBId
+                ? () => setSelectedMatch(placementMatch)
+                : undefined
+            }
+          />
+        </section>
+      )}
+
       {/* Modal de lançar placar — admin */}
       {isAdmin && selectedMatch && (
         <div
-          className="fixed inset-0 z-50 flex items-end bg-black/50 backdrop-blur-sm sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
           onClick={() => setSelectedMatch(null)}
         >
           <div
-            className="arena w-full max-w-sm rounded-t-3xl p-5 sm:rounded-3xl"
+            className="arena w-full max-h-[92dvh] overflow-y-auto rounded-t-3xl p-5 sm:max-w-sm sm:rounded-3xl"
             style={{
-              background: "var(--popover)",
+              background: "var(--arena-bg-1)",
               border: "1px solid var(--glass-border)",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -164,5 +195,59 @@ export function BracketClientShell({
         </div>
       )}
     </div>
+  );
+}
+
+/** Card da disputa de 3º lugar — fora do bracket, clicável p/ admin lançar placar. */
+function PlacementCard({
+  match,
+  participants,
+  onClick,
+}: {
+  match: TournamentMatch;
+  participants: TournamentParticipant[];
+  onClick?: () => void;
+}) {
+  const nameOf = (id: string | null) =>
+    id ? participantName(participants.find((p) => p.id === id)) : "A definir";
+  const bothSet = !!match.participantAId && !!match.participantBId;
+  const winnerId = match.winnerParticipantId;
+
+  const row = (id: string | null, score: number | null) => {
+    const isWinner = !!winnerId && winnerId === id;
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-semibold"
+          style={{ color: isWinner ? "var(--state-played)" : "var(--arena-foreground)" }}
+        >
+          {nameOf(id)}
+        </span>
+        <span className="shrink-0 text-sm font-bold tabular-nums text-(--arena-foreground)">
+          {score ?? "–"}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <GlassCard
+      noPadding
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      className={`flex flex-col gap-1.5 px-4 py-3 ${
+        onClick ? "cursor-pointer hover:scale-[1.01] hover:bg-(--glass-bg-hover)" : ""
+      }`}
+    >
+      {row(match.participantAId, match.scoreA)}
+      <div className="h-px" style={{ background: "var(--glass-border)" }} />
+      {row(match.participantBId, match.scoreB)}
+      {!bothSet && (
+        <p className="pt-0.5 text-[10px] text-(--arena-muted)">
+          Aguardando o fim das semifinais
+        </p>
+      )}
+    </GlassCard>
   );
 }

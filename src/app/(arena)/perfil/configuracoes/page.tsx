@@ -2,6 +2,8 @@
 
 import { changePassword } from "@/app/actions/profile";
 import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
+import { ThemeToggle } from "@/components/arena/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-store";
@@ -15,6 +17,7 @@ import {
   EyeOff,
   Key,
   Loader2,
+  Palette,
   RefreshCcw,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -47,7 +50,7 @@ export default function PerfilConfiguracoesPage() {
     if (!isConfigured) {
       return {
         label: "Indisponível",
-        badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        badgeClass: "border-(--state-scheduled)/30 bg-(--state-scheduled)/10 text-(--state-scheduled)",
         description: "Notificações ainda não foram habilitadas no servidor.",
       };
     }
@@ -55,7 +58,7 @@ export default function PerfilConfiguracoesPage() {
     if (!isSupported) {
       return {
         label: "Não suportado",
-        badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        badgeClass: "border-(--state-scheduled)/30 bg-(--state-scheduled)/10 text-(--state-scheduled)",
         description: "Este dispositivo ou navegador não suporta notificações push.",
       };
     }
@@ -63,7 +66,7 @@ export default function PerfilConfiguracoesPage() {
     if (permission === "denied") {
       return {
         label: "Bloqueado",
-        badgeClass: "border-red-200 bg-red-50 text-red-700",
+        badgeClass: "border-(--state-noshow)/30 bg-(--state-noshow)/10 text-(--state-noshow)",
         description: "Você bloqueou notificações. Libere nas configurações do navegador.",
       };
     }
@@ -71,7 +74,7 @@ export default function PerfilConfiguracoesPage() {
     if (permission === "granted" && hasSubscription) {
       return {
         label: "Ativo",
-        badgeClass: "border-green-200 bg-green-50 text-green-700",
+        badgeClass: "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)",
         description: "Seu dispositivo está pronto para receber alertas.",
       };
     }
@@ -79,7 +82,7 @@ export default function PerfilConfiguracoesPage() {
     if (permission === "granted" && !hasSubscription) {
       return {
         label: "Sincronizando",
-        badgeClass: "border-yellow-200 bg-yellow-50 text-yellow-700",
+        badgeClass: "border-(--state-scheduled)/30 bg-(--state-scheduled)/10 text-(--state-scheduled)",
         description: "Permissão concedida. Estamos finalizando o vínculo do dispositivo.",
       };
     }
@@ -192,11 +195,24 @@ export default function PerfilConfiguracoesPage() {
   return (
     <ArenaShell title="Configurações" subtitle="Preferências do app" showBack>
       <div className="space-y-4">
+        <GlassCard className="space-y-3">
+          <div className="flex items-start gap-2">
+            <Palette className="mt-0.5 h-4 w-4 shrink-0 text-(--arena-primary)" />
+            <div className="space-y-0.5">
+              <p className="text-sm font-semibold text-(--arena-foreground)">Aparência</p>
+              <p className="text-xs text-(--arena-muted)">
+                Tema claro, escuro ou seguindo o sistema.
+              </p>
+            </div>
+          </div>
+          <ThemeToggle />
+        </GlassCard>
+
         <article className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2">
               {pushStatus.label === "Ativo" ? (
-                <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-(--state-played)" />
               ) : (
                 <BellOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               )}
@@ -307,14 +323,14 @@ export default function PerfilConfiguracoesPage() {
               </div>
 
               {passwordSuccess ? (
-                <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-600">
+                <div className="flex items-center gap-2 rounded-lg bg-(--state-played)/10 p-3 text-sm text-(--state-played)">
                   <Check className="h-4 w-4" />
                   Senha alterada com sucesso!
                 </div>
               ) : null}
 
               {passwordError ? (
-                <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+                <div className="flex items-center gap-2 rounded-lg bg-(--state-noshow)/10 p-3 text-sm text-(--state-noshow)">
                   <AlertTriangle className="h-4 w-4" />
                   {passwordError}
                 </div>

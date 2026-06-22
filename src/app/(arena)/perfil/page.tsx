@@ -242,9 +242,9 @@ export default function PerfilPage() {
           </article>
           <article className="rounded-2xl border border-border bg-card p-3 shadow-sm text-center">
             <p className="text-xl font-bold">
-              <span className="text-green-600">{vitorias}</span>
+              <span className="text-(--state-played)">{vitorias}</span>
               <span className="text-muted-foreground">/</span>
-              <span className="text-red-500">{derrotas}</span>
+              <span className="text-(--state-noshow)">{derrotas}</span>
             </p>
             <p className="text-[10px] text-muted-foreground">V/D</p>
           </article>
@@ -254,11 +254,11 @@ export default function PerfilPage() {
           </article>
           <article className={`rounded-2xl border p-3 shadow-sm text-center ${
             streak > 0
-              ? "border-amber-200 bg-amber-50"
+              ? "border-(--state-scheduled)/30 bg-(--state-scheduled)/10"
               : "border-border bg-card"
           }`}>
             <>
-              <p className={`text-xl font-bold ${streak > 0 ? "text-amber-600" : "text-foreground"}`}>
+              <p className={`text-xl font-bold ${streak > 0 ? "text-(--state-scheduled)" : "text-foreground"}`}>
                 🔥 {streak}
               </p>
               <p className="text-[10px] text-muted-foreground">streak</p>
@@ -360,12 +360,12 @@ export default function PerfilPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                            euVenci ? "bg-emerald-100" : "bg-red-100"
+                            euVenci ? "bg-(--state-played)/15" : "bg-(--state-noshow)/15"
                           }`}
                         >
                           <span
                             className={`text-sm font-bold ${
-                              euVenci ? "text-emerald-700" : "text-red-600"
+                              euVenci ? "text-(--state-played)" : "text-(--state-noshow)"
                             }`}
                           >
                             {euVenci ? "V" : "D"}
@@ -382,7 +382,7 @@ export default function PerfilPage() {
                       </div>
                       <span
                         className={`text-sm font-semibold ${
-                          euVenci ? "text-green-600" : "text-red-500"
+                          euVenci ? "text-(--state-played)" : "text-(--state-noshow)"
                         }`}
                       >
                         {meusPoints !== undefined && meusPoints !== null
@@ -418,17 +418,17 @@ export default function PerfilPage() {
                   return (
                     <article
                       key={match.id}
-                      className="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50/60 p-3 shadow-sm"
+                      className="flex items-center justify-between rounded-2xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 shadow-sm"
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                            euVenci ? "bg-emerald-100" : "bg-red-100"
+                            euVenci ? "bg-(--state-played)/15" : "bg-(--state-noshow)/15"
                           }`}
                         >
                           <span
                             className={`text-sm font-bold ${
-                              euVenci ? "text-emerald-700" : "text-red-600"
+                              euVenci ? "text-(--state-played)" : "text-(--state-noshow)"
                             }`}
                           >
                             {euVenci ? "V" : "D"}
@@ -443,7 +443,7 @@ export default function PerfilPage() {
                           </p>
                         </div>
                       </div>
-                      <span className="text-sm font-semibold text-amber-700">
+                      <span className="text-sm font-semibold text-(--state-scheduled)">
                         +{seasonPts} pts
                       </span>
                     </article>
@@ -492,25 +492,25 @@ export default function PerfilPage() {
         {canAccessAdmin && (
           <Link
             href="/admin"
-            className="flex items-center justify-between rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm transition hover:border-orange-400"
+            className="flex items-center justify-between rounded-2xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-4 shadow-sm transition hover:border-(--state-scheduled)/40"
           >
             <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-orange-600" />
+              <Shield className="h-5 w-5 text-(--state-scheduled)" />
               <div>
-                <p className="font-semibold text-orange-800">Painel Admin</p>
-                <p className="text-xs text-orange-600/80">
+                <p className="font-semibold text-(--state-scheduled)">Painel Admin</p>
+                <p className="text-xs text-(--state-scheduled)/80">
                   Gerenciar jogadores, partidas e temporadas
                 </p>
               </div>
             </div>
-            <span className="text-orange-400">→</span>
+            <span className="text-(--state-scheduled)">→</span>
           </Link>
         )}
 
         {/* Botão de logout */}
         <button
           onClick={logout}
-          className="w-full rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+          className="w-full rounded-2xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 p-3 text-sm font-semibold text-(--state-noshow) transition hover:bg-(--state-noshow)/15"
         >
           Sair da conta
         </button>

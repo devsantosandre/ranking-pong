@@ -13,8 +13,6 @@ export function useRealtimeBracket(tournamentId: string) {
 
   useEffect(() => {
     if (!tournamentId) return;
-    // Sem Supabase em modo mock — skip silencioso
-    if ((process.env.NEXT_PUBLIC_DATA_SOURCE ?? "mock") !== "supabase") return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let channel: any;

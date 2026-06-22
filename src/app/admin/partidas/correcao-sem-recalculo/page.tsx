@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
+import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
 function InfoCard({
@@ -10,31 +12,36 @@ function InfoCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      <div className="mt-2 space-y-2 text-sm text-muted-foreground">{children}</div>
-    </section>
+    <GlassCard>
+      <h2 className="text-sm font-semibold text-(--arena-foreground)" style={{ fontFamily: "var(--font-display)" }}>
+        {title}
+      </h2>
+      <div className="mt-2 space-y-2 text-sm text-(--arena-muted)">{children}</div>
+    </GlassCard>
   );
 }
 
 export default function CorrecaoSemRecalculoPage() {
   return (
-    <AppShell
+    <ArenaShell
       title="Correção sem recálculo"
       subtitle="Quando usar e o que ela pode afetar"
       showBack
     >
       <div className="space-y-4">
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-950">
+        <GlassCard
+          glow="scheduled"
+          style={{ background: "color-mix(in srgb, var(--state-scheduled) 10%, var(--glass-bg))" }}
+        >
+          <p className="text-sm font-semibold" style={{ color: "var(--state-scheduled)" }}>
             Esta opção é excepcional
           </p>
-          <p className="mt-2 text-sm text-amber-900">
+          <p className="mt-2 text-sm text-(--arena-foreground)">
             Ela existe para casos em que uma partida errada já ficou antiga, o
             cancelamento seguro não é mais possível e o ranking já foi
             prejudicado.
           </p>
-        </section>
+        </GlassCard>
 
         <InfoCard title="Quando faz sentido usar">
           <p>
@@ -93,8 +100,10 @@ export default function CorrecaoSemRecalculoPage() {
           </p>
         </InfoCard>
 
-        <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground shadow-sm">
-          <p className="font-semibold text-foreground">Resumo</p>
+        <GlassCard variant="strong" className="text-sm text-(--arena-muted)">
+          <p className="font-semibold text-(--arena-foreground)" style={{ fontFamily: "var(--font-display)" }}>
+            Resumo
+          </p>
           <p className="mt-2">
             A correção sem recálculo é uma saída de contenção. Ela é útil para
             resolver um prejuízo claro no ranking sem parar a operação do app,
@@ -102,12 +111,13 @@ export default function CorrecaoSemRecalculoPage() {
           </p>
           <Link
             href="/admin/partidas"
-            className="mt-3 inline-flex font-semibold text-primary underline-offset-4 hover:underline"
+            className="mt-3 inline-flex items-center gap-1.5 font-semibold text-(--arena-primary) underline-offset-4 hover:underline"
           >
+            <ArrowLeft className="h-4 w-4" />
             Voltar para Partidas
           </Link>
-        </div>
+        </GlassCard>
       </div>
-    </AppShell>
+    </ArenaShell>
   );
 }

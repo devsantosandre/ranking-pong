@@ -152,7 +152,7 @@ function ActiveSeasonCard() {
         <div className="flex items-center gap-2">
           <Medal className="h-4 w-4 text-primary" />
           <p className="text-sm font-bold text-primary">{activeSeason.name}</p>
-          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
+          <span className="rounded-full bg-(--state-played)/15 px-2 py-0.5 text-[10px] font-bold text-(--state-played)">
             ativa
           </span>
         </div>
@@ -258,7 +258,7 @@ export default function TemporadasPage() {
                   key={season.id}
                   className={`rounded-2xl border shadow-sm ${
                     isFirst
-                      ? "border-yellow-300 bg-yellow-50"
+                      ? "border-(--state-scheduled)/30 bg-(--state-scheduled)/10"
                       : "border-border bg-card"
                   }`}
                 >
@@ -266,7 +266,7 @@ export default function TemporadasPage() {
                   <div className="flex items-start gap-3 p-4">
                     <div
                       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
-                        isFirst ? "bg-yellow-200" : "bg-muted"
+                        isFirst ? "bg-(--state-scheduled)/20" : "bg-muted"
                       }`}
                     >
                       {isFirst ? "🏆" : "🏅"}
@@ -275,7 +275,7 @@ export default function TemporadasPage() {
                       <div className="flex items-center gap-2">
                         <p
                           className={`font-bold ${
-                            isFirst ? "text-yellow-800" : "text-foreground"
+                            isFirst ? "text-(--state-scheduled)" : "text-foreground"
                           }`}
                         >
                           {season.name}
@@ -290,7 +290,7 @@ export default function TemporadasPage() {
                       {championName ? (
                         <p
                           className={`mt-1 text-sm font-semibold ${
-                            isFirst ? "text-yellow-700" : "text-primary"
+                            isFirst ? "text-(--state-scheduled)" : "text-primary"
                           }`}
                         >
                           🥇 {championName}
@@ -308,7 +308,7 @@ export default function TemporadasPage() {
                     onClick={() => toggleExpanded(season.id)}
                     className={`flex w-full items-center justify-center gap-1.5 border-t px-4 py-2.5 text-xs font-semibold transition ${
                       isFirst
-                        ? "border-yellow-200 text-yellow-700 hover:bg-yellow-100"
+                        ? "border-(--state-scheduled)/30 text-(--state-scheduled) hover:bg-(--state-scheduled)/15"
                         : "border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                     }`}
                   >
@@ -329,7 +329,7 @@ export default function TemporadasPage() {
                   {isExpanded && (
                     <div
                       className={`border-t px-4 pb-4 ${
-                        isFirst ? "border-yellow-200" : "border-border"
+                        isFirst ? "border-(--state-scheduled)/30" : "border-border"
                       }`}
                     >
                       <ClosedSeasonStandings

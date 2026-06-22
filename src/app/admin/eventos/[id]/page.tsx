@@ -27,7 +27,7 @@ const FORMAT_ICONS: Partial<Record<TournamentFormat, typeof Trophy>> = {
 const DIVISION_FORMATS: { value: TournamentFormat; label: string }[] = [
   { value: "single_elimination", label: "Eliminatória simples" },
   { value: "groups_knockout", label: "Grupos + mata-mata" },
-  { value: "round_robin", label: "Round-robin" },
+  { value: "round_robin", label: "Pontos corridos" },
   { value: "king_of_table", label: "Rei da Mesa" },
 ];
 const BEST_OF = [1, 3, 5, 7] as const;

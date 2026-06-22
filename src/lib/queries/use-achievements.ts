@@ -248,12 +248,12 @@ export const achievementCategories: Record<string, { name: string; emoji: string
   marcos: { name: "Marcos", emoji: "⏰" },
 };
 
-// Cores por raridade
+// Cores por raridade — tokens temáveis (white-label + dark)
 export const rarityColors: Record<string, { bg: string; border: string; text: string }> = {
-  bronze: { bg: "bg-amber-100", border: "border-amber-300", text: "text-amber-700" },
-  prata: { bg: "bg-slate-100", border: "border-slate-300", text: "text-slate-600" },
-  ouro: { bg: "bg-yellow-100", border: "border-yellow-400", text: "text-yellow-700" },
-  platina: { bg: "bg-cyan-100", border: "border-cyan-300", text: "text-cyan-700" },
-  diamante: { bg: "bg-purple-100", border: "border-purple-300", text: "text-purple-700" },
-  especial: { bg: "bg-pink-100", border: "border-pink-300", text: "text-pink-700" },
+  bronze: { bg: "bg-(--state-scheduled)/15", border: "border-(--state-scheduled)/30", text: "text-(--state-scheduled)" },
+  prata: { bg: "bg-(--state-tbd)/15", border: "border-(--state-tbd)/30", text: "text-(--state-tbd)" },
+  ouro: { bg: "bg-(--state-scheduled)/15", border: "border-(--state-scheduled)/40", text: "text-(--state-scheduled)" },
+  platina: { bg: "bg-(--state-active)/15", border: "border-(--state-active)/30", text: "text-(--state-active)" },
+  diamante: { bg: "bg-(--arena-primary)/15", border: "border-(--arena-primary)/30", text: "text-(--arena-primary)" },
+  especial: { bg: "bg-(--state-noshow)/15", border: "border-(--state-noshow)/30", text: "text-(--state-noshow)" },
 };

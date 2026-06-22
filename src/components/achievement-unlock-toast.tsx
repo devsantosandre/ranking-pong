@@ -455,7 +455,7 @@ export function AchievementUnlockToast({
                   {icon}
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                  <p className="text-[10px] font-bold text-(--state-scheduled) uppercase tracking-wider">
                     Conquista Desbloqueada!
                   </p>
                   <p className={`font-bold text-lg ${colors.text}`}>

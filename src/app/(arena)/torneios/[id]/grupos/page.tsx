@@ -5,6 +5,7 @@ import { StandingsTable } from "@/components/tournaments/standings-table";
 import Link from "next/link";
 import { Network, ChevronRight } from "lucide-react";
 import { GlassCard } from "@/components/arena/glass-card";
+import { isAdminServer } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,12 @@ export default async function GruposPage({
 }) {
   const { id } = await params;
   const repo = await getTournamentRepo();
-  const tournament = await repo.getTournament(id);
+  const [tournament, admin] = await Promise.all([repo.getTournament(id), isAdminServer()]);
 
   if (!tournament) notFound();
+
+  // Rascunho só é visível para o admin.
+  if (tournament.status === "draft" && !admin) notFound();
 
   const standings = await repo.getStandings(id);
 

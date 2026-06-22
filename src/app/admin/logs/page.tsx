@@ -1,6 +1,7 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
@@ -15,44 +16,51 @@ import { LoadMoreButton } from "@/components/ui/load-more-button";
 import { LogListSkeleton } from "@/components/skeletons";
 import { adminGetLogs, type AdminLog } from "@/app/actions/admin";
 
-const actionLabels: Record<string, { label: string; color: string }> = {
-  user_created: { label: "Jogador criado", color: "bg-green-100 text-green-700" },
-  user_password_reset: { label: "Senha resetada", color: "bg-blue-100 text-blue-700" },
-  user_activated: { label: "Jogador ativado", color: "bg-emerald-100 text-emerald-700" },
-  user_deactivated: { label: "Jogador desativado", color: "bg-red-100 text-red-700" },
-  user_stats_reset: { label: "Stats resetadas", color: "bg-orange-100 text-orange-700" },
-  user_name_updated: { label: "Nome alterado", color: "bg-blue-100 text-blue-700" },
-  user_rating_changed: { label: "Pontos alterados", color: "bg-purple-100 text-purple-700" },
-  user_role_changed: { label: "Role alterado", color: "bg-indigo-100 text-indigo-700" },
-  user_hidden_from_ranking: { label: "Jogador oculto", color: "bg-amber-100 text-amber-700" },
-  user_shown_in_ranking: { label: "Jogador visível", color: "bg-emerald-100 text-emerald-700" },
-  match_cancelled: { label: "Partida cancelada", color: "bg-red-100 text-red-700" },
+// Token de cor por categoria semântica (themable / dark): positivo→played,
+// negativo→noshow, info→active, mudança de admin→primary, atenção→scheduled.
+const actionLabels: Record<string, { label: string; token: string }> = {
+  user_created: { label: "Jogador criado", token: "var(--state-played)" },
+  user_password_reset: { label: "Senha resetada", token: "var(--state-active)" },
+  user_activated: { label: "Jogador ativado", token: "var(--state-played)" },
+  user_deactivated: { label: "Jogador desativado", token: "var(--state-noshow)" },
+  user_stats_reset: { label: "Stats resetadas", token: "var(--state-scheduled)" },
+  user_name_updated: { label: "Nome alterado", token: "var(--state-active)" },
+  user_rating_changed: { label: "Pontos alterados", token: "var(--arena-primary)" },
+  user_role_changed: { label: "Role alterado", token: "var(--arena-primary)" },
+  user_hidden_from_ranking: { label: "Jogador oculto", token: "var(--state-scheduled)" },
+  user_shown_in_ranking: { label: "Jogador visível", token: "var(--state-played)" },
+  match_cancelled: { label: "Partida cancelada", token: "var(--state-noshow)" },
   match_validated_by_admin: {
     label: "Partida aceita pelo admin",
-    color: "bg-emerald-100 text-emerald-700",
+    token: "var(--state-played)",
   },
   match_auto_validated: {
     label: "Confirmação automática",
-    color: "bg-cyan-100 text-cyan-700",
+    token: "var(--state-active)",
   },
   match_auto_cancelled_nonexistent: {
     label: "Cancelamento automático",
-    color: "bg-red-100 text-red-700",
+    token: "var(--state-noshow)",
   },
   match_corrected_without_recalculation: {
     label: "Correção sem recálculo",
-    color: "bg-amber-100 text-amber-800",
+    token: "var(--state-scheduled)",
   },
   match_confirmation_overdue: {
     label: "Histórico do modelo anterior",
-    color: "bg-amber-100 text-amber-700",
+    token: "var(--state-scheduled)",
   },
   match_confirmation_extension_granted: {
     label: "Prorrogação do modelo anterior",
-    color: "bg-sky-100 text-sky-700",
+    token: "var(--state-active)",
   },
-  setting_changed: { label: "Config alterada", color: "bg-amber-100 text-amber-700" },
+  setting_changed: { label: "Config alterada", token: "var(--state-scheduled)" },
 };
+
+// Badge/chip a partir do token: fundo tingido + texto na cor cheia.
+function tokenChipStyle(token: string) {
+  return { background: `color-mix(in srgb, ${token} 15%, transparent)`, color: token };
+}
 
 // Labels para configuracoes
 const settingNames: Record<string, string> = {
@@ -315,7 +323,7 @@ function formatValue(value: unknown, action: string): React.ReactNode {
   if (action === "user_rating_changed" && typeof value === "object") {
     const obj = value as Record<string, unknown>;
     if ("rating" in obj) {
-      return <span className="font-semibold text-primary">{String(obj.rating)} pts</span>;
+      return <span className="font-semibold text-(--arena-primary)">{String(obj.rating)} pts</span>;
     }
   }
 
@@ -334,7 +342,7 @@ function formatValue(value: unknown, action: string): React.ReactNode {
   // Fallback para JSON
   if (typeof value === "object") {
     return (
-      <pre className="max-w-full whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 text-[10px] leading-relaxed [overflow-wrap:anywhere]">
+      <pre className="max-w-full whitespace-pre-wrap break-words rounded bg-(--glass-bg) px-2 py-1 text-[10px] leading-relaxed [overflow-wrap:anywhere]">
         {JSON.stringify(value, null, 2)}
       </pre>
     );
@@ -410,11 +418,14 @@ export default function AdminLogsPage() {
   }, [loadLogs]);
 
   return (
-    <AppShell title="Historico" subtitle="Acoes administrativas" showBack>
-      <div className="space-y-4">
+    <ArenaShell title="Histórico" subtitle="Ações administrativas" showBack>
+      <div className="flex flex-col gap-4">
         {/* Erro */}
         {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          <div
+            className="flex items-center gap-2 rounded-lg p-3 text-sm"
+            style={{ background: "color-mix(in srgb, var(--state-noshow) 12%, transparent)", color: "var(--state-noshow)" }}
+          >
             <AlertTriangle className="h-4 w-4" />
             {error}
             <button onClick={() => setError("")} className="ml-auto">
@@ -427,25 +438,22 @@ export default function AdminLogsPage() {
         {loading ? (
           <LogListSkeleton count={6} />
         ) : logs.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            Nenhuma acao registrada
+          <p className="py-8 text-center text-sm text-(--arena-muted)">
+            Nenhuma ação registrada
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-2">
             {logs.map((log) => {
               const actionMeta = actionLabels[log.action] || {
-                label: "Acao registrada",
-                color: "bg-slate-100 text-slate-700",
+                label: "Ação registrada",
+                token: "var(--state-tbd)",
               };
               const TargetIcon = targetIcons[log.target_type] || User;
               const isExpanded = expandedLog === log.id;
               const autoValidationDeadlineHours = getAutoValidationDeadlineHours(log);
 
               return (
-                <article
-                  key={log.id}
-                  className="rounded-2xl border border-border bg-card shadow-sm"
-                >
+                <GlassCard key={log.id} noPadding>
                   {/* Header clicavel */}
                   <button
                     onClick={() =>
@@ -455,13 +463,15 @@ export default function AdminLogsPage() {
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <div
-                        className={`flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-full ${actionMeta.color}`}
+                        className="flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-full"
+                        style={tokenChipStyle(actionMeta.token)}
                       >
                         <TargetIcon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <span
-                          className={`inline-flex max-w-full rounded-full px-2 py-0.5 text-[10px] font-semibold ${actionMeta.color}`}
+                          className="inline-flex max-w-full rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={tokenChipStyle(actionMeta.token)}
                         >
                           {actionMeta.label}
                         </span>
@@ -469,19 +479,19 @@ export default function AdminLogsPage() {
                           {log.action_description}
                         </p>
                         {autoValidationDeadlineHours ? (
-                          <p className="mt-1 text-xs font-medium text-cyan-700">
+                          <p className="mt-1 text-xs font-medium text-(--state-active)">
                             Prazo aplicado: {autoValidationDeadlineHours}h sem resposta
                           </p>
                         ) : null}
                         {log.target_name && (
-                          <p className="text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
+                          <p className="text-xs text-(--arena-muted) break-words [overflow-wrap:anywhere]">
                             {log.target_name}
                           </p>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                      <span className="whitespace-nowrap text-xs text-(--arena-muted)">
                         {formatRelativeTime(log.created_at)}
                       </span>
                         {isExpanded ? (
@@ -494,29 +504,29 @@ export default function AdminLogsPage() {
 
                   {/* Detalhes expandidos */}
                   {isExpanded && (
-                    <div className="space-y-2 overflow-hidden border-t border-border px-4 pb-4 pt-3">
+                    <div className="space-y-2 overflow-hidden border-t border-(--glass-border) px-4 pb-4 pt-3">
                       <div className="text-xs break-words [overflow-wrap:anywhere]">
-                        <span className="text-muted-foreground">Admin: </span>
+                        <span className="text-(--arena-muted)">Admin: </span>
                         <span className="font-medium">
                           {log.admin?.full_name ||
                             log.admin?.name ||
                             (log.admin_role === "system" ? "Sistema" : "Desconhecido")}
                         </span>
-                        <span className="ml-1 text-muted-foreground">
+                        <span className="ml-1 text-(--arena-muted)">
                           ({log.admin_role})
                         </span>
                       </div>
 
                       {log.reason && (
                         <div className="text-xs break-words [overflow-wrap:anywhere]">
-                          <span className="text-muted-foreground">Motivo: </span>
+                          <span className="text-(--arena-muted)">Motivo: </span>
                           <span className="font-medium">{log.reason}</span>
                         </div>
                       )}
 
                       {log.old_value && (
                         <div className="text-xs">
-                          <span className="text-muted-foreground">Antes: </span>
+                          <span className="text-(--arena-muted)">Antes: </span>
                           <div className="mt-1 max-w-full">
                             {formatValue(log.old_value, log.action)}
                           </div>
@@ -525,19 +535,19 @@ export default function AdminLogsPage() {
 
                       {log.new_value && (
                         <div className="text-xs">
-                          <span className="text-muted-foreground">Depois: </span>
+                          <span className="text-(--arena-muted)">Depois: </span>
                           <div className="mt-1 max-w-full">
                             {formatValue(log.new_value, log.action)}
                           </div>
                         </div>
                       )}
 
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-[10px] text-(--arena-muted)">
                         {formatAbsoluteDateTime(log.created_at)}
                       </div>
                     </div>
                   )}
-                </article>
+                </GlassCard>
               );
             })}
 
@@ -550,6 +560,6 @@ export default function AdminLogsPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </ArenaShell>
   );
 }

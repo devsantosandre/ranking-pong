@@ -1,6 +1,7 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useAllSeasons, type ClosedSeason } from "@/lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries";
@@ -38,11 +39,17 @@ const STATUS_LABELS: Record<SeasonStatus, string> = {
   closed: "encerrada",
 };
 
-const STATUS_CLASSES: Record<SeasonStatus, string> = {
-  upcoming: "bg-blue-100 text-blue-700",
-  active: "bg-green-100 text-green-700",
-  closed: "bg-muted text-muted-foreground",
+// Cor de cada status via token temável (white-label / dark).
+const STATUS_TOKEN: Record<SeasonStatus, string> = {
+  upcoming: "var(--state-active)",
+  active: "var(--state-played)",
+  closed: "var(--state-tbd)",
 };
+
+function statusBadgeStyle(status: SeasonStatus) {
+  const token = STATUS_TOKEN[status];
+  return { background: `color-mix(in srgb, ${token} 15%, transparent)`, color: token };
+}
 
 const RECURRENCE_LABELS: Record<string, string> = {
   none: "Sem recorrência",
@@ -161,9 +168,9 @@ function SeasonForm({
   };
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border bg-muted/30 p-4">
+    <GlassCard variant="strong" className="space-y-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Nome</label>
+        <label className="text-xs font-medium text-(--arena-muted)">Nome</label>
         <Input
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -173,11 +180,12 @@ function SeasonForm({
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label className="text-xs font-medium text-(--arena-muted)">
           Recorrência
         </label>
         <select
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+          style={{ borderColor: "var(--glass-border-strong)" }}
           value={form.recurrence}
           onChange={(e) => handleRecurrenceChange(e.target.value)}
         >
@@ -191,7 +199,7 @@ function SeasonForm({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Início</label>
+          <label className="text-xs font-medium text-(--arena-muted)">Início</label>
           <Input
             type="datetime-local"
             value={form.starts_at}
@@ -199,7 +207,7 @@ function SeasonForm({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">
+          <label className="text-xs font-medium text-(--arena-muted)">
             Término
           </label>
           <Input
@@ -210,7 +218,7 @@ function SeasonForm({
         </div>
       </div>
 
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs" style={{ color: "var(--state-noshow)" }}>{error}</p>}
 
       <div className="flex gap-2">
         <Button
@@ -232,7 +240,7 @@ function SeasonForm({
           Revisar →
         </Button>
       </div>
-    </div>
+    </GlassCard>
   );
 }
 
@@ -240,22 +248,22 @@ function SeasonForm({
 
 function SeasonDataSummary({ data }: { data: FormState }) {
   return (
-    <div className="mb-4 rounded-xl bg-muted/40 p-3 text-sm space-y-1.5">
+    <div className="mb-4 rounded-xl p-3 text-sm space-y-1.5" style={{ background: "color-mix(in srgb, var(--arena-foreground) 5%, transparent)" }}>
       <div className="flex justify-between">
-        <span className="text-muted-foreground">Nome</span>
-        <span className="font-medium text-right max-w-[180px] truncate">{data.name}</span>
+        <span className="text-(--arena-muted)">Nome</span>
+        <span className="font-medium text-right max-w-[180px] truncate text-(--arena-foreground)">{data.name}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-muted-foreground">Início</span>
-        <span className="font-medium">{formatDateDisplay(data.starts_at)}</span>
+        <span className="text-(--arena-muted)">Início</span>
+        <span className="font-medium text-(--arena-foreground)">{formatDateDisplay(data.starts_at)}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-muted-foreground">Término</span>
-        <span className="font-medium">{formatDateDisplay(data.ends_at)}</span>
+        <span className="text-(--arena-muted)">Término</span>
+        <span className="font-medium text-(--arena-foreground)">{formatDateDisplay(data.ends_at)}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-muted-foreground">Recorrência</span>
-        <span className="font-medium">{RECURRENCE_LABELS[data.recurrence] ?? data.recurrence}</span>
+        <span className="text-(--arena-muted)">Recorrência</span>
+        <span className="font-medium text-(--arena-foreground)">{RECURRENCE_LABELS[data.recurrence] ?? data.recurrence}</span>
       </div>
     </div>
   );
@@ -405,16 +413,16 @@ export default function AdminTemporadasPage() {
   const nowIso = new Date().toISOString().slice(0, 16);
 
   return (
-    <AppShell title="Temporadas" subtitle="Gerenciamento" showBack>
+    <ArenaShell title="Temporadas" subtitle="Gerenciamento" showBack>
       <div className="space-y-4">
         {/* Feedback */}
         {feedback && (
           <div
-            className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
-              feedback.type === "ok"
-                ? "bg-green-50 text-green-700"
-                : "bg-red-50 text-red-700"
-            }`}
+            className="flex items-center gap-2 rounded-lg p-3 text-sm"
+            style={{
+              background: `color-mix(in srgb, ${feedback.type === "ok" ? "var(--state-played)" : "var(--state-noshow)"} 12%, transparent)`,
+              color: feedback.type === "ok" ? "var(--state-played)" : "var(--state-noshow)",
+            }}
           >
             {feedback.type === "ok" ? (
               <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -440,7 +448,7 @@ export default function AdminTemporadasPage() {
         {/* Formulário de criação */}
         {showCreateForm && (
           <div className="space-y-2">
-            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-(--arena-muted)">
               Nova temporada
             </p>
             <SeasonForm
@@ -455,10 +463,10 @@ export default function AdminTemporadasPage() {
         {/* Lista de temporadas */}
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <Loader2 className="h-6 w-6 animate-spin text-(--arena-primary)" />
           </div>
         ) : !seasons || seasons.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="py-6 text-center text-sm text-(--arena-muted)">
             Nenhuma temporada cadastrada.
           </p>
         ) : (
@@ -469,10 +477,7 @@ export default function AdminTemporadasPage() {
               const isEditing = editingId === season.id;
 
               return (
-                <div
-                  key={season.id}
-                  className="rounded-2xl border border-border bg-card shadow-sm"
-                >
+                <GlassCard key={season.id} noPadding>
                   {/* Header do card */}
                   <button
                     className="flex w-full items-center justify-between gap-3 p-4 text-left"
@@ -482,31 +487,32 @@ export default function AdminTemporadasPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-foreground truncate">
+                        <p className="font-semibold text-(--arena-foreground) truncate">
                           {season.name}
                         </p>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_CLASSES[status]}`}
+                          className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                          style={statusBadgeStyle(status)}
                         >
                           {STATUS_LABELS[status]}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-(--arena-muted)">
                         {new Date(season.starts_at).toLocaleDateString("pt-BR")}{" "}
                         →{" "}
                         {new Date(season.ends_at).toLocaleDateString("pt-BR")}
                       </p>
                     </div>
                     {isExpanded ? (
-                      <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <ChevronUp className="h-4 w-4 shrink-0 text-(--arena-muted)" />
                     ) : (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <ChevronDown className="h-4 w-4 shrink-0 text-(--arena-muted)" />
                     )}
                   </button>
 
                   {/* Detalhes expandidos */}
                   {isExpanded && (
-                    <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
+                    <div className="px-4 pb-4 pt-3 space-y-3" style={{ borderTop: "1px solid var(--glass-border)" }}>
                       {isEditing ? (
                         <SeasonForm
                           initial={{
@@ -523,23 +529,23 @@ export default function AdminTemporadasPage() {
                         <>
                           <div className="grid grid-cols-2 gap-3 text-xs">
                             <div>
-                              <p className="text-muted-foreground">Recorrência</p>
-                              <p className="font-medium">
+                              <p className="text-(--arena-muted)">Recorrência</p>
+                              <p className="font-medium text-(--arena-foreground)">
                                 {RECURRENCE_LABELS[season.recurrence] ?? season.recurrence}
                               </p>
                             </div>
                             {season.champion && status === "closed" && (
                               <div>
-                                <p className="text-muted-foreground">Campeão</p>
-                                <p className="font-medium text-primary">
+                                <p className="text-(--arena-muted)">Campeão</p>
+                                <p className="font-medium text-(--arena-primary)">
                                   🥇 {getPlayerName(season.champion)}
                                 </p>
                               </div>
                             )}
                             {season.closed_at && (
                               <div>
-                                <p className="text-muted-foreground">Encerrada em</p>
-                                <p className="font-medium">
+                                <p className="text-(--arena-muted)">Encerrada em</p>
+                                <p className="font-medium text-(--arena-foreground)">
                                   {new Date(season.closed_at).toLocaleDateString("pt-BR")}
                                 </p>
                               </div>
@@ -551,7 +557,7 @@ export default function AdminTemporadasPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-green-200 text-green-700 hover:bg-green-50"
+                                style={{ borderColor: "color-mix(in srgb, var(--state-played) 35%, transparent)", color: "var(--state-played)" }}
                                 onClick={() =>
                                   setLifecycleConfirm({ type: "activate", season })
                                 }
@@ -576,7 +582,7 @@ export default function AdminTemporadasPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-red-200 text-red-600 hover:bg-red-50"
+                                style={{ borderColor: "color-mix(in srgb, var(--state-noshow) 35%, transparent)", color: "var(--state-noshow)" }}
                                 onClick={() =>
                                   setLifecycleConfirm({ type: "close", season })
                                 }
@@ -590,7 +596,7 @@ export default function AdminTemporadasPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                                style={{ borderColor: "color-mix(in srgb, var(--state-active) 35%, transparent)", color: "var(--state-active)" }}
                                 onClick={() =>
                                   setLifecycleConfirm({ type: "reopen", season })
                                 }
@@ -604,7 +610,7 @@ export default function AdminTemporadasPage() {
                       )}
                     </div>
                   )}
-                </div>
+                </GlassCard>
               );
             })}
           </div>
@@ -626,17 +632,18 @@ export default function AdminTemporadasPage() {
         {createConfirm.data && (
           <>
             <SeasonDataSummary data={createConfirm.data} />
-            <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+            <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5" style={{ border: "1px solid var(--glass-border)", background: "color-mix(in srgb, var(--arena-foreground) 4%, transparent)" }}>
               <input
                 type="checkbox"
-                className="h-4 w-4 accent-primary"
+                className="h-4 w-4"
+                style={{ accentColor: "var(--arena-primary)" }}
                 checked={createConfirm.notify}
                 onChange={(e) =>
                   setCreateConfirm((p) => ({ ...p, notify: e.target.checked }))
                 }
               />
-              <span className="flex items-center gap-1.5 text-sm">
-                <Megaphone className="h-3.5 w-3.5 text-primary" />
+              <span className="flex items-center gap-1.5 text-sm text-(--arena-foreground)">
+                <Megaphone className="h-3.5 w-3.5 text-(--arena-primary)" />
                 Publicar anúncio no feed de notícias
               </span>
             </label>
@@ -689,6 +696,6 @@ export default function AdminTemporadasPage() {
         variant="warning"
         loading={actionLoading}
       />
-    </AppShell>
+    </ArenaShell>
   );
 }

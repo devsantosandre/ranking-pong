@@ -183,25 +183,25 @@ export default function RegrasPage() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left py-2 font-semibold">Situacao</th>
-                    <th className="text-center py-2 font-semibold text-green-600">Vitoria</th>
-                    <th className="text-center py-2 font-semibold text-red-500">Derrota</th>
+                    <th className="text-center py-2 font-semibold text-(--state-played)">Vitoria</th>
+                    <th className="text-center py-2 font-semibold text-(--state-noshow)">Derrota</th>
                   </tr>
                 </thead>
                 <tbody className="text-muted-foreground">
                   <tr className="border-b border-border/50">
                     <td className="py-2">vs Mais forte</td>
-                    <td className="text-center py-2 text-green-600 font-semibold">+{eloExamples.vsStronger.win}</td>
-                    <td className="text-center py-2 text-red-500 font-semibold">{eloExamples.vsStronger.lose}</td>
+                    <td className="text-center py-2 text-(--state-played) font-semibold">+{eloExamples.vsStronger.win}</td>
+                    <td className="text-center py-2 text-(--state-noshow) font-semibold">{eloExamples.vsStronger.lose}</td>
                   </tr>
                   <tr className="border-b border-border/50">
                     <td className="py-2">vs Mesmo nivel</td>
-                    <td className="text-center py-2 text-green-600 font-semibold">+{eloExamples.vsEqual.win}</td>
-                    <td className="text-center py-2 text-red-500 font-semibold">{eloExamples.vsEqual.lose}</td>
+                    <td className="text-center py-2 text-(--state-played) font-semibold">+{eloExamples.vsEqual.win}</td>
+                    <td className="text-center py-2 text-(--state-noshow) font-semibold">{eloExamples.vsEqual.lose}</td>
                   </tr>
                   <tr>
                     <td className="py-2">vs Mais fraco</td>
-                    <td className="text-center py-2 text-green-600 font-semibold">+{eloExamples.vsWeaker.win}</td>
-                    <td className="text-center py-2 text-red-500 font-semibold">{eloExamples.vsWeaker.lose}</td>
+                    <td className="text-center py-2 text-(--state-played) font-semibold">+{eloExamples.vsWeaker.win}</td>
+                    <td className="text-center py-2 text-(--state-noshow) font-semibold">{eloExamples.vsWeaker.lose}</td>
                   </tr>
                 </tbody>
               </table>
@@ -218,83 +218,83 @@ export default function RegrasPage() {
           <h2 className="text-lg font-bold text-foreground mb-3">Por que ELO?</h2>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
-              <span className="text-green-500 mt-0.5">✓</span>
+              <span className="text-(--state-played) mt-0.5">✓</span>
               <span>Jogadores fortes que perdem para fracos sao mais penalizados</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-green-500 mt-0.5">✓</span>
+              <span className="text-(--state-played) mt-0.5">✓</span>
               <span>Jogadores fracos que vencem fortes sao mais recompensados</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-green-500 mt-0.5">✓</span>
+              <span className="text-(--state-played) mt-0.5">✓</span>
               <span>Vitorias contra adversarios do mesmo nivel = pontuacao equilibrada</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-green-500 mt-0.5">✓</span>
+              <span className="text-(--state-played) mt-0.5">✓</span>
               <span>O rating segue exatamente a soma das vitórias e derrotas, inclusive abaixo de zero</span>
             </li>
           </ul>
         </section>
 
         {/* Temporadas */}
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+        <section className="rounded-2xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
-            <Trophy className="h-5 w-5 text-amber-600" />
-            <h2 className="text-lg font-bold text-amber-900">Temporadas</h2>
+            <Trophy className="h-5 w-5 text-(--state-scheduled)" />
+            <h2 className="text-lg font-bold text-(--state-scheduled)">Temporadas</h2>
           </div>
-          <p className="text-sm text-amber-800/80 mb-4">
+          <p className="text-sm text-(--state-scheduled)/80 mb-4">
             Uma temporada é uma competição paralela ao ranking ELO, com período definido.
             Todo jogador acumula pontos separadamente — o placar começa do zero em cada temporada.
           </p>
 
-          <p className="text-sm font-semibold text-amber-900 mb-2">Pontuação por partida</p>
+          <p className="text-sm font-semibold text-(--state-scheduled) mb-2">Pontuação por partida</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="rounded-xl bg-green-100 p-3 text-center">
-              <p className="text-xl font-bold text-green-700">+{seasonPointsWin} pts</p>
-              <p className="text-xs text-green-600">por vitória</p>
+            <div className="rounded-xl bg-(--state-played)/15 p-3 text-center">
+              <p className="text-xl font-bold text-(--state-played)">+{seasonPointsWin} pts</p>
+              <p className="text-xs text-(--state-played)">por vitória</p>
             </div>
-            <div className="rounded-xl bg-amber-100 p-3 text-center">
-              <p className="text-xl font-bold text-amber-700">+{seasonPointsLoss} pt</p>
-              <p className="text-xs text-amber-600">por derrota</p>
+            <div className="rounded-xl bg-(--state-scheduled)/15 p-3 text-center">
+              <p className="text-xl font-bold text-(--state-scheduled)">+{seasonPointsLoss} pt</p>
+              <p className="text-xs text-(--state-scheduled)">por derrota</p>
             </div>
           </div>
           {seasonZebraEnabled && (
-            <div className="mb-3 rounded-xl bg-purple-100 p-3 text-center">
-              <p className="text-sm font-bold text-purple-700">+{seasonZebraBonus} pts bônus zebra</p>
-              <p className="text-xs text-purple-600">ao vencer alguém acima de você no ranking geral</p>
+            <div className="mb-3 rounded-xl bg-(--arena-primary)/15 p-3 text-center">
+              <p className="text-sm font-bold text-(--arena-primary)">+{seasonZebraBonus} pts bônus zebra</p>
+              <p className="text-xs text-(--arena-primary)">ao vencer alguém acima de você no ranking geral</p>
             </div>
           )}
-          <p className="text-xs text-amber-700/70 italic mb-4">
+          <p className="text-xs text-(--state-scheduled)/70 italic mb-4">
             Toda partida vale — mesmo na derrota você acumula pontos!
           </p>
 
-          <ul className="space-y-2 text-sm text-amber-800/80">
+          <ul className="space-y-2 text-sm text-(--state-scheduled)/80">
             <li className="flex items-start gap-2">
-              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span className="mt-0.5 shrink-0 text-(--state-scheduled)">•</span>
               <span>
                 Partidas validadas durante uma temporada ativa contam <strong>automaticamente</strong> para o placar — não é preciso fazer nada diferente.
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span className="mt-0.5 shrink-0 text-(--state-scheduled)">•</span>
               <span>
                 O ranking da temporada fica na aba <strong>Temporada</strong> dentro de Ranking, separado do ranking ELO.
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span className="mt-0.5 shrink-0 text-(--state-scheduled)">•</span>
               <span>
                 O ELO continua sendo calculado normalmente em paralelo — as partidas valem para os dois rankings ao mesmo tempo.
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span className="mt-0.5 shrink-0 text-(--state-scheduled)">•</span>
               <span>
                 Quando a temporada encerra, o jogador com mais pontos é o <strong>campeão</strong> e fica registrado no Hall da Fama em <strong>Temporadas</strong>.
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-0.5 shrink-0 text-amber-500">•</span>
+              <span className="mt-0.5 shrink-0 text-(--state-scheduled)">•</span>
               <span>
                 O ELO acumulado durante a temporada <strong>não é zerado</strong> no encerramento — só a pontuação de temporada recomeça do zero na próxima.
               </span>

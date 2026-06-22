@@ -10,7 +10,17 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
+
+// Chip tingido a partir de um token de cor (themable / dark).
+function tokenChipStyle(token: string) {
+  return {
+    background: `color-mix(in srgb, ${token} 14%, transparent)`,
+    borderColor: `color-mix(in srgb, ${token} 30%, transparent)`,
+    color: token,
+  };
+}
 
 type RoleKey = "player" | "moderator" | "admin";
 type AccessKind = "allowed" | "limited" | "blocked";
@@ -39,7 +49,7 @@ const roleCards: Array<{
   title: string;
   summary: string;
   icon: typeof UserRound;
-  tone: string;
+  token: string;
 }> = [
   {
     role: "player",
@@ -47,7 +57,7 @@ const roleCards: Array<{
     summary:
       "Usa as telas normais do app, registra partidas, confirma jogos e acompanha o ranking. Não entra na área administrativa.",
     icon: UserRound,
-    tone: "border-slate-200 bg-slate-50 text-slate-700",
+    token: "var(--state-tbd)",
   },
   {
     role: "moderator",
@@ -55,7 +65,7 @@ const roleCards: Array<{
     summary:
       "Cuida da operação do dia a dia: acessa Admin, acompanha pendências, cancela partidas, cria jogador e reseta senha.",
     icon: ShieldCheck,
-    tone: "border-sky-200 bg-sky-50 text-sky-700",
+    token: "var(--state-active)",
   },
   {
     role: "admin",
@@ -63,7 +73,7 @@ const roleCards: Array<{
     summary:
       "Tem tudo do moderador e ainda altera regras, perfis, pontos, status da conta, visibilidade no ranking e configurações.",
     icon: Shield,
-    tone: "border-violet-200 bg-violet-50 text-violet-700",
+    token: "var(--arena-primary)",
   },
 ];
 
@@ -187,7 +197,7 @@ const stateCards = [
     title: "Observador",
     subtitle: "Não é perfil",
     icon: EyeOff,
-    tone: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    token: "var(--state-active)",
     description:
       "Vem do ajuste “Ocultar do ranking”. A conta continua ativa e pode entrar no app, mas sai do ranking, some das listas de adversários e não pode registrar partidas.",
   },
@@ -195,7 +205,7 @@ const stateCards = [
     title: "Inativo",
     subtitle: "Não é perfil",
     icon: Lock,
-    tone: "border-rose-200 bg-rose-50 text-rose-700",
+    token: "var(--state-noshow)",
     description:
       "Vem do ajuste “Desativar”. No código atual, isso tira a conta das listagens e leituras que usam apenas jogadores ativos. Não existe um bloqueio separado de login no middleware.",
   },
@@ -203,23 +213,12 @@ const stateCards = [
 
 function getAccessMeta(kind: AccessKind) {
   if (kind === "allowed") {
-    return {
-      icon: CheckCircle2,
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    };
+    return { icon: CheckCircle2, token: "var(--state-played)" };
   }
-
   if (kind === "limited") {
-    return {
-      icon: Minus,
-      className: "border-amber-200 bg-amber-50 text-amber-700",
-    };
+    return { icon: Minus, token: "var(--state-scheduled)" };
   }
-
-  return {
-    icon: Lock,
-    className: "border-slate-200 bg-slate-100 text-slate-600",
-  };
+  return { icon: Lock, token: "var(--state-tbd)" };
 }
 
 function AccessBadge({ cell }: { cell: AccessCell }) {
@@ -228,7 +227,8 @@ function AccessBadge({ cell }: { cell: AccessCell }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.className}`}
+      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+      style={tokenChipStyle(meta.token)}
     >
       <Icon className="h-3.5 w-3.5" />
       {cell.label}
@@ -238,88 +238,88 @@ function AccessBadge({ cell }: { cell: AccessCell }) {
 
 export default function AdminPerfisPage() {
   return (
-    <AppShell
+    <ArenaShell
       title="Perfis e permissões"
       subtitle="Comparativo real entre Jogador, Moderador e Admin"
       showBack
       layoutWidth="wide"
     >
-      <div className="space-y-4">
-        <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+      <div className="flex flex-col gap-4">
+        <GlassCard variant="strong" glow="primary">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <UsersRound className="h-5 w-5 text-primary" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)" }}>
+              <UsersRound className="h-5 w-5 text-(--arena-primary)" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-(--arena-foreground)">
                 Leitura baseada no comportamento atual do sistema
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-(--arena-muted)">
                 Esta página resume o que cada perfil realmente consegue fazer hoje no app.
                 O foco principal está na diferença entre Moderador e Admin.
               </p>
             </div>
           </div>
-        </section>
+        </GlassCard>
 
         <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {roleCards.map((card) => {
             const Icon = card.icon;
 
             return (
-              <article
-                key={card.role}
-                className="rounded-2xl border border-border bg-card p-4 shadow-sm"
-              >
+              <GlassCard key={card.role}>
                 <div className="flex items-start gap-3">
                   <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${card.tone}`}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
+                    style={tokenChipStyle(card.token)}
                   >
                     <Icon className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 space-y-1">
-                    <h2 className="text-sm font-semibold text-foreground">{card.title}</h2>
-                    <p className="text-xs text-muted-foreground">{card.summary}</p>
+                    <h2 className="text-sm font-semibold text-(--arena-foreground)">{card.title}</h2>
+                    <p className="text-xs text-(--arena-muted)">{card.summary}</p>
                   </div>
                 </div>
-              </article>
+              </GlassCard>
             );
           })}
         </section>
 
-        <section className="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+        <GlassCard glow="active" style={{ background: "color-mix(in srgb, var(--state-active) 7%, var(--glass-bg))" }}>
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/70">
-              <ShieldCheck className="h-5 w-5 text-sky-700" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: "color-mix(in srgb, var(--state-active) 16%, transparent)" }}>
+              <ShieldCheck className="h-5 w-5" style={{ color: "var(--state-active)" }} />
             </div>
             <div className="space-y-3">
               <div className="space-y-1">
-                <h2 className="text-sm font-semibold text-sky-950">
+                <h2 className="text-sm font-semibold text-(--arena-foreground)">
                   Diferença central entre Moderador e Admin
                 </h2>
-                <p className="text-xs text-sky-900/80">
+                <p className="text-xs text-(--arena-muted)">
                   O Moderador opera o dia a dia do ranking. O Admin, além disso, muda
                   estrutura, regras, visibilidade e perfis das contas.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <div className="rounded-xl border border-sky-200 bg-white/80 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+                <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg-strong) p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--state-active)" }}>
                     Moderador pode
                   </p>
-                  <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                  <ul className="mt-2 space-y-2 text-sm text-(--arena-foreground)">
                     <li>Criar jogador e resetar senha</li>
                     <li>Cancelar partidas e aceitar pendências</li>
                     <li>Consultar jogadores, métricas, logs e configurações em leitura</li>
                   </ul>
                 </div>
 
-                <div className="rounded-xl border border-violet-200 bg-white/80 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">
+                <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg-strong) p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-(--arena-primary)">
                     Só Admin pode
                   </p>
-                  <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                  <ul className="mt-2 space-y-2 text-sm text-(--arena-foreground)">
                     <li>Alterar perfil, nome, pontos e estatísticas</li>
                     <li>Ativar, desativar e transformar conta em Observador</li>
                     <li>Salvar configurações do sistema</li>
@@ -328,14 +328,14 @@ export default function AdminPerfisPage() {
               </div>
             </div>
           </div>
-        </section>
+        </GlassCard>
 
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <GlassCard>
           <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 className="text-sm font-semibold text-(--arena-foreground)">
               Tabela comparativa de permissões
             </h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-(--arena-muted)">
               A tabela abaixo separa o que é permitido, bloqueado ou apenas parcial.
             </p>
           </div>
@@ -344,20 +344,20 @@ export default function AdminPerfisPage() {
             {permissionRows.map((row) => (
               <article
                 key={row.capability}
-                className="rounded-2xl border border-border bg-muted/10 p-4"
+                className="rounded-2xl border border-(--glass-border) bg-(--glass-bg) p-4"
               >
                 <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-foreground">{row.capability}</h3>
-                  <p className="text-xs leading-5 text-muted-foreground">{row.note}</p>
+                  <h3 className="text-sm font-semibold text-(--arena-foreground)">{row.capability}</h3>
+                  <p className="text-xs leading-5 text-(--arena-muted)">{row.note}</p>
                 </div>
 
                 <div className="mt-4 space-y-2">
                   {roleAccessOrder.map((role) => (
                     <div
                       key={role.key}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-(--glass-border) bg-(--glass-bg-strong) px-3 py-2"
                     >
-                      <span className="text-xs font-semibold text-foreground">
+                      <span className="text-xs font-semibold text-(--arena-foreground)">
                         {role.label}
                       </span>
                       <AccessBadge cell={row[role.key]} />
@@ -372,19 +372,19 @@ export default function AdminPerfisPage() {
             <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left">
               <thead>
                 <tr>
-                  <th className="rounded-l-xl border border-border bg-muted/40 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <th className="rounded-l-xl border border-(--glass-border) bg-(--glass-bg) px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                     Funcionalidade
                   </th>
-                  <th className="border-y border-border bg-muted/40 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <th className="border-y border-(--glass-border) bg-(--glass-bg) px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                     Jogador
                   </th>
-                  <th className="border-y border-border bg-muted/40 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <th className="border-y border-(--glass-border) bg-(--glass-bg) px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                     Moderador
                   </th>
-                  <th className="border-y border-border bg-muted/40 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <th className="border-y border-(--glass-border) bg-(--glass-bg) px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                     Admin
                   </th>
-                  <th className="rounded-r-xl border border-border bg-muted/40 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <th className="rounded-r-xl border border-(--glass-border) bg-(--glass-bg) px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                     Observação
                   </th>
                 </tr>
@@ -392,19 +392,19 @@ export default function AdminPerfisPage() {
               <tbody>
                 {permissionRows.map((row) => (
                   <tr key={row.capability}>
-                    <td className="border-b border-border px-3 py-3 align-top text-xs font-medium text-foreground lg:text-sm">
+                    <td className="border-b border-(--glass-border) px-3 py-3 align-top text-xs font-medium text-(--arena-foreground) lg:text-sm">
                       {row.capability}
                     </td>
-                    <td className="border-b border-border px-3 py-3 align-top">
+                    <td className="border-b border-(--glass-border) px-3 py-3 align-top">
                       <AccessBadge cell={row.player} />
                     </td>
-                    <td className="border-b border-border px-3 py-3 align-top">
+                    <td className="border-b border-(--glass-border) px-3 py-3 align-top">
                       <AccessBadge cell={row.moderator} />
                     </td>
-                    <td className="border-b border-border px-3 py-3 align-top">
+                    <td className="border-b border-(--glass-border) px-3 py-3 align-top">
                       <AccessBadge cell={row.admin} />
                     </td>
-                    <td className="border-b border-border px-3 py-3 align-top text-[11px] leading-5 text-muted-foreground lg:text-xs">
+                    <td className="border-b border-(--glass-border) px-3 py-3 align-top text-[11px] leading-5 text-(--arena-muted) lg:text-xs">
                       {row.note}
                     </td>
                   </tr>
@@ -412,14 +412,14 @@ export default function AdminPerfisPage() {
               </tbody>
             </table>
           </div>
-        </section>
+        </GlassCard>
 
         <section className="space-y-3">
           <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 className="text-sm font-semibold text-(--arena-foreground)">
               Estados da conta que mudam a experiência
             </h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-(--arena-muted)">
               Observador e Inativo aparecem na tela de jogadores, mas não são tipos de perfil.
             </p>
           </div>
@@ -429,27 +429,25 @@ export default function AdminPerfisPage() {
               const Icon = card.icon;
 
               return (
-                <article
-                  key={card.title}
-                  className="rounded-2xl border border-border bg-card p-4 shadow-sm"
-                >
+                <GlassCard key={card.title}>
                   <div className="flex items-start gap-3">
                     <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${card.tone}`}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
+                      style={tokenChipStyle(card.token)}
                     >
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold text-foreground">{card.title}</h3>
-                        <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        <h3 className="text-sm font-semibold text-(--arena-foreground)">{card.title}</h3>
+                        <span className="rounded-full border border-(--glass-border) bg-(--glass-bg) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                           {card.subtitle}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">{card.description}</p>
+                      <p className="text-xs text-(--arena-muted)">{card.description}</p>
                     </div>
                   </div>
-                </article>
+                </GlassCard>
               );
             })}
           </div>
@@ -457,12 +455,12 @@ export default function AdminPerfisPage() {
 
         <Link
           href="/admin/jogadores"
-          className="inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
+          className="inline-flex w-full items-center justify-center rounded-xl border border-(--glass-border) bg-(--glass-bg-strong) px-4 py-3 text-sm font-semibold text-(--arena-foreground) transition hover:border-(--arena-primary) hover:text-(--arena-primary)"
         >
           Voltar para Jogadores
           <ArrowRight className="ml-2 h-4 w-4" />
         </Link>
       </div>
-    </AppShell>
+    </ArenaShell>
   );
 }

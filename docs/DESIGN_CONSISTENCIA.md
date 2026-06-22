@@ -1,3 +1,7 @@
+> ⚠️ **OBSOLETO.** Este guia descreve o padrão antigo (`AppShell`). A fonte da verdade do
+> design agora é a skill **`arena-design-pattern`** (+ tokens em `src/app/globals.css`, bloco
+> `.arena`). Use a skill. Mantido só por histórico.
+
 # Guia de Consistência Visual
 
 Objetivo: toda tela/feature nova nasce harmônica com o app existente. **Regra de ouro: reusar > inventar.** Antes de criar um componente, procure um equivalente em `src/components` e `src/components/ui`.

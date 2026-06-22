@@ -6,11 +6,14 @@ import { StatusPill } from "@/components/arena/status-pill";
 import { useAuth } from "@/lib/auth-store";
 import { useHomeHighlights, useRanking, useMatches, useRecentMatches } from "@/lib/queries";
 import { useActiveSeason, useUserSeasonStanding } from "@/lib/queries/use-seasons";
+import { useTournaments } from "@/lib/queries/use-tournaments";
+import { useEvents } from "@/lib/queries/use-events";
+import { LiveDot } from "@/components/arena/live-dot";
 import { HomePageSkeleton, PendingMatchListSkeleton } from "@/components/skeletons";
 import { getPlayerStyle } from "@/lib/divisions";
 import Link from "next/link";
 import { useMemo } from "react";
-import { Flame, Trophy, Clock, ChevronRight, Swords, TrendingUp } from "lucide-react";
+import { Flame, Trophy, ChevronRight, Swords, TrendingUp } from "lucide-react";
 
 function formatSeasonCountdown(endsAt: string): string {
   const diffMs = new Date(endsAt).getTime() - Date.now();
@@ -30,6 +33,8 @@ export default function Home() {
   const { data: highlightsData, isLoading: highlightsLoading } = useHomeHighlights();
   const { data: activeSeason } = useActiveSeason();
   const { data: userSeasonStanding } = useUserSeasonStanding(activeSeason?.id, user?.id);
+  const { data: tournamentsData } = useTournaments();
+  const { data: eventsData } = useEvents();
 
   const ranking = useMemo(
     () => rankingData?.pages.flatMap((p) => p.users) ?? [],
@@ -47,6 +52,43 @@ export default function Home() {
   const streakHighlight = highlightsData?.streakLeader ?? null;
   const weeklyHighlight = highlightsData?.weeklyActivityLeader ?? null;
   const isLoading = authLoading || rankingLoading;
+
+  // Destaque "em andamento": considera eventos (com categorias) E torneios avulsos,
+  // igual à listagem. Prioriza quem tem jogo AO VIVO agora (hasLiveMatch — só os
+  // eventos expõem esse sinal); desempate determinístico pelo mais recente.
+  const liveHighlight = useMemo(() => {
+    const candidates = [
+      ...(eventsData ?? [])
+        .filter((e) => e.status === "active")
+        .map((e) => ({
+          name: e.name,
+          live: e.hasLiveMatch,
+          ts: new Date(e.eventDate ?? e.createdAt).getTime(),
+        })),
+      ...(tournamentsData ?? [])
+        .filter((t) => t.status === "active")
+        .map((t) => ({
+          name: t.name,
+          live: false,
+          ts: new Date(t.createdAt).getTime(),
+        })),
+    ];
+    candidates.sort((a, b) => Number(b.live) - Number(a.live) || b.ts - a.ts);
+    const liveCount = candidates.filter((c) => c.live).length;
+    return candidates[0] ? { ...candidates[0], liveCount } : null;
+  }, [eventsData, tournamentsData]);
+  const lastChampionTournament = useMemo(() => {
+    if (!tournamentsData) return null;
+    return (
+      [...tournamentsData]
+        .filter((t) => t.status === "finished" && t.championName)
+        .sort(
+          (a, b) =>
+            new Date(b.finishedAt ?? b.createdAt).getTime() -
+            new Date(a.finishedAt ?? a.createdAt).getTime(),
+        )[0] ?? null
+    );
+  }, [tournamentsData]);
 
   const topRanking = ranking.slice(0, 3).map((player, i) => ({
     pos: i + 1,
@@ -131,42 +173,110 @@ export default function Home() {
         {activeSeason && (
           <Link href="/ranking">
             <GlassCard
-              variant="default"
-              className="group cursor-pointer hover:bg-(--glass-bg-hover) transition-all"
-              style={{
-                borderColor:
-                  "color-mix(in srgb,var(--arena-primary) 25%,transparent)",
-              }}
+              noPadding
+              glow="scheduled"
+              className="group flex items-center gap-3 px-3 py-3 transition-all hover:scale-[1.01]"
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-primary)">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                style={{
+                  background: "color-mix(in srgb, var(--state-scheduled) 14%, transparent)",
+                }}
+              >
+                <Trophy className="h-5 w-5" style={{ color: "var(--state-scheduled)" }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-(--state-scheduled)">
                     Temporada ativa
                   </p>
-                  <p className="mt-0.5 text-sm font-bold text-(--arena-foreground)">
+                  <p className="mt-0.5 truncate text-sm font-bold text-(--arena-foreground)">
                     {activeSeason.name}
                   </p>
                   {userSeasonStanding ? (
-                    <p className="text-xs text-(--arena-muted)">
+                    <p className="text-xs text-(--state-scheduled)/80">
                       {userSeasonStanding.position != null
                         ? `${userSeasonStanding.position}º lugar · `
                         : ""}
-                      <span style={{ color: "var(--arena-primary)" }} className="font-semibold">
+                      <span className="font-semibold text-(--state-scheduled)">
                         {userSeasonStanding.points} pts
                       </span>
                     </p>
                   ) : (
-                    <p className="text-xs text-(--arena-muted)">Nenhum jogo na temporada ainda</p>
+                    <p className="text-xs text-(--state-scheduled)/70">
+                      Nenhum jogo na temporada ainda
+                    </p>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <StatusPill kind="active" label={formatSeasonCountdown(activeSeason.ends_at)} pulse />
-                  <ChevronRight className="h-4 w-4 text-(--arena-muted) transition group-hover:translate-x-0.5" />
+                  <StatusPill
+                    kind="scheduled"
+                    label={formatSeasonCountdown(activeSeason.ends_at)}
+                  />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-(--state-scheduled)/70 transition group-hover:translate-x-0.5" />
                 </div>
-              </div>
             </GlassCard>
           </Link>
         )}
+
+        {/* Torneios — resumo compacto */}
+        {liveHighlight ? (
+          <Link href="/torneios">
+            <GlassCard
+              noPadding
+              glow="active"
+              className="group flex items-center gap-3 px-3 py-3 transition-all hover:scale-[1.01]"
+            >
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: "color-mix(in srgb,var(--state-active) 14%,transparent)" }}
+              >
+                <Trophy className="h-5 w-5" style={{ color: "var(--state-active)" }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-(--state-active)">
+                  Torneio em andamento
+                </p>
+                <p className="truncate text-sm font-bold text-(--arena-foreground)">
+                  {liveHighlight.name}
+                </p>
+                {liveHighlight.liveCount > 1 && (
+                  <p className="truncate text-[11px] text-(--arena-muted)">
+                    +{liveHighlight.liveCount - 1} ao vivo agora
+                  </p>
+                )}
+              </div>
+              {liveHighlight.live && <LiveDot />}
+              <StatusPill kind="active" label={liveHighlight.live ? "Ao vivo" : "Ativo"} pulse={liveHighlight.live} />
+              <ChevronRight className="h-4 w-4 shrink-0 text-(--arena-muted) transition group-hover:translate-x-0.5" />
+            </GlassCard>
+          </Link>
+        ) : lastChampionTournament ? (
+          <Link href="/torneios/historico">
+            <GlassCard
+              noPadding
+              className="group flex items-center gap-3 px-3 py-3 transition-all hover:scale-[1.01]"
+            >
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: "color-mix(in srgb,var(--state-scheduled) 14%,transparent)" }}
+              >
+                <Trophy className="h-5 w-5" style={{ color: "var(--state-scheduled)" }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-(--state-scheduled)">
+                  Último campeão
+                </p>
+                <p className="truncate text-sm font-bold text-(--arena-foreground)">
+                  {lastChampionTournament.championName}
+                </p>
+                <p className="truncate text-[11px] text-(--arena-muted)">
+                  {lastChampionTournament.name}
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-(--arena-muted) transition group-hover:translate-x-0.5" />
+            </GlassCard>
+          </Link>
+        ) : null}
 
         {/* Destaques da semana */}
         <div className="space-y-2">

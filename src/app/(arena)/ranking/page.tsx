@@ -154,9 +154,9 @@ const RankingPlayerCard = memo(function RankingPlayerCard({
           <p className="text-xs text-muted-foreground">
             <span className="font-medium">{position}º</span>
             {" · "}
-            <span className="text-green-600 font-semibold">{wins}V</span>
+            <span className="text-(--state-played) font-semibold">{wins}V</span>
             {" / "}
-            <span className="text-red-500 font-semibold">{losses}D</span>
+            <span className="text-(--state-noshow) font-semibold">{losses}D</span>
           </p>
         </div>
 
@@ -190,16 +190,16 @@ const SeasonStandingMini = memo(function SeasonStandingMini({
   standing: { position: number; points: number; wins: number; losses: number } | null;
 }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-white/70 p-3 text-center">
-      <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-amber-700/80">
+    <div className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 text-center">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-(--state-scheduled)/80">
         {label}
       </p>
       {loading ? (
         <p className="mt-2 text-xs text-muted-foreground">Carregando…</p>
       ) : standing ? (
         <>
-          <p className="mt-1 text-2xl font-bold text-amber-900">{standing.position}º</p>
-          <p className="text-xs text-amber-800">
+          <p className="mt-1 text-2xl font-bold text-(--state-scheduled)">{standing.position}º</p>
+          <p className="text-xs text-(--state-scheduled)">
             {standing.points} pts · {standing.wins}V {standing.losses}D
           </p>
         </>
@@ -420,7 +420,7 @@ export default function RankingPage() {
           Carregando partidas…
         </p>
       ) : selectedPlayerMatchesError ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+        <p className="rounded-xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 p-3 text-sm text-(--state-noshow)">
           Erro ao carregar partidas do jogador.
         </p>
       ) : selectedPlayerMatches.length > 0 ? (
@@ -464,19 +464,19 @@ export default function RankingPage() {
       Carregando confronto…
     </p>
   ) : h2hError ? (
-    <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+    <p className="rounded-2xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 p-4 text-sm text-(--state-noshow)">
       Erro ao carregar confronto. Tente novamente.
     </p>
   ) : h2hStats && h2hStats.total > 0 ? (
     <div className="space-y-3 sm:space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-          <p className="text-2xl font-bold text-emerald-700 sm:text-3xl">{h2hStats.wins}</p>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Você ganhou</p>
+        <article className="rounded-xl border border-(--state-played)/30 bg-(--state-played)/10 p-4 text-center">
+          <p className="text-2xl font-bold text-(--state-played) sm:text-3xl">{h2hStats.wins}</p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-(--state-played)/80">Você ganhou</p>
         </article>
-        <article className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
-          <p className="text-2xl font-bold text-red-600 sm:text-3xl">{h2hStats.losses}</p>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-red-600/80">Você perdeu</p>
+        <article className="rounded-xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 p-4 text-center">
+          <p className="text-2xl font-bold text-(--state-noshow) sm:text-3xl">{h2hStats.losses}</p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-(--state-noshow)/80">Você perdeu</p>
         </article>
         <article className="col-span-2 rounded-xl border border-border bg-card p-4 text-center sm:col-span-1">
           <p className="text-2xl font-bold text-primary sm:text-3xl">{h2hStats.total}</p>
@@ -491,7 +491,7 @@ export default function RankingPage() {
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+            className="h-full rounded-full bg-(--state-played) transition-all duration-500"
             style={{ width: `${Math.max(0, Math.min(100, h2hStats.winRate))}%` }}
           />
         </div>
@@ -554,7 +554,7 @@ export default function RankingPage() {
   const seasonH2HContent =
     activeSeason && selectedPlayer && user && selectedPlayer.id !== user.id ? (
       <div className="space-y-3">
-        <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
+        <p className="flex items-center gap-1.5 text-xs font-medium text-(--state-scheduled)">
           <Trophy className="h-3.5 w-3.5 shrink-0" />
           {activeSeason.name}
         </p>
@@ -574,16 +574,16 @@ export default function RankingPage() {
         </div>
 
         {/* B — confronto direto recortado pela temporada */}
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700/80">
+        <div className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-(--state-scheduled)/80">
             Confronto direto nesta temporada
           </p>
           {h2hSeasonLoading ? (
             <p className="mt-1 text-xs text-muted-foreground">Carregando…</p>
           ) : h2hSeasonStats && h2hSeasonStats.total > 0 ? (
-            <p className="mt-1 text-sm font-semibold text-amber-900">
+            <p className="mt-1 text-sm font-semibold text-(--state-scheduled)">
               {h2hSeasonStats.wins}V × {h2hSeasonStats.losses}D{" "}
-              <span className="font-normal text-amber-700/80">
+              <span className="font-normal text-(--state-scheduled)/80">
                 ({h2hSeasonStats.total} jogo{h2hSeasonStats.total > 1 ? "s" : ""})
               </span>
             </p>
@@ -595,20 +595,20 @@ export default function RankingPage() {
         </div>
 
         {/* C — histórico de partidas da temporada */}
-        <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/30 p-3 sm:p-4">
+        <section className="space-y-3 rounded-2xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-amber-900">
+            <h3 className="text-sm font-semibold text-(--state-scheduled)">
               Partidas na temporada
             </h3>
             {!selectedPlayerSeasonMatchesLoading && (
-              <span className="shrink-0 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+              <span className="shrink-0 rounded-full border border-(--state-scheduled)/30 bg-(--state-scheduled)/15 px-2 py-0.5 text-[11px] font-semibold text-(--state-scheduled)">
                 {selectedPlayerSeasonMatchesTotal.toLocaleString("pt-BR")} jogos
               </span>
             )}
           </div>
 
           {selectedPlayerSeasonMatchesLoading ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+            <p className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 text-sm text-(--state-scheduled)">
               Carregando partidas da temporada…
             </p>
           ) : selectedPlayerSeasonMatches.length > 0 ? (
@@ -628,7 +628,7 @@ export default function RankingPage() {
               <div ref={historySeasonSentinelRef} className="h-1 w-full" />
 
               {isFetchingNextSeasonMatchesPage && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-700">
+                <p className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 text-center text-xs font-medium text-(--state-scheduled)">
                   Carregando mais partidas…
                 </p>
               )}
@@ -641,7 +641,7 @@ export default function RankingPage() {
               />
             </>
           ) : (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700/80">
+            <p className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 text-sm text-(--state-scheduled)/80">
               Nenhuma partida nesta temporada ainda.
             </p>
           )}
@@ -748,7 +748,7 @@ export default function RankingPage() {
             {geralLoading ? (
               <PlayerListSkeleton count={8} />
             ) : geralError ? (
-              <p className="py-8 text-center text-sm text-red-500">
+              <p className="py-8 text-center text-sm text-(--state-noshow)">
                 Erro ao carregar ranking. Tente novamente.
               </p>
             ) : players.length === 0 ? (
@@ -788,11 +788,18 @@ export default function RankingPage() {
       <Sheet open={Boolean(selectedPlayerId)} onOpenChange={handleSheetOpenChange}>
         <SheetContent
           side="bottom"
-          className="right-auto bottom-2 left-1/2 flex max-h-[85vh] w-[calc(100%-0.75rem)] max-w-2xl -translate-x-1/2 flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-card p-0 shadow-2xl"
+          className="arena right-auto bottom-2 left-1/2 z-[90] flex max-h-[85vh] w-[calc(100%-0.75rem)] max-w-2xl -translate-x-1/2 flex-col gap-0 overflow-hidden rounded-3xl border border-(--glass-border) bg-(--arena-bg-1) p-0 shadow-2xl"
         >
-          <SheetHeader className="space-y-2 border-b border-border px-4 pb-4 pt-4 pr-14 sm:px-5">
-            <SheetTitle>H2H</SheetTitle>
-            <SheetDescription>Seu H2H e histórico do jogador selecionado</SheetDescription>
+          <SheetHeader className="space-y-1 border-b border-(--glass-border) px-4 pb-4 pt-4 pr-14 sm:px-5">
+            <SheetTitle
+              className="text-xl font-bold text-(--arena-foreground)"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              H2H
+            </SheetTitle>
+            <SheetDescription className="text-(--arena-muted)">
+              Seu H2H e histórico do jogador selecionado
+            </SheetDescription>
           </SheetHeader>
 
           <div
@@ -871,7 +878,7 @@ function SeasonBanner({ season }: { season: { name: string; starts_at: string; e
         <div
           className={`flex items-center gap-1 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
             isEnding
-              ? "bg-orange-100 text-orange-700"
+              ? "bg-(--state-scheduled)/15 text-(--state-scheduled)"
               : "bg-primary/10 text-primary"
           }`}
         >
@@ -914,9 +921,9 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
   const playerLost = Boolean(match.vencedor_id && match.vencedor_id !== playerId);
   const resultLabel = playerWon ? "Vitória" : playerLost ? "Derrota" : "Sem vencedor";
   const resultClassName = playerWon
-    ? "bg-emerald-100 text-emerald-700"
+    ? "bg-(--state-played)/15 text-(--state-played)"
     : playerLost
-      ? "bg-red-100 text-red-600"
+      ? "bg-(--state-noshow)/15 text-(--state-noshow)"
       : "bg-muted text-muted-foreground";
 
   // Pontos: modo temporada (âmbar) ou modo ELO (verde/vermelho)
@@ -926,13 +933,13 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
 
   if (seasonPoints !== undefined) {
     pointsLabel = `+${seasonPoints} pts`;
-    pointsClassName = "text-amber-700";
+    pointsClassName = "text-(--state-scheduled)";
     pointsSuffix = "na temporada";
   } else {
     const playerPoints = playerIsA ? match.pontos_variacao_a : match.pontos_variacao_b;
     if (typeof playerPoints === "number") {
       pointsLabel = `${playerPoints > 0 ? "+" : ""}${playerPoints} pts`;
-      pointsClassName = playerPoints >= 0 ? "text-emerald-600" : "text-red-600";
+      pointsClassName = playerPoints >= 0 ? "text-(--state-played)" : "text-(--state-noshow)";
     }
   }
 
@@ -965,7 +972,7 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
         <div
           className={`rounded-md border px-2 py-2 ${
             playerWon
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
               : "border-border bg-background text-foreground"
           }`}
         >
@@ -978,7 +985,7 @@ const PlayerMatchHistoryCard = memo(function PlayerMatchHistoryCard({
         <div
           className={`rounded-md border px-2 py-2 text-right ${
             playerLost
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              ? "border-(--state-played)/30 bg-(--state-played)/10 text-(--state-played)"
               : "border-border bg-background text-foreground"
           }`}
         >
