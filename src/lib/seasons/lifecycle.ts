@@ -36,6 +36,7 @@ export async function enforceSeasonLifecycle(params?: {
     .from("seasons")
     .select("id, name, slug")
     .eq("status", "active")
+    .is("archived_at", null)
     .lte("ends_at", new Date().toISOString());
 
   if (error || !expiredSeasons?.length) return;

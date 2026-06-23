@@ -42,6 +42,7 @@ export async function getSeasonOverviewAction(): Promise<Season | null> {
       "id, name, slug, starts_at, ends_at, status, recurrence, champion_user_id, closed_at, created_at"
     )
     .eq("status", "active")
+    .is("archived_at", null)
     .order("starts_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -264,6 +265,7 @@ export async function adminActivateSeason(
       .from("seasons")
       .select("id, name")
       .eq("status", "active")
+      .is("archived_at", null)
       .limit(1)
       .maybeSingle();
 
@@ -371,6 +373,107 @@ export async function adminReopenSeason(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Erro ao reabrir temporada.",
+    };
+  }
+}
+
+// ── Admin: ocultar / restaurar temporada (soft-delete reversível) ─────────────
+
+/**
+ * Oculta uma temporada dos jogadores SEM apagá-la (≠ encerrar e ≠ excluir de
+ * verdade). Marca `archived_at`; as partidas seguem carimbadas e os standings
+ * intactos, então a restauração é perfeita. Some das views de jogador (ranking,
+ * Hall da Fama, /temporadas), mas continua visível no admin para ser restaurada.
+ */
+export async function adminArchiveSeason(
+  seasonId: string
+): Promise<SeasonAdminResult> {
+  try {
+    await requireModerator();
+    const actor = await getCurrentUser();
+    const supabase = createAdminClient();
+
+    const { data: season, error: fetchError } = await supabase
+      .from("seasons")
+      .select("id, name, status, archived_at")
+      .eq("id", seasonId)
+      .single();
+
+    if (fetchError || !season) return { success: false, error: "Temporada não encontrada." };
+    if (season.archived_at) return { success: false, error: "Temporada já está oculta." };
+
+    const { error: updateError } = await supabase
+      .from("seasons")
+      .update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", seasonId);
+
+    if (updateError) return { success: false, error: updateError.message };
+
+    await supabase.from("admin_logs").insert({
+      admin_id: actor?.id ?? null,
+      admin_role: actor?.role ?? "admin",
+      action: "season_archived",
+      action_description: `Temporada "${season.name}" ocultada dos jogadores (reversível).`,
+      target_type: "season",
+      target_id: seasonId,
+      target_name: season.name,
+      old_value: { archived: false },
+      new_value: { archived: true },
+      reason: null,
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Erro ao ocultar temporada.",
+    };
+  }
+}
+
+/** Restaura uma temporada oculta, voltando a aparecer para os jogadores. */
+export async function adminRestoreSeason(
+  seasonId: string
+): Promise<SeasonAdminResult> {
+  try {
+    await requireModerator();
+    const actor = await getCurrentUser();
+    const supabase = createAdminClient();
+
+    const { data: season, error: fetchError } = await supabase
+      .from("seasons")
+      .select("id, name, archived_at")
+      .eq("id", seasonId)
+      .single();
+
+    if (fetchError || !season) return { success: false, error: "Temporada não encontrada." };
+    if (!season.archived_at) return { success: false, error: "Temporada não está oculta." };
+
+    const { error: updateError } = await supabase
+      .from("seasons")
+      .update({ archived_at: null, updated_at: new Date().toISOString() })
+      .eq("id", seasonId);
+
+    if (updateError) return { success: false, error: updateError.message };
+
+    await supabase.from("admin_logs").insert({
+      admin_id: actor?.id ?? null,
+      admin_role: actor?.role ?? "admin",
+      action: "season_restored",
+      action_description: `Temporada "${season.name}" restaurada (voltou a aparecer para os jogadores).`,
+      target_type: "season",
+      target_id: seasonId,
+      target_name: season.name,
+      old_value: { archived: true },
+      new_value: { archived: false },
+      reason: null,
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Erro ao restaurar temporada.",
     };
   }
 }

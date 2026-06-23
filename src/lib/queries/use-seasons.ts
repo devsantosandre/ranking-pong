@@ -16,6 +16,7 @@ export type Season = {
   champion_user_id: string | null;
   closed_at: string | null;
   created_at: string;
+  archived_at: string | null;
 };
 
 export type SeasonStandingEntry = {
@@ -87,10 +88,11 @@ export function useClosedSeasons() {
         .from("seasons")
         .select(`
           id, name, slug, starts_at, ends_at, status, recurrence,
-          champion_user_id, closed_at, created_at,
+          champion_user_id, closed_at, created_at, archived_at,
           champion:users!champion_user_id(id, full_name, name, email)
         `)
         .eq("status", "closed")
+        .is("archived_at", null)
         .order("ends_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ClosedSeason[];
@@ -108,7 +110,7 @@ export function useAllSeasons() {
         .from("seasons")
         .select(`
           id, name, slug, starts_at, ends_at, status, recurrence,
-          champion_user_id, closed_at, created_at,
+          champion_user_id, closed_at, created_at, archived_at,
           champion:users!champion_user_id(id, full_name, name, email)
         `)
         .order("starts_at", { ascending: false });
