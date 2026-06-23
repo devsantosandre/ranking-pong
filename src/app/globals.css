@@ -182,6 +182,24 @@
   --state-noshow-glow: color-mix(in srgb, var(--state-noshow) 15%, transparent);
   --state-tbd: #6b7280;
 
+  /* Medalhas de divisão — ouro / prata / bronze (distintas entre si e do placement 19+) */
+  --division-gold: #ca8a04;
+  --division-gold-bg: color-mix(in srgb, var(--division-gold) 10%, var(--arena-bg-1));
+  --division-gold-border: color-mix(in srgb, var(--division-gold) 30%, transparent);
+  --division-silver: #475569;
+  --division-silver-bg: color-mix(in srgb, var(--division-silver) 9%, var(--arena-bg-1));
+  --division-silver-border: color-mix(in srgb, var(--division-silver) 24%, transparent);
+  --division-silver-badge: color-mix(in srgb, var(--division-silver) 42%, transparent);
+  --division-bronze: #9a3412;
+  --division-bronze-bg: color-mix(in srgb, var(--division-bronze) 9%, var(--arena-bg-1));
+  --division-bronze-border: color-mix(in srgb, var(--division-bronze) 26%, transparent);
+  --division-bronze-badge: color-mix(in srgb, var(--division-bronze) 38%, transparent);
+
+  /* Divisão padrão (19+) — cinza bem claro, distinto da prata */
+  --division-default-bg: color-mix(in srgb, var(--state-tbd) 5%, var(--arena-bg-1));
+  --division-default-border: color-mix(in srgb, var(--state-tbd) 9%, transparent);
+  --division-default-badge: color-mix(in srgb, var(--state-tbd) 40%, transparent);
+
   /* Texto — quase preto com um toque da marca */
   --arena-foreground: color-mix(in srgb, var(--brand) 18%, #131016);
   --arena-muted: color-mix(in srgb, var(--brand) 40%, #645f6b);
@@ -240,6 +258,20 @@
   --state-noshow: #f43f5e;
   --state-noshow-glow: color-mix(in srgb, var(--state-noshow) 25%, transparent);
   --state-tbd: #8b8197;
+  --division-gold: #fbbf24;
+  --division-gold-bg: color-mix(in srgb, var(--division-gold) 14%, transparent);
+  --division-gold-border: color-mix(in srgb, var(--division-gold) 42%, transparent);
+  --division-silver: #94a3b8;
+  --division-silver-bg: color-mix(in srgb, var(--division-silver) 16%, transparent);
+  --division-silver-border: color-mix(in srgb, var(--division-silver) 38%, transparent);
+  --division-silver-badge: color-mix(in srgb, var(--division-silver) 52%, transparent);
+  --division-bronze: #e07a45;
+  --division-bronze-bg: color-mix(in srgb, var(--division-bronze) 14%, transparent);
+  --division-bronze-border: color-mix(in srgb, var(--division-bronze) 40%, transparent);
+  --division-bronze-badge: color-mix(in srgb, var(--division-bronze) 52%, transparent);
+  --division-default-bg: color-mix(in srgb, var(--state-tbd) 7%, transparent);
+  --division-default-border: color-mix(in srgb, var(--state-tbd) 16%, transparent);
+  --division-default-badge: color-mix(in srgb, var(--state-tbd) 44%, transparent);
   --arena-foreground: color-mix(in srgb, var(--brand) 12%, #ffffff);
   --arena-muted: color-mix(in srgb, var(--brand) 22%, #9b95a6);
   color: var(--arena-foreground);
@@ -256,6 +288,73 @@
   --primary: var(--arena-primary);
   --primary-foreground: #0b0612;
   --radius: 0.9rem;
+}
+
+/* TV light-mode override — anula `.dark .arena` (0,2,0) com especificidade (0,3,0).
+   Também reseta os tokens shadcn do `.dark` (:root) para que bg-muted, bg-accent,
+   etc. se comportem como no modo claro, sem herdarem os valores dark do <html>. */
+.dark .arena.tv-force-light {
+  /* ── Arena tokens light ── */
+  --arena-bg-1: color-mix(in srgb, var(--brand) 3%, #fafafa);
+  --arena-bg-2: color-mix(in srgb, var(--brand) 5%, #f4f4f5);
+  --arena-vignette: color-mix(in srgb, var(--brand) 6%, #ececec);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-bg-nav: rgba(255, 255, 255, 0.85);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: color-mix(in srgb, var(--brand) 12%, transparent);
+  --glass-border-strong: color-mix(in srgb, var(--brand) 22%, transparent);
+  --glass-border-nav-top: var(--glass-border);
+  --glass-border-nav-side: var(--glass-border-strong);
+  --glass-border-nav-bottom: var(--glass-border-strong);
+  --arena-primary: var(--brand);
+  --arena-primary-glow: color-mix(in srgb, var(--brand) 20%, transparent);
+  --state-active: #0891b2;
+  --state-active-glow: color-mix(in srgb, var(--state-active) 15%, transparent);
+  --state-scheduled: #d97706;
+  --state-scheduled-glow: color-mix(in srgb, var(--state-scheduled) 15%, transparent);
+  --state-played: #059669;
+  --state-played-glow: color-mix(in srgb, var(--state-played) 15%, transparent);
+  --state-noshow: #dc2626;
+  --state-noshow-glow: color-mix(in srgb, var(--state-noshow) 15%, transparent);
+  --state-tbd: #6b7280;
+  --division-gold: #ca8a04;
+  --division-gold-bg: color-mix(in srgb, var(--division-gold) 10%, var(--arena-bg-1));
+  --division-gold-border: color-mix(in srgb, var(--division-gold) 30%, transparent);
+  --division-silver: #475569;
+  --division-silver-bg: color-mix(in srgb, var(--division-silver) 9%, var(--arena-bg-1));
+  --division-silver-border: color-mix(in srgb, var(--division-silver) 24%, transparent);
+  --division-silver-badge: color-mix(in srgb, var(--division-silver) 42%, transparent);
+  --division-bronze: #9a3412;
+  --division-bronze-bg: color-mix(in srgb, var(--division-bronze) 9%, var(--arena-bg-1));
+  --division-bronze-border: color-mix(in srgb, var(--division-bronze) 26%, transparent);
+  --division-bronze-badge: color-mix(in srgb, var(--division-bronze) 38%, transparent);
+  --division-default-bg: color-mix(in srgb, var(--state-tbd) 5%, var(--arena-bg-1));
+  --division-default-border: color-mix(in srgb, var(--state-tbd) 9%, transparent);
+  --division-default-badge: color-mix(in srgb, var(--state-tbd) 40%, transparent);
+  --arena-foreground: color-mix(in srgb, var(--brand) 18%, #131016);
+  --arena-muted: color-mix(in srgb, var(--brand) 40%, #645f6b);
+  color: var(--arena-foreground);
+  --shadow-card: 0 2px 16px color-mix(in srgb, var(--brand) 9%, transparent), 0 1px 4px rgba(0, 0, 0, 0.04);
+  /* ── Shadcn tokens light (reseta os valores dark do <html class="dark">) ── */
+  --background: var(--arena-bg-1);
+  --foreground: var(--arena-foreground);
+  --card: var(--glass-bg-strong);
+  --card-foreground: var(--arena-foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--arena-foreground);
+  --primary: var(--arena-primary);
+  --primary-foreground: #ffffff;
+  --secondary: #f0dbff;
+  --secondary-foreground: #2b003c;
+  --muted: #f2e7ff;
+  --muted-foreground: var(--arena-muted);
+  --accent: #ead7ff;
+  --accent-foreground: #2b003c;
+  --destructive: #dc2626;
+  --border: var(--glass-border);
+  --input: #e5d1f7;
+  --ring: var(--brand);
 }
 
 /* ========================================
@@ -468,6 +567,9 @@ textarea,
 }
 
 .tv-ranking-root {
+  /* Texto neutro suave — combina com cards tintados, sem preto puro nem tint da marca */
+  --tv-ranking-text: #e4e4e7;
+  --tv-ranking-text-muted: #71717a;
   --tv-density-scale: 1;
   --tv-grid-column-width: calc(240px * var(--tv-density-scale));
   --tv-grid-gap: calc(1rem * var(--tv-density-scale));
@@ -505,6 +607,11 @@ textarea,
   --tv-change-badge-md-padding-x: calc(0.375rem * var(--tv-density-scale));
   --tv-change-badge-sm-font-size: calc(0.5625rem * var(--tv-density-scale));
   --tv-change-badge-md-font-size: calc(0.625rem * var(--tv-density-scale));
+}
+
+.arena.tv-force-light .tv-ranking-root {
+  --tv-ranking-text: #52525b;
+  --tv-ranking-text-muted: #a1a1aa;
 }
 
 /* TV Ranking Grid - Vertical ordering with auto columns */

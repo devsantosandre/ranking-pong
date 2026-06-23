@@ -3,12 +3,14 @@
 import { useRef, useEffect, useState, useCallback, type CSSProperties } from "react";
 import {
   getPlayerStyle,
-  getDivisionNumber,
   isTopThree,
 } from "@/lib/divisions";
 import type { RankingPlayerWithPosition } from "@/lib/hooks/use-realtime-ranking";
 
 type PositionChange = "up" | "down" | "new" | null;
+
+const TV_RANKING_TEXT = "text-(--tv-ranking-text)";
+const TV_RANKING_TEXT_MUTED = "text-(--tv-ranking-text-muted)";
 type PlayerSnapshot = {
   position: number;
   ratingAtual: number | null;
@@ -249,7 +251,6 @@ function GridView({
     <div className="tv-ranking-grid-vertical">
       {players.map((player) => {
         const playerStyle = getPlayerStyle(player.position);
-        const divisionNumber = getDivisionNumber(player.position);
         const isTop3 = isTopThree(player.position);
         const change = positionChanges.get(player.id);
 
@@ -287,7 +288,7 @@ function GridView({
                 <span
                   className={`
                     tv-ranking-position-label relative font-bold
-                    ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow" : "text-muted-foreground"}
+                    ${isTop3 || player.position > 3 ? "text-white drop-shadow" : "text-(--arena-foreground)"}
                   `}
                 >
                   {player.position}
@@ -297,26 +298,26 @@ function GridView({
               {/* Info do jogador */}
               <div className="min-w-0">
                 <div className="tv-ranking-name-row flex items-center">
-                  <p className={`tv-ranking-name truncate font-semibold ${playerStyle.text}`}>
+                  <p className={`tv-ranking-name truncate font-semibold ${TV_RANKING_TEXT}`}>
                     {player.displayName}
                   </p>
                   {isTop3 && <span className="tv-ranking-top-icon">🔥</span>}
                   {change && <ChangeIndicator change={change} size="sm" />}
                 </div>
-                <p className="tv-ranking-stats text-muted-foreground">
-                  <span className="text-green-600 font-semibold">{player.vitorias || 0}V</span>
+                <p className={`tv-ranking-stats ${TV_RANKING_TEXT_MUTED}`}>
+                  <span className="text-(--state-played) font-semibold">{player.vitorias || 0}V</span>
                   {" / "}
-                  <span className="text-red-500 font-semibold">{player.derrotas || 0}D</span>
+                  <span className="text-(--state-noshow) font-semibold">{player.derrotas || 0}D</span>
                 </p>
               </div>
             </div>
 
             {/* Pontuação */}
             <div className="text-right flex-shrink-0">
-              <p className={`tv-ranking-points font-bold ${playerStyle.text}`}>
+              <p className={`tv-ranking-points font-bold ${TV_RANKING_TEXT}`}>
                 {player.rating_atual ?? 250}
               </p>
-              <p className="tv-ranking-points-label text-muted-foreground">pts</p>
+              <p className={`tv-ranking-points-label ${TV_RANKING_TEXT_MUTED}`}>pts</p>
             </div>
           </article>
         );
@@ -337,7 +338,7 @@ function TableView({
     <div className="overflow-x-auto">
       <table className="w-full tv-table">
         <thead>
-          <tr className="border-b border-border/50 bg-muted/30">
+          <tr className="border-b border-(--glass-border) bg-(--glass-bg)">
             <th className="tv-table-th tv-table-col-position text-center">#</th>
             <th className="tv-table-th text-left">Jogador</th>
             <th className="tv-table-th tv-table-col-score text-center">V</th>
@@ -349,7 +350,7 @@ function TableView({
           {players.map((player) => {
             const playerStyle = getPlayerStyle(player.position);
             const isTop3 = isTopThree(player.position);
-            const useWhitePositionText = player.position >= 4 && player.position <= 18;
+            const useWhitePositionText = player.position > 3;
             const change = positionChanges.get(player.id);
 
             const animationClass =
@@ -367,7 +368,7 @@ function TableView({
                 className={`
                   tv-table-row
                   border-b border-border/20 last:border-b-0
-                  ${isTop3 ? playerStyle.bg : "hover:bg-muted/10"}
+                  ${isTop3 ? playerStyle.bg : "hover:bg-(--glass-bg-hover)"}
                   ${animationClass}
                   transition-all duration-300
                 `}
@@ -385,7 +386,7 @@ function TableView({
                       className={
                         isTop3 || useWhitePositionText
                           ? "text-white drop-shadow-sm"
-                          : "text-muted-foreground"
+                          : "text-(--arena-foreground)"
                       }
                     >
                       {player.position}
@@ -394,7 +395,7 @@ function TableView({
                 </td>
                 <td className="tv-table-td">
                   <div className="tv-table-name-row flex min-w-0 items-center">
-                    <span className={`tv-table-name truncate font-medium ${playerStyle.text}`}>
+                    <span className={`tv-table-name truncate font-medium ${TV_RANKING_TEXT}`}>
                       {player.displayName}
                     </span>
                     {isTop3 && <span className="tv-table-top-icon text-orange-500 flex-shrink-0">🔥</span>}
@@ -402,17 +403,17 @@ function TableView({
                   </div>
                 </td>
                 <td className="tv-table-td text-center">
-                  <span className="tv-table-value font-semibold text-green-600">
+                  <span className="tv-table-value font-semibold text-(--state-played)">
                     {player.vitorias || 0}
                   </span>
                 </td>
                 <td className="tv-table-td text-center">
-                  <span className="tv-table-value font-semibold text-red-500">
+                  <span className="tv-table-value font-semibold text-(--state-noshow)">
                     {player.derrotas || 0}
                   </span>
                 </td>
                 <td className="tv-table-td text-right">
-                  <span className={`tv-table-value font-bold ${playerStyle.text}`}>
+                  <span className={`tv-table-value font-bold ${TV_RANKING_TEXT}`}>
                     {player.rating_atual ?? 250}
                   </span>
                 </td>
@@ -435,9 +436,9 @@ function ChangeIndicator({ change, size = "md" }: { change: PositionChange; size
     <span
       className={`
         tv-change-badge ${sizeClasses} flex-shrink-0 font-bold rounded inline-flex items-center justify-center
-        ${change === "up" ? "bg-green-500/20 text-green-600" : ""}
-        ${change === "down" ? "bg-red-500/20 text-red-600" : ""}
-        ${change === "new" ? "bg-blue-500/20 text-blue-600" : ""}
+        ${change === "up" ? "bg-(--state-played)/20 text-(--state-played)" : ""}
+        ${change === "down" ? "bg-(--state-noshow)/20 text-(--state-noshow)" : ""}
+        ${change === "new" ? "bg-(--state-active)/20 text-(--state-active)" : ""}
       `}
     >
       {change === "up" && "▲"}

@@ -131,7 +131,7 @@ const RankingPlayerCard = memo(function RankingPlayerCard({
             <div className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400/30 via-orange-500/20 to-red-500/30 blur-sm" />
           )}
           <span
-            className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow-md" : "text-muted-foreground"}`}
+            className={`relative text-sm font-bold ${divisionNumber <= 3 || isTop3 ? "text-white drop-shadow-md" : "text-(--arena-foreground)"}`}
           >
             {position}º
           </span>
