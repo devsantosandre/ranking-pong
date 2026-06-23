@@ -38,6 +38,10 @@ yarn-error.log*
 # local mcp credentials
 .mcp.json
 
+# migração de produção: config com segredos e dumps com dados reais
+scripts/migracao-prod/config.env
+scripts/migracao-prod/dumps/
+
 # vercel
 .vercel
 

@@ -1,0 +1,58 @@
+name: Backup PROD -> R2 (diário)
+
+# Backup off-site do Supabase Cloud (PROD) para o Cloudflare R2.
+# Supabase free não tem backup gerenciado — esta rotina é a apólice de rollback.
+# Reaproveita scripts/migracao-prod/05-backup-cloud-para-r2.sh.
+
+on:
+  schedule:
+    # 09:00 UTC = 06:00 BRT (baixo fluxo). Cron sempre em UTC.
+    - cron: "0 9 * * *"
+  workflow_dispatch: {} # permite rodar manualmente pelo botão "Run workflow"
+
+# Evita execuções concorrentes (ex.: agendada + manual ao mesmo tempo).
+concurrency:
+  group: backup-prod-r2
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instala pg_dump 17 (PGDG)
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Backup -> R2
+        working-directory: scripts/migracao-prod
+        env:
+          SUPABASE_CLOUD_DB_URL: ${{ secrets.SUPABASE_CLOUD_DB_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_PREFIXO: cloud-prod
+          R2_RETENCAO: "30"
+        run: |
+          # config.env efêmero a partir dos secrets (não é commitado; runner é descartado).
+          umask 077
+          cat > config.env <<EOF
+          SUPABASE_CLOUD_DB_URL="${SUPABASE_CLOUD_DB_URL}"
+          R2_ENDPOINT="${R2_ENDPOINT}"
+          R2_BUCKET="${R2_BUCKET}"
+          R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}"
+          R2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}"
+          R2_PREFIXO="${R2_PREFIXO}"
+          R2_RETENCAO="${R2_RETENCAO}"
+          EOF
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          ./05-backup-cloud-para-r2.sh
+          rm -f config.env
