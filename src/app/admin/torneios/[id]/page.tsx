@@ -151,28 +151,20 @@ export default function AdminTournamentPage() {
   async function handleGenerate() {
     setActionError(null);
     startTransition(async () => {
-      try {
-        await generateBracket(id);
-        setGenerateConfirmOpen(false);
-        invalidate();
-        setTab(isRoundRobin ? "grupos" : "chave");
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Erro ao gerar chave.");
-        setGenerateConfirmOpen(false);
-      }
+      const result = await generateBracket(id);
+      setGenerateConfirmOpen(false);
+      if (result.error) { setActionError(result.error); return; }
+      invalidate();
+      setTab(isRoundRobin ? "grupos" : "chave");
     });
   }
   async function handleRegenerate() {
     setActionError(null);
     startTransition(async () => {
-      try {
-        await generateBracket(id);
-        setRegenConfirmOpen(false);
-        invalidate();
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Erro ao regenerar chave.");
-        setRegenConfirmOpen(false);
-      }
+      const result = await generateBracket(id);
+      setRegenConfirmOpen(false);
+      if (result.error) { setActionError(result.error); return; }
+      invalidate();
     });
   }
   async function handleFinish() {

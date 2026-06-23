@@ -124,11 +124,17 @@ export async function saveSeeding(tournamentId: string, rawOrder: unknown) {
 
 export async function generateBracket(tournamentId: string, method: SeedingMethod = "standard") {
   await assertAdmin();
-  const repo = await getTournamentRepo();
-  const matches = await repo.generateBracket(tournamentId, method);
-  await logAdmin("tournament_generate_bracket", { tournament_id: tournamentId, method });
-  invalidateTournament(tournamentId);
-  return { matches };
+  try {
+    const repo = await getTournamentRepo();
+    const matches = await repo.generateBracket(tournamentId, method);
+    await logAdmin("tournament_generate_bracket", { tournament_id: tournamentId, method });
+    invalidateTournament(tournamentId);
+    return { matches, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[generateBracket]", msg, err);
+    return { matches: null, error: msg };
+  }
 }
 
 const reportResultSchema = z.object({
