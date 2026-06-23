@@ -19,7 +19,9 @@
 - Respect existing enums/status names from Supabase (`match_status`, `resultado_tipo`, etc.) and keep DTO shapes consistent with `src/lib/queries`.
 
 ## Design & UI Consistency
-- New screens/features must match the existing visual language. Follow `docs/DESIGN_CONSISTENCIA.md` (reuse `AppShell`, theme tokens, `src/lib/divisions.ts`, `ui/` primitives; always cover loading/empty/error states).
+- **Fonte da verdade do design = skill `arena-design-pattern`** (+ tokens em `src/app/globals.css`, bloco `.arena`). Invoque a skill ANTES de qualquer trabalho de UI (também exigido pelo `CLAUDE.md`).
+- Padrão Arena: `ArenaShell` (nunca `AppShell` — legado), `GlassCard`, cor SÓ via tokens CSS (`--arena-*`/`--state-*`, white-label + dark), notação Tailwind v4 `text-(--token)`, espaçamento canônico (skill §2.1), modais como "página dentro do modal" (§2.2), padrão dark (§3.1) e os estados loading/empty/error.
+- `docs/DESIGN_CONSISTENCIA.md` está DESATUALIZADO (cita `AppShell`); a skill o substitui.
 - Rule of thumb: reuse existing components before creating new ones.
 
 ## Testing Guidelines

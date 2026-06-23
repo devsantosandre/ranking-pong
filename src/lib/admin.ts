@@ -81,3 +81,12 @@ export async function isAdmin(): Promise<boolean> {
   const role = await getCurrentUserRole();
   return role === "admin";
 }
+
+export async function isAdminServer(): Promise<boolean> {
+  try {
+    const role = await getCurrentUserRole();
+    return role === "admin";
+  } catch {
+    return false;
+  }
+}

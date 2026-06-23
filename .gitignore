@@ -48,3 +48,9 @@ scripts/migracao-prod/dumps/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code (tooling local)
+.claude/settings.local.json
+.claude/skills/
+.agents/
+skills-lock.json

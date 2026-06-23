@@ -138,7 +138,7 @@ export function AchievementsSection({ userId, compact = false }: AchievementsSec
         className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Trophy className="h-5 w-5 text-amber-500" />
+          <Trophy className="h-5 w-5 text-(--state-scheduled)" />
           <span className="font-semibold">Conquistas</span>
           <span className="text-sm text-muted-foreground">
             ({unlockedCount}/{totalCount})

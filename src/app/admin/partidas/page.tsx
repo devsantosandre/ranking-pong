@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useAuth } from "@/lib/auth-store";
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,34 +27,33 @@ const statusFilters = [
   { value: "cancelado", label: "Canceladas" },
 ];
 
-const statusColors: Record<string, string> = {
-  pendente: "bg-amber-100 text-amber-700",
-  validado: "bg-emerald-100 text-emerald-700",
-  cancelado: "bg-red-100 text-red-600",
-  edited: "bg-blue-100 text-blue-700",
+// Token de cor por status (themable / dark).
+const statusToken: Record<string, string> = {
+  pendente: "var(--state-scheduled)",
+  validado: "var(--state-played)",
+  cancelado: "var(--state-noshow)",
+  edited: "var(--state-active)",
 };
+
+function statusBadgeStyle(token: string) {
+  return { background: `color-mix(in srgb, ${token} 15%, transparent)`, color: token };
+}
 
 const HISTORICAL_CANCEL_BLOCK_MESSAGE =
   "Não é possível cancelar esta partida porque já existem partidas validadas mais recentes envolvendo esses jogadores";
 
 function getAdminMatchStatusBadge(match: AdminMatch) {
   if (match.correction_kind === "without_recalculation") {
-    return {
-      label: "corrigida sem recálculo",
-      className: "bg-amber-100 text-amber-800",
-    };
+    return { label: "corrigida sem recálculo", token: "var(--state-scheduled)" };
   }
 
   if (match.status === "validado" && match.aprovado_por === null) {
-    return {
-      label: "validado pelo sistema",
-      className: "bg-emerald-100 text-emerald-700",
-    };
+    return { label: "validado pelo sistema", token: "var(--state-played)" };
   }
 
   return {
     label: match.status,
-    className: statusColors[match.status] || "bg-gray-100 text-gray-700",
+    token: statusToken[match.status] || "var(--state-tbd)",
   };
 }
 
@@ -304,8 +304,8 @@ export default function AdminPartidasPage() {
   };
 
   return (
-    <AppShell title="Partidas" subtitle="Gerenciar partidas" showBack>
-      <div className="space-y-4">
+    <ArenaShell title="Partidas" subtitle="Gerenciar partidas" showBack>
+      <div className="flex flex-col gap-4">
         {/* Filtros */}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {statusFilters.map((filter) => (
@@ -314,8 +314,8 @@ export default function AdminPartidasPage() {
               onClick={() => setStatusFilter(filter.value)}
               className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition ${
                 statusFilter === filter.value
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-card text-foreground hover:border-primary/50"
+                  ? "border-(--arena-primary) bg-(--arena-primary)/15 text-(--arena-primary)"
+                  : "border-(--glass-border) bg-(--glass-bg-strong) text-(--arena-foreground) hover:border-(--arena-primary)/50"
               }`}
             >
               {filter.label}
@@ -325,7 +325,7 @@ export default function AdminPartidasPage() {
 
         {/* Erro */}
         {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          <div className="flex items-center gap-2 rounded-lg bg-(--state-noshow)/10 p-3 text-sm text-(--state-noshow)">
             <AlertTriangle className="h-4 w-4" />
             {error}
             <button onClick={() => setError("")} className="ml-auto">
@@ -338,11 +338,11 @@ export default function AdminPartidasPage() {
         {loading ? (
           <MatchListSkeleton count={5} />
         ) : matches.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="py-8 text-center text-sm text-(--arena-muted)">
             Nenhuma partida encontrada
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-2">
             {matches.map((match) => {
               const statusBadge = getAdminMatchStatusBadge(match);
               const isPlayerAWinner =
@@ -372,22 +372,20 @@ export default function AdminPartidasPage() {
                 match.status !== "validado" || match.can_cancel_safely !== false;
 
               return (
-                <article
-                  key={match.id}
-                  className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-                >
+                <GlassCard key={match.id} className="space-y-3">
                   {/* Header */}
                   <div className="flex items-start justify-between">
-                    <p className="text-xs font-semibold text-muted-foreground">
+                    <p className="text-xs font-semibold text-(--arena-muted)">
                       Resultado
                     </p>
                     <div className="text-right">
                       <span
-                        className={`inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${statusBadge.className}`}
+                        className="inline-block rounded-full px-2 py-1 text-[10px] font-semibold"
+                        style={statusBadgeStyle(statusBadge.token)}
                       >
                         {statusBadge.label}
                       </span>
-                      <p className="mt-1 text-[10px] text-muted-foreground">
+                      <p className="mt-1 text-[10px] text-(--arena-muted)">
                         {formatDate(match.created_at)}
                       </p>
                     </div>
@@ -396,19 +394,19 @@ export default function AdminPartidasPage() {
                   {/* Jogadores + placar (vencedor sempre à esquerda) */}
                   <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                     <div className="text-left">
-                      <p className="text-sm font-semibold text-emerald-700">
+                      <p className="text-sm font-semibold text-(--state-played)">
                         {winnerName}
                       </p>
-                      <p className="text-xs text-muted-foreground">Vencedor</p>
+                      <p className="text-xs text-(--arena-muted)">Vencedor</p>
                     </div>
-                    <p className="text-center text-2xl font-bold text-primary">
+                    <p className="text-center text-2xl font-bold text-(--arena-primary)">
                       {winnerScore} x {loserScore}
                     </p>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-red-600">
+                      <p className="text-sm font-semibold text-(--state-noshow)">
                         {loserName}
                       </p>
-                      <p className="text-xs text-muted-foreground">Perdedor</p>
+                      <p className="text-xs text-(--arena-muted)">Perdedor</p>
                     </div>
                   </div>
 
@@ -417,10 +415,10 @@ export default function AdminPartidasPage() {
                     winnerPoints !== null &&
                     loserPoints !== null && (
                       <div className="grid grid-cols-2 gap-4 text-xs">
-                        <p className="text-center font-semibold text-emerald-600">
+                        <p className="text-center font-semibold text-(--state-played)">
                           +{winnerPoints} pts
                         </p>
-                        <p className="text-center font-semibold text-red-600">
+                        <p className="text-center font-semibold text-(--state-noshow)">
                           -{loserPoints} pts
                         </p>
                       </div>
@@ -429,14 +427,14 @@ export default function AdminPartidasPage() {
                   {match.status === "validado" &&
                   match.aprovado_por === null &&
                   !match.correction_kind ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <div className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 px-3 py-2 text-xs text-(--state-scheduled)">
                       Se esse placar estiver incorreto e novos jogos acontecerem antes da
                       correção, o ranking pode sofrer impacto em cadeia.
                     </div>
                   ) : null}
 
                   {match.correction_kind === "without_recalculation" ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <div className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 px-3 py-2 text-xs text-(--state-scheduled)">
                       Correção excepcional aplicada. Esta partida foi retirada do ranking,
                       com compensação apenas entre os dois jogadores, sem recalcular jogos
                       posteriores.
@@ -444,7 +442,7 @@ export default function AdminPartidasPage() {
                   ) : null}
 
                   {match.status === "validado" && !safeCancelAvailable ? (
-                    <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+                    <div className="space-y-2 rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 px-3 py-3 text-xs text-(--state-scheduled)">
                       <p className="font-semibold">
                         Cancelamento com reversão indisponível
                       </p>
@@ -458,7 +456,7 @@ export default function AdminPartidasPage() {
                       </p>
                       <Link
                         href="/admin/partidas/correcao-sem-recalculo"
-                        className="inline-flex font-semibold text-amber-800 underline-offset-4 hover:underline"
+                        className="inline-flex font-semibold text-(--state-scheduled) underline-offset-4 hover:underline"
                       >
                         Saiba mais
                       </Link>
@@ -475,15 +473,15 @@ export default function AdminPartidasPage() {
                               value={cancelReason}
                               onChange={(e) => handleReasonChange(e.target.value)}
                               placeholder="Motivo do cancelamento (obrigatorio)"
-                              className={`w-full rounded-lg border bg-background p-2 text-sm placeholder:text-muted-foreground focus:outline-none ${
+                              className={`w-full rounded-lg border bg-(--glass-bg) p-2 text-sm placeholder:text-(--arena-muted) focus:outline-none ${
                                 fieldError
-                                  ? "border-red-500 focus:border-red-500"
-                                  : "border-border focus:border-primary"
+                                  ? "border-(--state-noshow) focus:border-(--state-noshow)"
+                                  : "border-(--glass-border) focus:border-(--arena-primary)"
                               }`}
                               rows={2}
                             />
                             {fieldError && (
-                              <p className="mt-1 text-xs text-red-500">
+                              <p className="mt-1 text-xs text-(--state-noshow)">
                                 {fieldError}
                               </p>
                             )}
@@ -503,7 +501,7 @@ export default function AdminPartidasPage() {
                             </Button>
                             <Button
                               size="sm"
-                              className="flex-1 bg-red-600 hover:bg-red-700"
+                              className="flex-1 bg-(--state-noshow) hover:opacity-90"
                               onClick={() => handleCancelClick(match)}
                               disabled={!!fieldError}
                             >
@@ -516,7 +514,7 @@ export default function AdminPartidasPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                            className="w-full text-(--state-noshow)"
                             onClick={() => setCancelingId(match.id)}
                           >
                             <X className="mr-1 h-4 w-4" />
@@ -535,13 +533,13 @@ export default function AdminPartidasPage() {
                     <Button
                       size="sm"
                       type="button"
-                      className="w-full bg-amber-600 text-white hover:bg-amber-700"
+                      className="w-full bg-(--state-scheduled) text-white hover:opacity-90"
                       onClick={() => void handleOpenExceptionalCorrection(match)}
                     >
                       Corrigir sem recálculo
                     </Button>
                   ) : null}
-                </article>
+                </GlassCard>
               );
             })}
 
@@ -578,7 +576,7 @@ export default function AdminPartidasPage() {
         {canUseExceptionalCorrection &&
         confirmError === HISTORICAL_CANCEL_BLOCK_MESSAGE &&
         confirmModal.isValidated ? (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-900">
+          <div className="mb-4 rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-3 text-left text-xs text-(--state-scheduled)">
             <p className="font-semibold">Correção excepcional disponível</p>
             <p className="mt-1">
               Use somente quando a partida ficou antiga, o cancelamento seguro não é
@@ -586,7 +584,7 @@ export default function AdminPartidasPage() {
             </p>
             <button
               type="button"
-              className="mt-3 text-sm font-semibold text-amber-800 underline-offset-4 hover:underline"
+              className="mt-3 text-sm font-semibold text-(--state-scheduled) underline-offset-4 hover:underline"
               onClick={() => {
                 const targetMatch = matches.find((match) => match.id === confirmModal.matchId);
                 if (!targetMatch) return;
@@ -601,11 +599,11 @@ export default function AdminPartidasPage() {
 
       {correctionModalOpen ? (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] sm:items-center sm:p-4">
-          <div className="relative flex max-h-[calc(100vh-7rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl sm:max-h-[calc(100vh-2rem)]">
+          <div className="relative flex max-h-[calc(100vh-7rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-(--glass-border) bg-(--glass-bg-strong) shadow-xl sm:max-h-[calc(100vh-2rem)]">
             <button
               type="button"
               onClick={resetExceptionalCorrectionModal}
-              className="absolute right-4 top-4 z-10 rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="absolute right-4 top-4 z-10 rounded-full p-2 text-(--arena-muted) transition hover:bg-(--glass-bg) hover:text-(--arena-foreground)"
               aria-label="Fechar modal"
             >
               <X className="h-5 w-5" />
@@ -613,21 +611,21 @@ export default function AdminPartidasPage() {
 
             <div className="overflow-y-auto px-4 pb-4 pt-5 sm:px-5 sm:pb-5">
               <div className="flex items-start gap-3 pr-12">
-                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-(--state-scheduled)/15 text-(--state-scheduled)">
                   <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-base font-semibold text-foreground">
+                  <p className="text-base font-semibold text-(--arena-foreground)">
                     Corrigir sem recálculo
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-(--arena-muted)">
                     Use só quando o cancelamento seguro já não é mais possível e o
                     placar errado já prejudicou o ranking.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+              <div className="mt-4 rounded-2xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 p-4 text-sm text-(--state-scheduled)">
                 <p className="font-semibold">Resumo rápido</p>
                 <p className="mt-1 leading-relaxed">
                   Esta correção compensa só os dois jogadores desta partida. Jogos
@@ -636,43 +634,43 @@ export default function AdminPartidasPage() {
                 </p>
                 <Link
                   href="/admin/partidas/correcao-sem-recalculo"
-                  className="mt-3 inline-flex text-sm font-semibold text-amber-800 underline-offset-4 hover:underline"
+                  className="mt-3 inline-flex text-sm font-semibold text-(--state-scheduled) underline-offset-4 hover:underline"
                 >
                   Saiba mais
                 </Link>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-border/70 bg-muted/15 p-4">
+              <div className="mt-4 rounded-2xl border border-(--glass-border) bg-(--glass-bg) p-4">
                 {correctionPreviewLoading ? (
-                  <p className="text-sm text-muted-foreground">Analisando impacto da correção...</p>
+                  <p className="text-sm text-(--arena-muted)">Analisando impacto da correção...</p>
                 ) : correctionPreview ? (
-                  <div className="space-y-2 text-sm text-foreground">
+                  <div className="space-y-2 text-sm text-(--arena-foreground)">
                     <p className="font-semibold">
                       {correctionPreview.playerAName} vs {correctionPreview.playerBName} ({correctionPreview.scoreLabel})
                     </p>
-                    <p className="text-muted-foreground">
+                    <p className="text-(--arena-muted)">
                       Pontos desta partida foram aplicados em{" "}
                       {formatDate(correctionPreview.appliedAt)}.
                     </p>
                     <div className="grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-3">
-                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-(--arena-muted)">
                           Impacto direto
                         </p>
                         <p className="mt-1 font-semibold">
                           {correctionPreview.directMatchCount} partida(s)
                         </p>
                       </div>
-                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-(--arena-muted)">
                           Em cadeia
                         </p>
                         <p className="mt-1 font-semibold">
                           {correctionPreview.cascadeMatchCount} partida(s)
                         </p>
                       </div>
-                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <div className="rounded-xl border border-(--glass-border) bg-(--glass-bg) px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-(--arena-muted)">
                           Jogadores afetados
                         </p>
                         <p className="mt-1 font-semibold">
@@ -681,7 +679,7 @@ export default function AdminPartidasPage() {
                       </div>
                     </div>
                     {correctionPreview.isAutoValidated ? (
-                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                      <p className="rounded-xl border border-(--state-scheduled)/30 bg-(--state-scheduled)/10 px-3 py-2 text-[13px] text-(--state-scheduled)">
                         Esta partida foi confirmada automaticamente pelo sistema. Se o
                         placar estava errado, o prejuízo pode ter se espalhado para o
                         ranking e a sequência de vitórias.
@@ -689,14 +687,14 @@ export default function AdminPartidasPage() {
                     ) : null}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-(--arena-muted)">
                     A análise aparece aqui assim que ficar disponível.
                   </p>
                 )}
               </div>
 
               <div className="mt-4 space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-(--arena-muted)">
                   Motivo da correção
                 </label>
                 <textarea
@@ -704,24 +702,24 @@ export default function AdminPartidasPage() {
                   onChange={(event) => handleCorrectionReasonChange(event.target.value)}
                   rows={3}
                   placeholder="Explique o erro, por que a correção excepcional está sendo usada e qual foi o prejuízo no ranking"
-                  className={`w-full rounded-2xl border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none ${
+                  className={`w-full rounded-2xl border bg-(--glass-bg) px-3 py-2 text-sm text-(--arena-foreground) placeholder:text-(--arena-muted) focus:outline-none ${
                     correctionFieldError
-                      ? "border-red-500 focus:border-red-500"
-                      : "border-border focus:border-primary"
+                      ? "border-(--state-noshow) focus:border-(--state-noshow)"
+                      : "border-(--glass-border) focus:border-(--arena-primary)"
                   }`}
                 />
                 {correctionFieldError ? (
-                  <p className="text-xs text-red-600">{correctionFieldError}</p>
+                  <p className="text-xs text-(--state-noshow)">{correctionFieldError}</p>
                 ) : null}
               </div>
 
-              <div className="mt-4 space-y-3 rounded-2xl border border-border/70 bg-card/80 p-4">
-                <label className="flex items-start gap-3 text-sm text-foreground">
+              <div className="mt-4 space-y-3 rounded-2xl border border-(--glass-border) bg-(--glass-bg) p-4">
+                <label className="flex items-start gap-3 text-sm text-(--arena-foreground)">
                   <input
                     type="checkbox"
                     checked={correctionAckRisk}
                     onChange={(event) => setCorrectionAckRisk(event.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-border"
+                    className="mt-1 h-4 w-4 rounded border-(--glass-border)"
                   />
                   <span>
                     Entendi que esta correção é excepcional, não recalcula jogos
@@ -731,13 +729,13 @@ export default function AdminPartidasPage() {
               </div>
 
               {correctionError ? (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="mt-4 rounded-2xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 px-3 py-2 text-sm text-(--state-noshow)">
                   {correctionError}
                 </div>
               ) : null}
             </div>
 
-            <div className="border-t border-border bg-card px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+            <div className="border-t border-(--glass-border) bg-(--glass-bg-strong) px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button
                   type="button"
@@ -750,7 +748,7 @@ export default function AdminPartidasPage() {
                 </Button>
                 <Button
                   type="button"
-                  className="flex-1 bg-amber-600 text-white hover:bg-amber-700"
+                  className="flex-1 bg-(--state-scheduled) text-white hover:opacity-90"
                   onClick={() => void handleConfirmExceptionalCorrection()}
                   disabled={correctionSaving || correctionPreviewLoading || !correctionPreview}
                 >
@@ -761,6 +759,6 @@ export default function AdminPartidasPage() {
           </div>
         </div>
       ) : null}
-    </AppShell>
+    </ArenaShell>
   );
 }

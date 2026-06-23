@@ -1,0 +1,308 @@
+"use client";
+
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { createTournament, createEvent } from "@/app/actions/tournaments";
+import { useRouter } from "next/navigation";
+import { useTransition, useState } from "react";
+import {
+  Loader2, Network, RotateCw,
+  Layers, Crown, Trophy, Check, AlertCircle, ListTree, Medal,
+} from "lucide-react";
+import type { TournamentFormat } from "@/lib/tournaments/types";
+
+const FORMATS: {
+  value: TournamentFormat;
+  label: string;
+  description: string;
+  Icon: typeof Trophy;
+  color: string;
+  bg: string;
+  border: string;
+}[] = [
+  { value: "single_elimination", label: "Eliminatória simples", description: "Eliminado na 1ª derrota",      Icon: Network,   color: "var(--arena-primary)",   bg: "color-mix(in srgb, var(--arena-primary) 10%, transparent)",   border: "color-mix(in srgb, var(--arena-primary) 22%, transparent)" },
+  { value: "round_robin",        label: "Pontos corridos",       description: "Todos jogam contra todos",      Icon: RotateCw,  color: "var(--state-played)",    bg: "color-mix(in srgb, var(--state-played) 10%, transparent)",    border: "color-mix(in srgb, var(--state-played) 22%, transparent)"  },
+  { value: "groups_knockout",    label: "Grupos + mata-mata",    description: "Fase de grupos + eliminação",   Icon: Layers,    color: "var(--state-scheduled)", bg: "color-mix(in srgb, var(--state-scheduled) 10%, transparent)", border: "color-mix(in srgb, var(--state-scheduled) 22%, transparent)" },
+  { value: "king_of_table",      label: "Rei da Mesa",           description: "Desafiante enfrenta o líder",  Icon: Crown,     color: "var(--state-noshow)",    bg: "color-mix(in srgb, var(--state-noshow) 10%, transparent)",    border: "color-mix(in srgb, var(--state-noshow) 22%, transparent)"  },
+];
+
+const BEST_OF_OPTIONS = [1, 3, 5, 7] as const;
+
+export default function CriarTorneioPage() {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [format, setFormat] = useState<TournamentFormat>("single_elimination");
+  const [bestOf, setBestOf] = useState(3);
+  const [thirdPlace, setThirdPlace] = useState(true);
+  const [multiCategory, setMultiCategory] = useState(false);
+
+  const selectedFormat = FORMATS.find((f) => f.value === format)!;
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) { setError("O nome do torneio é obrigatório."); return; }
+    startTransition(async () => {
+      try {
+        if (multiCategory) {
+          // Torneio com categorias → cria o agrupador e leva ao hub para adicionar as categorias.
+          const result = await createEvent({ name: name.trim() });
+          if (result?.event?.id) router.push(`/admin/eventos/${result.event.id}`);
+        } else {
+          const result = await createTournament({
+            name: name.trim(), format, bestOf,
+            thirdPlaceMatch: format === "single_elimination" ? thirdPlace : false,
+          });
+          if (result?.tournament?.id) router.push(`/admin/torneios/${result.tournament.id}`);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Erro ao criar torneio.");
+      }
+    });
+  }
+
+  return (
+    <ArenaShell title="Novo Torneio" showBack>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+
+        {/* Nome */}
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+            Nome do torneio *
+          </p>
+          <input
+            type="text"
+            placeholder="Ex: Copa de Verão 2026"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isPending}
+            maxLength={80}
+            autoFocus
+            className="w-full rounded-2xl px-4 py-3 text-sm font-medium outline-none transition"
+            style={{
+              background: "var(--glass-bg)",
+              border: "1px solid var(--glass-border)",
+              color: "var(--arena-foreground)",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "color-mix(in srgb, var(--arena-primary) 50%, transparent)";
+              e.currentTarget.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--arena-primary) 10%, transparent)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--glass-border)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          />
+        </div>
+
+        {/* Tipo de torneio */}
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+            Tipo
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { multi: false, Icon: Trophy, title: "Único", desc: "Uma competição só" },
+              { multi: true, Icon: ListTree, title: "Com categorias", desc: "A/B/C, Absoluto, Veteranos…" },
+            ] as const).map((opt) => {
+              const sel = multiCategory === opt.multi;
+              return (
+                <button
+                  key={opt.title}
+                  type="button"
+                  onClick={() => setMultiCategory(opt.multi)}
+                  disabled={isPending}
+                  className="flex flex-col items-start gap-1 rounded-2xl p-3 text-left transition-all hover:scale-[1.01]"
+                  style={sel
+                    ? { background: "color-mix(in srgb, var(--arena-primary) 8%, var(--glass-bg))", border: "1.5px solid color-mix(in srgb, var(--arena-primary) 40%, transparent)" }
+                    : { background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}
+                >
+                  <opt.Icon className="h-5 w-5" style={{ color: sel ? "var(--arena-primary)" : "var(--arena-muted)" }} />
+                  <span className="text-sm font-bold" style={{ color: sel ? "var(--arena-primary)" : "var(--arena-foreground)" }}>{opt.title}</span>
+                  <span className="text-[11px] text-(--arena-muted)">{opt.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {multiCategory && (
+          <p className="rounded-2xl px-4 py-3 text-xs text-(--arena-muted)"
+            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
+            Você definirá o <strong className="text-(--arena-foreground)">formato e os sets de cada categoria</strong> no próximo passo, ao adicioná-las.
+          </p>
+        )}
+
+        {!multiCategory && (
+          <>
+        {/* Formato */}
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+            Formato
+          </p>
+          <div className="flex flex-col gap-2">
+            {FORMATS.map((f) => {
+              const isSelected = format === f.value;
+              return (
+                <button
+                  key={f.value}
+                  type="button"
+                  onClick={() => setFormat(f.value)}
+                  disabled={isPending}
+                  className="flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  style={{
+                    background: isSelected
+                      ? `color-mix(in srgb, ${f.color} 8%, var(--glass-bg))`
+                      : "var(--glass-bg)",
+                    border: isSelected
+                      ? `1.5px solid ${f.border}`
+                      : "1px solid var(--glass-border)",
+                    boxShadow: isSelected
+                      ? `0 4px 16px color-mix(in srgb, ${f.color} 15%, transparent)`
+                      : "var(--shadow-card)",
+                  }}
+                >
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: f.bg }}
+                  >
+                    <f.Icon className="h-5 w-5" style={{ color: f.color }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-(--arena-foreground)"
+                      style={{ color: isSelected ? f.color : undefined }}>
+                      {f.label}
+                    </p>
+                    <p className="text-[11px] text-(--arena-muted)">{f.description}</p>
+                  </div>
+                  {isSelected && (
+                    <div
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                      style={{ background: f.color }}
+                    >
+                      <Check className="h-3 w-3 text-white" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Melhor de N */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between px-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+              Sets por partida
+            </p>
+            <p className="text-[11px] text-(--arena-muted)">
+              {Math.ceil(bestOf / 2)} para vencer
+            </p>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {BEST_OF_OPTIONS.map((n) => {
+              const isSelected = bestOf === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setBestOf(n)}
+                  disabled={isPending}
+                  className="flex flex-col items-center justify-center gap-0.5 rounded-2xl py-4 transition-all hover:scale-[1.04] active:scale-[0.97]"
+                  style={
+                    isSelected
+                      ? {
+                          background: "var(--arena-primary)",
+                          boxShadow: "0 4px 14px color-mix(in srgb, var(--arena-primary) 35%, transparent)",
+                          color: "#ffffff",
+                        }
+                      : {
+                          background: "var(--glass-bg)",
+                          border: "1px solid var(--glass-border)",
+                          color: "var(--arena-muted)",
+                        }
+                  }
+                >
+                  <span
+                    className="text-xl font-black tabular-nums leading-none"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {n}
+                  </span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider opacity-75">
+                    {n === 1 ? "set" : "sets"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Disputa de 3º lugar (só eliminatória simples) */}
+        {format === "single_elimination" && (
+          <div
+            className="flex items-center gap-3 rounded-2xl px-4 py-3"
+            style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}
+          >
+            <Medal className="h-5 w-5 shrink-0" style={{ color: "var(--state-played)" }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-(--arena-foreground)">Disputa de 3º lugar</p>
+              <p className="text-[11px] text-(--arena-muted)">
+                {thirdPlace
+                  ? "Perdedores das semis jogam pelo bronze (3º × 4º)."
+                  : "Sem disputa: os dois semifinalistas ficam em 3º."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setThirdPlace((v) => !v)}
+              disabled={isPending}
+              className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-90 disabled:opacity-40"
+              style={thirdPlace
+                ? { background: "color-mix(in srgb, var(--state-played) 12%, transparent)", color: "var(--state-played)", border: "1px solid color-mix(in srgb, var(--state-played) 25%, transparent)" }
+                : { background: "color-mix(in srgb, var(--arena-muted) 10%, transparent)", color: "var(--arena-muted)", border: "1px solid color-mix(in srgb, var(--arena-muted) 22%, transparent)" }}
+            >
+              {thirdPlace ? "Ativada" : "Desativada"}
+            </button>
+          </div>
+        )}
+          </>
+        )}
+
+        {/* Erro */}
+        {error && (
+          <div
+            className="flex items-center gap-2 rounded-2xl px-4 py-3"
+            style={{
+              background: "color-mix(in srgb, var(--state-noshow) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--state-noshow) 25%, transparent)",
+            }}
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" style={{ color: "var(--state-noshow)" }} />
+            <p className="text-sm" style={{ color: "var(--state-noshow)" }}>{error}</p>
+          </div>
+        )}
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={isPending || !name.trim()}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          style={{
+            background: "var(--arena-primary)",
+            boxShadow: name.trim()
+              ? "0 6px 20px color-mix(in srgb, var(--arena-primary) 35%, transparent)"
+              : "none",
+          }}
+        >
+          {isPending
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : multiCategory ? <ListTree className="h-4 w-4" /> : <selectedFormat.Icon className="h-4 w-4" />
+          }
+          {isPending ? "Criando…" : multiCategory ? "Criar e adicionar categorias" : "Criar torneio"}
+        </button>
+      </form>
+    </ArenaShell>
+  );
+}

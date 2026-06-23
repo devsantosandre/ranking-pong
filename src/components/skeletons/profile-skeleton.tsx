@@ -127,8 +127,8 @@ function ProfileQuickLinksSkeleton() {
 
 function ProfileLogoutSkeleton() {
   return (
-    <article className="rounded-2xl border border-red-200 bg-red-50 p-3">
-      <Skeleton className="mx-auto h-4 w-24 bg-red-200/80" />
+    <article className="rounded-2xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 p-3">
+      <Skeleton className="mx-auto h-4 w-24 bg-(--state-noshow)/25" />
     </article>
   );
 }

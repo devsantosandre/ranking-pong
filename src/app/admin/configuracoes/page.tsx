@@ -1,8 +1,9 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
+import { ArenaShell } from "@/components/arena/arena-shell";
+import { GlassCard } from "@/components/arena/glass-card";
 import { useState, useEffect } from "react";
-import { Loader2, Save, Check } from "lucide-react";
+import { Loader2, Save, Check, TrendingUp, Clock, Trophy, Medal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -15,112 +16,194 @@ import {
   type AdminSetting,
 } from "@/app/actions/admin";
 
-const settingDisplayOrder = [
-  "k_factor",
-  "limite_jogos_diarios",
-  "pending_confirmation_deadline_hours",
-  "rating_inicial",
-  "achievements_rating_min_players",
-  "achievements_rating_min_validated_matches",
-  "season_points_win",
-  "season_points_loss",
-  "season_zebra_bonus",
-  "season_zebra_enabled",
-] as const;
+type SettingType = "number" | "boolean";
 
-type SupportedSettingKey = (typeof settingDisplayOrder)[number];
+interface SettingMeta {
+  label: string;
+  description: string;
+  type: SettingType;
+  min?: number;
+  max?: number;
+  /** sufixo exibido junto ao valor (ex.: "h") */
+  unit?: string;
+  /** dica curta abaixo do campo em edição */
+  help?: string;
+}
 
-const settingLabels: Record<SupportedSettingKey, { label: string; description: string }> = {
+// Fonte única da verdade: rótulo, descrição, tipo e limites de cada configuração.
+const settingMeta: Record<string, SettingMeta> = {
   k_factor: {
     label: "Fator K (ELO)",
-    description: "Intensidade das mudancas de pontuacao (16-32 recomendado)",
-  },
-  limite_jogos_diarios: {
-    label: "Limite de Jogos Diarios",
-    description: "Maximo de partidas por dia contra o mesmo adversario",
-  },
-  pending_confirmation_deadline_hours: {
-    label: "Horas para Confirmação Automática",
-    description:
-      "Depois desse prazo sem resposta, o sistema confirma automaticamente a partida com o placar atual.",
+    description: "Intensidade das mudanças de pontuação a cada partida.",
+    type: "number",
+    min: 1,
+    max: 100,
+    help: "Entre 1 e 100. O intervalo 16–32 é o recomendado.",
   },
   rating_inicial: {
-    label: "Rating Inicial",
-    description: "Pontuacao inicial para novos jogadores",
+    label: "Rating inicial",
+    description: "Pontuação com que novos jogadores entram no ranking.",
+    type: "number",
+    min: 0,
+    max: 10000,
+    help: "Entre 0 e 10.000.",
   },
-  achievements_rating_min_players: {
-    label: "Conquistas Rating: Min. Jogadores",
-    description: "Minimo de jogadores com jogo validado para liberar conquistas de rating",
+  limite_jogos_diarios: {
+    label: "Limite de jogos diários",
+    description: "Máximo de partidas por dia contra o mesmo adversário.",
+    type: "number",
+    min: 1,
+    max: 50,
+    help: "Pelo menos 1, no máximo 50.",
   },
-  achievements_rating_min_validated_matches: {
-    label: "Conquistas Rating: Min. Partidas",
-    description: "Minimo de partidas validadas globais para liberar conquistas de rating",
+  pending_confirmation_deadline_hours: {
+    label: "Prazo de confirmação automática",
+    description:
+      "Sem resposta nesse prazo, o sistema confirma a partida automaticamente com o placar atual.",
+    type: "number",
+    min: 1,
+    max: 168,
+    unit: "h",
+    help: "Prazo em horas. Entre 1h e 168h (7 dias).",
   },
   season_points_win: {
-    label: "Temporada: Pontos por Vitória",
-    description: "Pontos de temporada ganhos ao vencer uma partida (padrão: 3)",
+    label: "Pontos por vitória",
+    description: "Pontos de temporada ganhos ao vencer uma partida.",
+    type: "number",
+    min: 0,
+    max: 100,
+    help: "Padrão: 3.",
   },
   season_points_loss: {
-    label: "Temporada: Pontos por Derrota",
-    description: "Pontos de temporada ganhos ao perder uma partida (nunca negativo; padrão: 1)",
-  },
-  season_zebra_bonus: {
-    label: "Temporada: Bônus de Zebra",
-    description: "Pontos extras ao vencer alguém com rating Geral maior (padrão: 2)",
+    label: "Pontos por derrota",
+    description: "Pontos de temporada ao perder (nunca negativo).",
+    type: "number",
+    min: 0,
+    max: 100,
+    help: "Padrão: 1.",
   },
   season_zebra_enabled: {
-    label: "Temporada: Habilitar Bônus de Zebra",
-    description: "Liga ou desliga o bônus de zebra (valores: true / false)",
+    label: "Habilitar bônus de zebra",
+    description: "Liga ou desliga o bônus por vencer alguém mais bem ranqueado.",
+    type: "boolean",
+  },
+  season_zebra_bonus: {
+    label: "Bônus de zebra",
+    description: "Pontos extras ao vencer alguém com rating Geral maior.",
+    type: "number",
+    min: 0,
+    max: 100,
+    help: "Padrão: 2. Só vale quando o bônus está habilitado.",
+  },
+  achievements_rating_min_players: {
+    label: "Conquistas de rating — mín. jogadores",
+    description:
+      "Mínimo de jogadores com jogo validado para liberar as conquistas de rating.",
+    type: "number",
+    min: 1,
+    max: 10000,
+  },
+  achievements_rating_min_validated_matches: {
+    label: "Conquistas de rating — mín. partidas",
+    description: "Mínimo de partidas validadas no sistema para liberar as conquistas de rating.",
+    type: "number",
+    min: 0,
+    max: 10000,
   },
 };
 
-const settingOrderIndex = new Map<SupportedSettingKey, number>(
-  settingDisplayOrder.map((key, index) => [key, index])
-);
+interface SettingSection {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  keys: string[];
+}
 
-function isSupportedSettingKey(key: string): key is SupportedSettingKey {
-  return Object.prototype.hasOwnProperty.call(settingLabels, key);
+const settingSections: SettingSection[] = [
+  {
+    id: "ranking",
+    title: "Ranking & ELO",
+    description: "Como a pontuação geral é calculada.",
+    icon: TrendingUp,
+    keys: ["k_factor", "rating_inicial"],
+  },
+  {
+    id: "partidas",
+    title: "Partidas & confirmação",
+    description: "Regras de registro e validação dos jogos.",
+    icon: Clock,
+    keys: ["limite_jogos_diarios", "pending_confirmation_deadline_hours"],
+  },
+  {
+    id: "temporada",
+    title: "Temporada",
+    description: "Pontuação da temporada corrente.",
+    icon: Trophy,
+    keys: ["season_points_win", "season_points_loss", "season_zebra_enabled", "season_zebra_bonus"],
+  },
+  {
+    id: "conquistas",
+    title: "Conquistas",
+    description: "Pré-requisitos para liberar as conquistas de rating.",
+    icon: Medal,
+    keys: ["achievements_rating_min_players", "achievements_rating_min_validated_matches"],
+  },
+];
+
+function isSupportedSettingKey(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(settingMeta, key);
+}
+
+/** Valor formatado para exibição (Sim/Não em booleanos, sufixo de unidade em números). */
+function formatDisplayValue(key: string, value: string): string {
+  const meta = settingMeta[key];
+  if (!meta) return value;
+  if (meta.type === "boolean") return value === "true" ? "Sim" : "Não";
+  return `${value}${meta.unit ?? ""}`;
 }
 
 // Componente de preview da tabela ELO
 function EloPreview({ kFactor }: { kFactor: number }) {
   if (isNaN(kFactor) || kFactor < 1) return null;
 
-  // Calcular exemplos
   const vsStrongerWin = calculateElo(800, 1200, kFactor);
   const vsStrongerLose = calculateElo(1200, 800, kFactor);
   const vsEqual = calculateElo(1000, 1000, kFactor);
   const vsWeakerWin = calculateElo(1200, 800, kFactor);
   const vsWeakerLose = calculateElo(800, 1200, kFactor);
 
+  const win = { color: "var(--state-played)" };
+  const lose = { color: "var(--state-noshow)" };
+
   return (
-    <div className="mt-4 rounded-xl border border-border/50 bg-muted/30 p-3">
-      <p className="text-xs font-semibold text-muted-foreground mb-2">
-        Distribuicao de pontos (K={kFactor})
+    <div className="mt-4 rounded-xl p-3" style={{ background: "color-mix(in srgb, var(--arena-foreground) 4%, transparent)", border: "1px solid var(--glass-border)" }}>
+      <p className="text-xs font-semibold text-(--arena-muted) mb-2">
+        Distribuição de pontos (K={kFactor})
       </p>
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-border/50">
-            <th className="text-left py-1 font-medium text-muted-foreground">Situacao</th>
-            <th className="text-center py-1 font-medium text-green-600">Vitoria</th>
-            <th className="text-center py-1 font-medium text-red-500">Derrota</th>
+          <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+            <th className="text-left py-1 font-medium text-(--arena-muted)">Situação</th>
+            <th className="text-center py-1 font-medium" style={win}>Vitória</th>
+            <th className="text-center py-1 font-medium" style={lose}>Derrota</th>
           </tr>
         </thead>
-        <tbody className="text-muted-foreground">
-          <tr className="border-b border-border/30">
+        <tbody className="text-(--arena-muted)">
+          <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
             <td className="py-1.5">vs Mais forte</td>
-            <td className="text-center py-1.5 text-green-600 font-semibold">+{vsStrongerWin.winnerDelta}</td>
-            <td className="text-center py-1.5 text-red-500 font-semibold">{vsStrongerLose.loserDelta}</td>
+            <td className="text-center py-1.5 font-semibold" style={win}>+{vsStrongerWin.winnerDelta}</td>
+            <td className="text-center py-1.5 font-semibold" style={lose}>{vsStrongerLose.loserDelta}</td>
           </tr>
-          <tr className="border-b border-border/30">
-            <td className="py-1.5">vs Mesmo nivel</td>
-            <td className="text-center py-1.5 text-green-600 font-semibold">+{vsEqual.winnerDelta}</td>
-            <td className="text-center py-1.5 text-red-500 font-semibold">{vsEqual.loserDelta}</td>
+          <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+            <td className="py-1.5">vs Mesmo nível</td>
+            <td className="text-center py-1.5 font-semibold" style={win}>+{vsEqual.winnerDelta}</td>
+            <td className="text-center py-1.5 font-semibold" style={lose}>{vsEqual.loserDelta}</td>
           </tr>
           <tr>
             <td className="py-1.5">vs Mais fraco</td>
-            <td className="text-center py-1.5 text-green-600 font-semibold">+{vsWeakerWin.winnerDelta}</td>
-            <td className="text-center py-1.5 text-red-500 font-semibold">{vsWeakerLose.loserDelta}</td>
+            <td className="text-center py-1.5 font-semibold" style={win}>+{vsWeakerWin.winnerDelta}</td>
+            <td className="text-center py-1.5 font-semibold" style={lose}>{vsWeakerLose.loserDelta}</td>
           </tr>
         </tbody>
       </table>
@@ -138,7 +221,6 @@ export default function AdminConfiguracoesPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
 
-  // Modal de confirmacao
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     key: string;
@@ -163,33 +245,22 @@ export default function AdminConfiguracoesPage() {
   }, []);
 
   const validateField = (value: string, key?: string | null): string | null => {
-    if (!value.trim()) {
-      return "Valor nao pode ser vazio";
+    if (!key || !isSupportedSettingKey(key)) return null;
+    const meta = settingMeta[key];
+    const trimmed = value.trim();
+    if (!trimmed) return "O valor não pode ficar vazio.";
+
+    if (meta.type === "boolean") {
+      return trimmed === "true" || trimmed === "false" ? null : "Selecione Sim ou Não.";
     }
-    if (key === "season_zebra_enabled") {
-      if (value !== "true" && value !== "false") {
-        return "Valor deve ser 'true' ou 'false'";
-      }
-      return null;
+
+    if (!/^\d+$/.test(trimmed)) return "Informe um número inteiro válido.";
+    const num = parseInt(trimmed, 10);
+    if (meta.min != null && num < meta.min) {
+      return `O mínimo permitido é ${meta.min}${meta.unit ?? ""}.`;
     }
-    const num = parseInt(value, 10);
-    if (isNaN(num)) {
-      return "Valor deve ser um numero";
-    }
-    if (key === "k_factor" && (num < 1 || num > 100)) {
-      return "Fator K deve ficar entre 1 e 100";
-    }
-    if (key === "limite_jogos_diarios" && num < 1) {
-      return "Limite diario deve ser pelo menos 1";
-    }
-    if (key === "pending_confirmation_deadline_hours" && (num < 1 || num > 168)) {
-      return "Prazo da confirmação automática deve ficar entre 1h e 168h";
-    }
-    if (num < 0) {
-      return "Valor deve ser maior ou igual a zero";
-    }
-    if (num > 10000) {
-      return "Valor deve ser menor que 10.000";
+    if (meta.max != null && num > meta.max) {
+      return `O máximo permitido é ${meta.max}${meta.unit ?? ""}.`;
     }
     return null;
   };
@@ -222,13 +293,11 @@ export default function AdminConfiguracoesPage() {
     const currentSetting = settings.find((s) => s.key === key);
     if (!currentSetting) return;
 
-    // Se o valor nao mudou, apenas cancela a edicao
     if (currentSetting.value === editValue) {
       handleCancelEdit();
       return;
     }
 
-    // Abre modal de confirmacao
     setConfirmModal({
       isOpen: true,
       key,
@@ -244,184 +313,194 @@ export default function AdminConfiguracoesPage() {
       setEditingKey(null);
       setEditValue("");
       setFieldError("");
-      setSuccess("Configuracao atualizada com sucesso!");
+      setSuccess("Configuração atualizada com sucesso!");
       setTimeout(() => setSuccess(""), 3000);
       loadSettings();
-      // Invalidar cache para atualizar outras paginas (ex: /regras)
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-    } catch {
-      setFieldError("Erro ao salvar configuracao");
+    } catch (err) {
+      setFieldError(err instanceof Error ? err.message : "Erro ao salvar configuração");
     } finally {
       setSaving(false);
       setConfirmModal({ isOpen: false, key: "", oldValue: "", newValue: "" });
     }
   };
 
-  const orderedSettings = [...settings]
-    .filter(
-      (setting): setting is AdminSetting & { key: SupportedSettingKey } =>
-        isSupportedSettingKey(setting.key)
-    )
-    .sort((left, right) => {
-      const leftIndex = settingOrderIndex.get(left.key) ?? Number.MAX_SAFE_INTEGER;
-      const rightIndex = settingOrderIndex.get(right.key) ?? Number.MAX_SAFE_INTEGER;
-      return leftIndex - rightIndex;
-    });
+  const getSettingLabel = (key: string) =>
+    isSupportedSettingKey(key) ? settingMeta[key].label : key;
 
-  const getSettingLabel = (key: string) => {
-    if (isSupportedSettingKey(key)) {
-      return settingLabels[key].label;
-    }
-    return key;
+  const settingsByKey = new Map(settings.map((s) => [s.key, s]));
+  const zebraEnabled = settingsByKey.get("season_zebra_enabled")?.value === "true";
+
+  const renderSettingCard = (setting: AdminSetting) => {
+    const meta = settingMeta[setting.key];
+    const isEditing = editingKey === setting.key;
+    const isBoolean = meta.type === "boolean";
+    const bonusDisabled = setting.key === "season_zebra_bonus" && !zebraEnabled;
+
+    return (
+      <GlassCard key={setting.id}>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <p className="font-semibold text-(--arena-foreground)">{meta.label}</p>
+            <p className="text-xs text-(--arena-muted)">{meta.description}</p>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          {isEditing ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  {isBoolean ? (
+                    <select
+                      className="h-9 w-full rounded-md px-3 text-sm text-(--arena-foreground) outline-none"
+                      style={{
+                        background: "var(--arena-bg-2)",
+                        border: `1px solid ${fieldError ? "var(--state-noshow)" : "var(--glass-border)"}`,
+                      }}
+                      value={editValue}
+                      onChange={(e) => handleValueChange(e.target.value)}
+                      autoFocus
+                    >
+                      <option value="true">Sim (ativado)</option>
+                      <option value="false">Não (desativado)</option>
+                    </select>
+                  ) : (
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={editValue}
+                      onChange={(e) => handleValueChange(e.target.value)}
+                      style={fieldError ? { borderColor: "var(--state-noshow)" } : undefined}
+                      autoFocus
+                    />
+                  )}
+                  {meta.help && !fieldError && (
+                    <p className="mt-1 text-xs text-(--arena-muted)">{meta.help}</p>
+                  )}
+                  {fieldError && (
+                    <p className="mt-1 text-xs" style={{ color: "var(--state-noshow)" }}>
+                      {fieldError}
+                    </p>
+                  )}
+                </div>
+                <Button size="sm" variant="outline" onClick={handleCancelEdit} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveClick(setting.key)}
+                  disabled={saving || !!fieldError}
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              {isBoolean ? (
+                <span
+                  className="rounded-full px-3 py-1 text-sm font-bold"
+                  style={{
+                    background: `color-mix(in srgb, ${setting.value === "true" ? "var(--state-played)" : "var(--state-tbd)"} 14%, transparent)`,
+                    color: setting.value === "true" ? "var(--state-played)" : "var(--state-tbd)",
+                  }}
+                >
+                  {formatDisplayValue(setting.key, setting.value)}
+                </span>
+              ) : (
+                <p className="text-2xl font-bold text-(--arena-primary) tabular-nums">
+                  {formatDisplayValue(setting.key, setting.value)}
+                </p>
+              )}
+              <Button size="sm" variant="outline" onClick={() => handleStartEdit(setting)}>
+                Editar
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {bonusDisabled && !isEditing && (
+          <p className="mt-2 text-[11px] text-(--state-scheduled)">
+            O bônus de zebra está desativado — este valor não está sendo aplicado.
+          </p>
+        )}
+
+        {setting.updated_at && (
+          <p className="mt-2 text-[10px] text-(--arena-muted)">
+            Atualizado em: {new Date(setting.updated_at).toLocaleDateString("pt-BR")}
+          </p>
+        )}
+
+        {setting.key === "k_factor" && (
+          <EloPreview kFactor={isEditing ? parseInt(editValue, 10) || 24 : parseInt(setting.value, 10)} />
+        )}
+      </GlassCard>
+    );
   };
 
   return (
-    <AppShell title="Configuracoes" subtitle="Regras do sistema" showBack>
-      <div className="space-y-4">
-        {/* Sucesso */}
+    <ArenaShell title="Configurações" subtitle="Regras do sistema" showBack>
+      <div className="flex flex-col gap-6">
         {success && (
-          <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-600">
+          <div
+            className="flex items-center gap-2 rounded-lg p-3 text-sm"
+            style={{ background: "color-mix(in srgb, var(--state-played) 12%, transparent)", color: "var(--state-played)" }}
+          >
             <Check className="h-4 w-4" />
             {success}
           </div>
         )}
 
-        {/* Loading */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="h-8 w-8 animate-spin text-(--arena-primary)" />
           </div>
         ) : (
-          <div className="space-y-4">
-            {orderedSettings.map((setting) => {
-              const meta = settingLabels[setting.key];
-              const isEditing = editingKey === setting.key;
+          settingSections.map((section) => {
+            const sectionSettings = section.keys
+              .map((key) => settingsByKey.get(key))
+              .filter((s): s is AdminSetting => !!s);
 
-              return (
-                <div
-                  key={setting.id}
-                  className="rounded-2xl border border-border bg-card p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-semibold">{meta.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {meta.description}
-                      </p>
-                    </div>
+            if (sectionSettings.length === 0) return null;
+
+            const Icon = section.icon;
+            return (
+              <section key={section.id} className="flex flex-col gap-2">
+                <div className="flex items-center gap-2.5 px-1">
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: "color-mix(in srgb, var(--arena-primary) 14%, transparent)" }}
+                  >
+                    <Icon className="h-5 w-5 text-(--arena-primary)" />
                   </div>
-
-                  <div className="mt-3">
-                    {isEditing ? (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            {setting.key === "season_zebra_enabled" ? (
-                              <select
-                                className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${fieldError ? "border-red-500" : "border-input"}`}
-                                value={editValue}
-                                onChange={(e) => handleValueChange(e.target.value)}
-                                autoFocus
-                              >
-                                <option value="true">Sim (ativado)</option>
-                                <option value="false">Não (desativado)</option>
-                              </select>
-                            ) : (
-                              <Input
-                                type="number"
-                                value={editValue}
-                                onChange={(e) => handleValueChange(e.target.value)}
-                                className={fieldError ? "border-red-500" : ""}
-                                autoFocus
-                              />
-                            )}
-                            {setting.key === "pending_confirmation_deadline_hours" ? (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Informe o prazo em horas.
-                              </p>
-                            ) : null}
-                            {/* Erro de validacao abaixo do campo */}
-                            {fieldError && (
-                              <p className="mt-1 text-xs text-red-500">
-                                {fieldError}
-                              </p>
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleCancelEdit}
-                            disabled={saving}
-                          >
-                            Cancelar
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleSaveClick(setting.key)}
-                            disabled={saving || !!fieldError}
-                          >
-                            {saving ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Save className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <p className="text-2xl font-bold text-primary">
-                          {setting.key === "pending_confirmation_deadline_hours"
-                            ? `${setting.value}h`
-                            : setting.value}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleStartEdit(setting)}
-                        >
-                          Editar
-                        </Button>
-                      </div>
-                    )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-(--arena-foreground)">{section.title}</p>
+                    <p className="text-[11px] text-(--arena-muted)">{section.description}</p>
                   </div>
-
-                  {setting.updated_at && (
-                    <p className="mt-2 text-[10px] text-muted-foreground">
-                      Atualizado em:{" "}
-                      {new Date(setting.updated_at).toLocaleDateString("pt-BR")}
-                    </p>
-                  )}
-
-                  {/* Preview da tabela ELO para k_factor */}
-                  {setting.key === "k_factor" && (
-                    <EloPreview kFactor={isEditing ? parseInt(editValue, 10) || 24 : parseInt(setting.value, 10)} />
-                  )}
                 </div>
-              );
-            })}
-          </div>
+                {sectionSettings.map(renderSettingCard)}
+              </section>
+            );
+          })
         )}
       </div>
 
-      {/* Modal de confirmacao */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
-        onClose={() =>
-          setConfirmModal({ isOpen: false, key: "", oldValue: "", newValue: "" })
-        }
+        onClose={() => setConfirmModal({ isOpen: false, key: "", oldValue: "", newValue: "" })}
         onConfirm={handleConfirmSave}
-        title="Confirmar alteracao"
-        description={`Deseja alterar "${getSettingLabel(confirmModal.key)}" de ${confirmModal.oldValue} para ${confirmModal.newValue}? ${
+        title="Confirmar alteração"
+        description={`Deseja alterar "${getSettingLabel(confirmModal.key)}" de ${formatDisplayValue(confirmModal.key, confirmModal.oldValue)} para ${formatDisplayValue(confirmModal.key, confirmModal.newValue)}? ${
           confirmModal.key === "pending_confirmation_deadline_hours"
             ? "Esta alteração afeta as pendências abertas e os próximos registros."
-            : "Esta alteração afetará todas as partidas futuras."
+            : "Esta alteração afetará as próximas partidas."
         }`}
-        confirmText="Salvar alteracao"
+        confirmText="Salvar alteração"
         cancelText="Cancelar"
         variant="warning"
         loading={saving}
       />
-    </AppShell>
+    </ArenaShell>
   );
 }

@@ -12,6 +12,7 @@ import { getQueryPersister } from "@/lib/query-persistence";
 import { clearClientSessionData } from "@/lib/client-session-cleanup";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import dynamic from "next/dynamic";
+import { PwaViewportLock } from "@/components/pwa-viewport-lock";
 
 const AuthenticatedAppRuntime = dynamic(
   () =>
@@ -78,6 +79,7 @@ export function Providers({ children }: { children: ReactNode }) {
       onSuccess={() => queryClient.resumePausedMutations()}
     >
       <AuthProvider>
+        <PwaViewportLock />
         <ProvidersContent>{children}</ProvidersContent>
       </AuthProvider>
     </PersistQueryClientProvider>

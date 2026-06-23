@@ -18,18 +18,12 @@ function isIOSDevice() {
   );
 }
 
-function isStandaloneDisplayMode() {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as unknown as { standalone?: boolean }).standalone === true
-  );
-}
+import { isStandalonePwa } from "@/lib/pwa/is-standalone";
 
 export function InstallPrompt() {
   const [isIOS] = useState(() => (typeof window !== "undefined" ? isIOSDevice() : false));
   const [isStandalone, setIsStandalone] = useState(() =>
-    typeof window !== "undefined" ? isStandaloneDisplayMode() : false
+    typeof window !== "undefined" ? isStandalonePwa() : false
   );
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
@@ -142,7 +136,7 @@ export function InstallPrompt() {
               <div className="mt-2 text-sm text-zinc-400">
                 <p className="flex items-center gap-1.5">
                   Toque em{" "}
-                  <Share size={16} className="inline text-blue-400" /> e depois{" "}
+                  <Share size={16} className="inline text-(--state-active)" /> e depois{" "}
                   <span className="inline-flex items-center gap-1 text-zinc-300">
                     <Plus size={14} /> Adicionar à Tela Inicial
                   </span>

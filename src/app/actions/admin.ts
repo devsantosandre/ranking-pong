@@ -2675,23 +2675,37 @@ export async function adminUpdateSetting(key: string, value: string) {
     throw new Error("Configuracao nao encontrada");
   }
 
-  if (!Number.isFinite(numericValue)) {
-    throw new Error("Valor da configuracao precisa ser numerico");
-  }
+  // Configurações booleanas são armazenadas como "true"/"false" e não passam
+  // pela validação numérica (senão o parseInt rejeitaria o valor).
+  const BOOLEAN_SETTING_KEYS = new Set<string>(["season_zebra_enabled"]);
 
-  if (key === "k_factor" && (numericValue < 1 || numericValue > 100)) {
-    throw new Error("Fator K deve ficar entre 1 e 100");
-  }
+  if (BOOLEAN_SETTING_KEYS.has(key)) {
+    if (value !== "true" && value !== "false") {
+      throw new Error("Valor deve ser 'true' ou 'false'");
+    }
+  } else {
+    if (!Number.isFinite(numericValue)) {
+      throw new Error("Valor da configuracao precisa ser numerico");
+    }
 
-  if (key === "limite_jogos_diarios" && numericValue < 1) {
-    throw new Error("Limite diario deve ser pelo menos 1");
-  }
+    if (key === "k_factor" && (numericValue < 1 || numericValue > 100)) {
+      throw new Error("Fator K deve ficar entre 1 e 100");
+    }
 
-  if (
-    key === "pending_confirmation_deadline_hours" &&
-    (numericValue < 1 || numericValue > 168)
-  ) {
-    throw new Error("Prazo da confirmação automática deve ficar entre 1h e 168h");
+    if (key === "limite_jogos_diarios" && numericValue < 1) {
+      throw new Error("Limite diario deve ser pelo menos 1");
+    }
+
+    if (
+      key === "pending_confirmation_deadline_hours" &&
+      (numericValue < 1 || numericValue > 168)
+    ) {
+      throw new Error("Prazo da confirmação automática deve ficar entre 1h e 168h");
+    }
+
+    if (numericValue < 0) {
+      throw new Error("Valor não pode ser negativo");
+    }
   }
 
   // Atualizar configuracao

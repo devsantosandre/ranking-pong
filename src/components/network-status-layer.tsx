@@ -195,8 +195,8 @@ export function NetworkStatusLayer() {
           <div
             className={`flex w-full max-w-[440px] items-center gap-2 rounded-xl border px-3 py-2 shadow-lg backdrop-blur ${
               networkState === "offline"
-                ? "border-red-200 bg-red-50/95 text-red-700"
-                : "border-amber-200 bg-amber-50/95 text-amber-700"
+                ? "border-(--state-noshow)/30 bg-(--state-noshow)/15 text-(--state-noshow)"
+                : "border-(--state-scheduled)/30 bg-(--state-scheduled)/15 text-(--state-scheduled)"
             }`}
             role="status"
             aria-live="polite"
@@ -229,7 +229,7 @@ export function NetworkStatusLayer() {
       {!showPersistentBanner && showOnlineToast ? (
         <div className="pointer-events-none fixed inset-x-0 top-2 z-[95] flex justify-center px-3">
           <div
-            className="flex w-full max-w-[420px] items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/95 px-3 py-2 text-emerald-700 shadow-lg backdrop-blur"
+            className="flex w-full max-w-[420px] items-center gap-2 rounded-xl border border-(--state-played)/30 bg-(--state-played)/15 px-3 py-2 text-(--state-played) shadow-lg backdrop-blur"
             role="status"
             aria-live="polite"
           >

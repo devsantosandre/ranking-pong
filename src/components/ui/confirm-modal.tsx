@@ -79,12 +79,12 @@ export function ConfirmModal({
 
   const variantStyles = {
     danger: {
-      icon: "bg-red-100 text-red-600",
-      button: "bg-red-600 hover:bg-red-700 text-white",
+      icon: "bg-(--state-noshow)/15 text-(--state-noshow)",
+      button: "bg-(--state-noshow) hover:opacity-90 text-white",
     },
     warning: {
-      icon: "bg-amber-100 text-amber-600",
-      button: "bg-amber-600 hover:bg-amber-700 text-white",
+      icon: "bg-(--state-scheduled)/15 text-(--state-scheduled)",
+      button: "bg-(--state-scheduled) hover:opacity-90 text-white",
     },
     default: {
       icon: "bg-primary/10 text-primary",
@@ -108,7 +108,7 @@ export function ConfirmModal({
 
       {/* Modal */}
       <div
-        className={`relative mx-4 w-full max-w-sm rounded-2xl bg-card p-6 shadow-xl transition-transform duration-150 ${
+        className={`relative mx-4 w-full max-w-sm rounded-2xl border border-(--glass-border) bg-(--arena-bg-1) p-6 shadow-xl transition-transform duration-150 ${
           isClosing ? "scale-95" : "scale-100"
         }`}
       >
@@ -136,7 +136,7 @@ export function ConfirmModal({
         </p>
 
         {errorMessage ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mb-4 rounded-xl border border-(--state-noshow)/30 bg-(--state-noshow)/10 px-3 py-2 text-sm text-(--state-noshow)">
             {errorMessage}
           </div>
         ) : null}

@@ -24,31 +24,33 @@ export interface DivisionStyle {
   text: string;
 }
 
-// Estilos especiais para o Top 3 (Fogo)
+// Estilos especiais para o Top 3 (Fogo).
+// Os `badge` mantêm gradientes vívidos de medalha (ouro/prata/bronze) — semânticos
+// de posição, lêem bem em claro e escuro. bg/border/text usam tokens (white-label + dark).
 export const TOP_3_STYLES: Record<number, DivisionStyle> = {
   1: {
     name: 'Top 1',
     emoji: '🔥',
     badge: 'bg-gradient-to-br from-yellow-300 via-orange-500 to-red-600',
-    border: 'border-orange-400 ring-2 ring-orange-300/50',
-    bg: 'bg-gradient-to-r from-orange-50 via-red-50 to-yellow-50',
-    text: 'text-orange-700',
+    border: 'border-(--state-scheduled)/50 ring-2 ring-(--state-scheduled)/30',
+    bg: 'bg-(--state-scheduled)/12',
+    text: 'text-(--state-scheduled)',
   },
   2: {
     name: 'Top 2',
     emoji: '🔥',
     badge: 'bg-gradient-to-br from-yellow-400 via-orange-500 to-red-500',
-    border: 'border-orange-300 ring-1 ring-orange-200/50',
-    bg: 'bg-gradient-to-r from-orange-50 to-yellow-50',
-    text: 'text-orange-600',
+    border: 'border-(--state-scheduled)/40 ring-1 ring-(--state-scheduled)/20',
+    bg: 'bg-(--state-scheduled)/10',
+    text: 'text-(--state-scheduled)',
   },
   3: {
     name: 'Top 3',
     emoji: '🔥',
     badge: 'bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500',
-    border: 'border-amber-300',
-    bg: 'bg-gradient-to-r from-amber-50 to-orange-50',
-    text: 'text-amber-700',
+    border: 'border-(--state-scheduled)/30',
+    bg: 'bg-(--state-scheduled)/10',
+    text: 'text-(--state-scheduled)',
   },
 };
 
@@ -57,25 +59,25 @@ export const DIVISION_STYLES: Record<number, DivisionStyle> = {
     name: 'Divisão 1',
     emoji: '🥇',
     badge: 'bg-gradient-to-br from-yellow-400 to-amber-500',
-    border: 'border-amber-300',
-    bg: 'bg-amber-50',
-    text: 'text-amber-700',
+    border: 'border-(--state-scheduled)/30',
+    bg: 'bg-(--state-scheduled)/10',
+    text: 'text-(--state-scheduled)',
   },
   2: {
     name: 'Divisão 2',
     emoji: '🥈',
     badge: 'bg-gradient-to-br from-gray-300 to-gray-400',
-    border: 'border-gray-300',
-    bg: 'bg-gray-50',
-    text: 'text-gray-600',
+    border: 'border-(--state-tbd)/30',
+    bg: 'bg-(--state-tbd)/10',
+    text: 'text-(--arena-muted)',
   },
   3: {
     name: 'Divisão 3',
     emoji: '🥉',
     badge: 'bg-gradient-to-br from-orange-400 to-orange-600',
-    border: 'border-orange-300',
-    bg: 'bg-orange-50',
-    text: 'text-orange-700',
+    border: 'border-(--state-scheduled)/30',
+    bg: 'bg-(--state-scheduled)/10',
+    text: 'text-(--state-scheduled)',
   },
 };
 

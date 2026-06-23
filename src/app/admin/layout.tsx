@@ -1,35 +1,22 @@
-"use client";
+import { redirect } from "next/navigation";
+import { canAccessAdmin } from "@/lib/admin";
 
-import { useAuth } from "@/lib/auth-store";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+// Sempre dinâmico: o gate de role precisa rodar a cada requisição.
+export const dynamic = "force-dynamic";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, canAccessAdmin } = useAuth();
-  const router = useRouter();
+  // Gate autoritativo no servidor — não dá pra burlar pelo client (ao contrário
+  // do redirect via useEffect anterior). Fail-closed: erro/sem-sessão → fora.
+  const allowed = await canAccessAdmin().catch(() => false);
+  if (!allowed) redirect("/");
 
-  useEffect(() => {
-    if (!loading && (!user || !canAccessAdmin)) {
-      router.push("/");
-    }
-  }, [loading, user, canAccessAdmin, router]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f4fa]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!canAccessAdmin) {
-    return null;
-  }
-
-  return <>{children}</>;
+  return (
+    <div className="arena min-h-screen" style={{ background: "var(--arena-bg-1)" }}>
+      {children}
+    </div>
+  );
 }
