@@ -186,21 +186,17 @@ describe("Season actions — reabertura de temporada encerrada", () => {
   it("reabertura limpa champion_user_id e closed_at no banco", async () => {
     const admin = adminClient();
 
-    const { data: active } = await admin
+    // O índice seasons_single_active_idx permite apenas UMA temporada ativa.
+    // Libera o slot fechando qualquer ativa remanescente (higiene do banco de
+    // teste) para que ativar/reabrir a temporada de teste seja determinístico.
+    await admin
       .from("seasons")
-      .select("id")
-      .eq("status", "active")
-      .maybeSingle();
+      .update({ status: "closed", closed_at: new Date().toISOString() })
+      .eq("status", "active");
 
     const season = await createTestSeason("reopen-clean");
 
-    // Ativa e depois fecha (se não houver outra ativa)
-    if (!active) {
-      await admin.from("seasons").update({ status: "active" }).eq("id", season.id);
-    } else {
-      // Fecha diretamente sem ativar para não conflitar
-      await admin.from("seasons").update({ status: "closed", closed_at: new Date().toISOString() }).eq("id", season.id);
-    }
+    await admin.from("seasons").update({ status: "active" }).eq("id", season.id);
     await admin.rpc("close_season", { p_season_id: season.id, p_actor_id: null });
 
     const { data: closed } = await admin
@@ -350,10 +346,18 @@ describe("Season actions — notícias tipo='temporada'", () => {
     createdNewsPostIds.push(data.id);
 
     const supa = userClient(player.accessToken);
-    const { error } = await supa.from("news_posts").delete().eq("id", data.id);
+    await supa.from("news_posts").delete().eq("id", data.id);
 
-    // RLS bloqueia: player não pode deletar notícias de outros
-    expect(error).not.toBeNull();
+    // RLS em DELETE funciona como filtro de linhas, não como erro: o player
+    // simplesmente afeta 0 linhas (sem erro). Verificamos que a notícia
+    // continua existindo — ou seja, a RLS bloqueou a exclusão.
+    const { data: still } = await admin
+      .from("news_posts")
+      .select("id")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    expect(still?.id).toBe(data.id);
   });
 });
 
