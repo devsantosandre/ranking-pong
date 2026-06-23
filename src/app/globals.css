@@ -200,9 +200,9 @@
   --division-default-border: color-mix(in srgb, var(--state-tbd) 9%, transparent);
   --division-default-badge: color-mix(in srgb, var(--state-tbd) 40%, transparent);
 
-  /* Texto — quase preto com um toque da marca */
-  --arena-foreground: color-mix(in srgb, var(--brand) 18%, #131016);
-  --arena-muted: color-mix(in srgb, var(--brand) 40%, #645f6b);
+  /* Texto — zinc-700/500 (WCAG AA+ em bg claro), tint mínimo da marca (daltonismo) */
+  --arena-foreground: color-mix(in srgb, var(--brand) 6%, #3f3f46);
+  --arena-muted: color-mix(in srgb, var(--brand) 8%, #71717a);
   --arena-radius: 0.9rem;
   color: var(--arena-foreground);
 
@@ -332,8 +332,8 @@
   --division-default-bg: color-mix(in srgb, var(--state-tbd) 5%, var(--arena-bg-1));
   --division-default-border: color-mix(in srgb, var(--state-tbd) 9%, transparent);
   --division-default-badge: color-mix(in srgb, var(--state-tbd) 40%, transparent);
-  --arena-foreground: color-mix(in srgb, var(--brand) 18%, #131016);
-  --arena-muted: color-mix(in srgb, var(--brand) 40%, #645f6b);
+  --arena-foreground: color-mix(in srgb, var(--brand) 6%, #3f3f46);
+  --arena-muted: color-mix(in srgb, var(--brand) 8%, #71717a);
   color: var(--arena-foreground);
   --shadow-card: 0 2px 16px color-mix(in srgb, var(--brand) 9%, transparent), 0 1px 4px rgba(0, 0, 0, 0.04);
   /* ── Shadcn tokens light (reseta os valores dark do <html class="dark">) ── */
@@ -567,9 +567,9 @@ textarea,
 }
 
 .tv-ranking-root {
-  /* Texto neutro suave — combina com cards tintados, sem preto puro nem tint da marca */
-  --tv-ranking-text: #e4e4e7;
-  --tv-ranking-text-muted: #71717a;
+  /* Herda hierarquia de texto do Arena (foreground / muted) */
+  --tv-ranking-text: var(--arena-foreground);
+  --tv-ranking-text-muted: var(--arena-muted);
   --tv-density-scale: 1;
   --tv-grid-column-width: calc(240px * var(--tv-density-scale));
   --tv-grid-gap: calc(1rem * var(--tv-density-scale));
@@ -607,11 +607,6 @@ textarea,
   --tv-change-badge-md-padding-x: calc(0.375rem * var(--tv-density-scale));
   --tv-change-badge-sm-font-size: calc(0.5625rem * var(--tv-density-scale));
   --tv-change-badge-md-font-size: calc(0.625rem * var(--tv-density-scale));
-}
-
-.arena.tv-force-light .tv-ranking-root {
-  --tv-ranking-text: #52525b;
-  --tv-ranking-text-muted: #a1a1aa;
 }
 
 /* TV Ranking Grid - Vertical ordering with auto columns */
