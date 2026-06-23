@@ -10,6 +10,8 @@ import {
   adminActivateSeason,
   adminCreateSeason,
   adminEditSeason,
+  adminArchiveSeason,
+  adminRestoreSeason,
 } from "@/app/actions/seasons";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,8 @@ import {
   ChevronDown,
   ChevronUp,
   Megaphone,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 
 // ── tipos e constantes ────────────────────────────────────────────────────────
@@ -300,6 +304,10 @@ export default function AdminTemporadasPage() {
   // Modal de confirmação para encerrar / reabrir
   const [lifecycleConfirm, setLifecycleConfirm] = useState<ConfirmLifecycleAction>(null);
 
+  // Modal de confirmação para ocultar / restaurar (soft-delete reversível)
+  const [archiveConfirm, setArchiveConfirm] = useState<ClosedSeason | null>(null);
+  const [restoreConfirm, setRestoreConfirm] = useState<ClosedSeason | null>(null);
+
   const showFeedback = (type: "ok" | "err", msg: string) => {
     setFeedback({ type, msg });
     setTimeout(() => setFeedback(null), 4000);
@@ -402,6 +410,36 @@ export default function AdminTemporadasPage() {
     }
   };
 
+  // ── ocultar / restaurar (soft-delete reversível) ──────────────────────────
+
+  const handleArchiveConfirm = async () => {
+    if (!archiveConfirm) return;
+    setActionLoading(true);
+    const result = await adminArchiveSeason(archiveConfirm.id);
+    setActionLoading(false);
+    setArchiveConfirm(null);
+    if (result.success) {
+      showFeedback("ok", "Temporada ocultada dos jogadores. Você pode restaurá-la quando quiser.");
+      invalidate();
+    } else {
+      showFeedback("err", result.error);
+    }
+  };
+
+  const handleRestoreConfirm = async () => {
+    if (!restoreConfirm) return;
+    setActionLoading(true);
+    const result = await adminRestoreSeason(restoreConfirm.id);
+    setActionLoading(false);
+    setRestoreConfirm(null);
+    if (result.success) {
+      showFeedback("ok", "Temporada restaurada! Voltou a aparecer para os jogadores.");
+      invalidate();
+    } else {
+      showFeedback("err", result.error);
+    }
+  };
+
   const nowIso = new Date().toISOString().slice(0, 16);
 
   return (
@@ -490,6 +528,12 @@ export default function AdminTemporadasPage() {
                         >
                           {STATUS_LABELS[status]}
                         </span>
+                        {season.archived_at && (
+                          <span className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                            <EyeOff className="h-3 w-3" />
+                            oculta
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {new Date(season.starts_at).toLocaleDateString("pt-BR")}{" "}
@@ -547,57 +591,81 @@ export default function AdminTemporadasPage() {
                           </div>
 
                           <div className="flex flex-wrap gap-2">
-                            {status === "upcoming" && (
+                            {season.archived_at ? (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 className="border-green-200 text-green-700 hover:bg-green-50"
-                                onClick={() =>
-                                  setLifecycleConfirm({ type: "activate", season })
-                                }
+                                onClick={() => setRestoreConfirm(season)}
                               >
-                                <Play className="mr-1.5 h-3.5 w-3.5" />
-                                Ativar
+                                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                                Restaurar
                               </Button>
-                            )}
+                            ) : (
+                              <>
+                                {status === "upcoming" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-green-200 text-green-700 hover:bg-green-50"
+                                    onClick={() =>
+                                      setLifecycleConfirm({ type: "activate", season })
+                                    }
+                                  >
+                                    <Play className="mr-1.5 h-3.5 w-3.5" />
+                                    Ativar
+                                  </Button>
+                                )}
 
-                            {(status === "upcoming" || status === "active") && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setEditingId(season.id)}
-                              >
-                                <PenLine className="mr-1.5 h-3.5 w-3.5" />
-                                Editar
-                              </Button>
-                            )}
+                                {(status === "upcoming" || status === "active") && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEditingId(season.id)}
+                                  >
+                                    <PenLine className="mr-1.5 h-3.5 w-3.5" />
+                                    Editar
+                                  </Button>
+                                )}
 
-                            {status === "active" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-red-200 text-red-600 hover:bg-red-50"
-                                onClick={() =>
-                                  setLifecycleConfirm({ type: "close", season })
-                                }
-                              >
-                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                                Encerrar agora
-                              </Button>
-                            )}
+                                {status === "active" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-red-200 text-red-600 hover:bg-red-50"
+                                    onClick={() =>
+                                      setLifecycleConfirm({ type: "close", season })
+                                    }
+                                  >
+                                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                                    Encerrar agora
+                                  </Button>
+                                )}
 
-                            {status === "closed" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-blue-200 text-blue-600 hover:bg-blue-50"
-                                onClick={() =>
-                                  setLifecycleConfirm({ type: "reopen", season })
-                                }
-                              >
-                                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                                Reabrir
-                              </Button>
+                                {status === "closed" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                                    onClick={() =>
+                                      setLifecycleConfirm({ type: "reopen", season })
+                                    }
+                                  >
+                                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                                    Reabrir
+                                  </Button>
+                                )}
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-red-200 text-red-600 hover:bg-red-50"
+                                  onClick={() => setArchiveConfirm(season)}
+                                >
+                                  <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+                                  Ocultar
+                                </Button>
+                              </>
                             )}
                           </div>
                         </>
@@ -687,6 +755,32 @@ export default function AdminTemporadasPage() {
         }
         cancelText="Cancelar"
         variant="warning"
+        loading={actionLoading}
+      />
+
+      {/* ── Modal: OCULTAR (soft-delete reversível) ──────────────────────────── */}
+      <ConfirmModal
+        isOpen={!!archiveConfirm}
+        onClose={() => setArchiveConfirm(null)}
+        onConfirm={handleArchiveConfirm}
+        title="Ocultar temporada?"
+        description={`"${archiveConfirm?.name}" deixa de aparecer para os jogadores (ranking, Hall da Fama e /temporadas). Nada é apagado: as partidas e o placar ficam guardados e você pode RESTAURAR a qualquer momento. É reversível — diferente de excluir de vez.`}
+        confirmText="Ocultar dos jogadores"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={actionLoading}
+      />
+
+      {/* ── Modal: RESTAURAR ─────────────────────────────────────────────────── */}
+      <ConfirmModal
+        isOpen={!!restoreConfirm}
+        onClose={() => setRestoreConfirm(null)}
+        onConfirm={handleRestoreConfirm}
+        title="Restaurar temporada?"
+        description={`"${restoreConfirm?.name}" volta a aparecer normalmente para os jogadores, com o mesmo status e placar de antes.`}
+        confirmText="Restaurar"
+        cancelText="Cancelar"
+        variant="default"
         loading={actionLoading}
       />
     </AppShell>
