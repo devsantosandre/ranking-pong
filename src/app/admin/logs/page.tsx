@@ -8,6 +8,7 @@ import {
   User,
   Gamepad2,
   Settings,
+  Trophy,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -52,6 +53,13 @@ const actionLabels: Record<string, { label: string; color: string }> = {
     color: "bg-sky-100 text-sky-700",
   },
   setting_changed: { label: "Config alterada", color: "bg-amber-100 text-amber-700" },
+  season_created: { label: "Temporada criada", color: "bg-green-100 text-green-700" },
+  season_edited: { label: "Temporada editada", color: "bg-blue-100 text-blue-700" },
+  season_activated: { label: "Temporada ativada", color: "bg-emerald-100 text-emerald-700" },
+  season_closed_manual: { label: "Temporada encerrada", color: "bg-red-100 text-red-700" },
+  season_auto_closed: { label: "Temporada encerrada (auto)", color: "bg-red-100 text-red-700" },
+  season_reopened: { label: "Temporada reaberta", color: "bg-amber-100 text-amber-700" },
+  season_news_deleted: { label: "Notícia de temporada removida", color: "bg-slate-100 text-slate-700" },
 };
 
 // Labels para configuracoes
@@ -347,6 +355,7 @@ const targetIcons: Record<string, React.ComponentType<{ className?: string }>> =
   user: User,
   match: Gamepad2,
   setting: Settings,
+  season: Trophy,
 };
 
 function formatRelativeTime(dateStr: string): string {

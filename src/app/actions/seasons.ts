@@ -382,15 +382,32 @@ export async function adminDeleteSeasonNewsPost(
 ): Promise<SeasonAdminResult> {
   try {
     await requireModerator();
+    const actor = await getCurrentUser();
     const supabase = createAdminClient();
 
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from("news_posts")
       .delete()
       .eq("id", newsPostId)
-      .eq("tipo", "temporada");
+      .eq("tipo", "temporada")
+      .select("title")
+      .maybeSingle();
 
     if (error) throw error;
+
+    await supabase.from("admin_logs").insert({
+      admin_id: actor?.id ?? null,
+      admin_role: actor?.role ?? "admin",
+      action: "season_news_deleted",
+      action_description: `Notícia de temporada "${deleted?.title ?? newsPostId}" removida.`,
+      target_type: "season",
+      target_id: null,
+      target_name: deleted?.title ?? null,
+      old_value: null,
+      new_value: null,
+      reason: null,
+    });
+
     return { success: true };
   } catch (e) {
     return {
