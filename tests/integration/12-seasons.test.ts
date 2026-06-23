@@ -16,36 +16,54 @@ const createdSeasonIds: string[] = [];
 
 afterAll(async () => {
   const admin = adminClient();
-  for (const seasonId of createdSeasonIds) {
-    // Busca slug para deletar news_post gerado pelo close_season
-    const { data: s } = await admin
+
+  if (createdSeasonIds.length > 0) {
+    // Notícias "campeao-<slug>" geradas pelo close_season — resolve slugs em lote
+    const { data: seasons } = await admin
       .from("seasons")
       .select("slug")
-      .eq("id", seasonId)
-      .maybeSingle();
-    if (s?.slug) {
-      await admin.from("news_posts").delete().eq("slug", `campeao-${s.slug}`);
+      .in("id", createdSeasonIds);
+    const champNewsSlugs = (seasons ?? [])
+      .map((s) => s.slug)
+      .filter((slug): slug is string => Boolean(slug))
+      .map((slug) => `campeao-${slug}`);
+    if (champNewsSlugs.length > 0) {
+      await admin.from("news_posts").delete().in("slug", champNewsSlugs);
     }
-    // Notificações geradas pelo close_season (coluna payload jsonb)
-    await admin
-      .from("notifications")
-      .delete()
-      .like("payload::text", `%${seasonId}%`);
-    // Conquistas de season_champion vinculadas a usuários de teste
-    for (const u of created) {
+
+    // Notificações geradas pelo close_season (like não aceita lote — uma por season)
+    for (const seasonId of createdSeasonIds) {
+      await admin
+        .from("notifications")
+        .delete()
+        .like("payload::text", `%${seasonId}%`);
+    }
+
+    await admin.from("season_standings").delete().in("season_id", createdSeasonIds);
+    await admin.from("seasons").delete().in("id", createdSeasonIds);
+  }
+
+  // Conquistas season_champion dos usuários de teste — user_achievements
+  // referencia o achievement por achievement_id (FK), então resolvemos a id 1x.
+  if (created.length > 0) {
+    const { data: champAch } = await admin
+      .from("achievements")
+      .select("id")
+      .eq("key", "season_champion")
+      .maybeSingle();
+    if (champAch?.id) {
       await admin
         .from("user_achievements")
         .delete()
-        .eq("user_id", u.id)
-        .eq("achievement_key", "season_champion");
+        .in("user_id", created.map((u) => u.id))
+        .eq("achievement_id", champAch.id);
     }
-    await admin.from("season_standings").delete().eq("season_id", seasonId);
-    await admin.from("seasons").delete().eq("id", seasonId);
   }
+
   for (const u of created) {
     await deleteTestUser(u.id);
   }
-});
+}, 60_000);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -637,11 +655,13 @@ describe("Seasons — achievement season_champion é concedido ao campeão", () 
     await admin.rpc("recalc_season_standings", { p_season_id: season.id });
     await admin.rpc("close_season", { p_season_id: season.id, p_actor_id: null });
 
+    // user_achievements referencia o achievement por achievement_id (FK), não
+    // por chave textual — então fazemos join na tabela achievements pela key.
     const { data: achievement } = await admin
       .from("user_achievements")
-      .select("achievement_key, user_id")
+      .select("user_id, achievements!inner(key)")
       .eq("user_id", winner.id)
-      .eq("achievement_key", "season_champion")
+      .eq("achievements.key", "season_champion")
       .maybeSingle();
 
     expect(achievement).not.toBeNull();
