@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/client";
+import { createAdminClient } from "@/utils/supabase/admin";
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
 import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, TournamentStatus } from "../types";
 import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow, standingFromRow } from "../types";
@@ -30,7 +31,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async createTournament(input: CreateTournamentInput) {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client.from("tournaments").insert({
       name: input.name, format: input.format, best_of: input.bestOf,
       third_place_match: input.thirdPlaceMatch ?? true,
@@ -46,7 +47,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async updateTournament(id, patch) {
-    const client = createClient();
+    const client = createAdminClient();
     const row: Record<string, unknown> = {};
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.status !== undefined) row.status = patch.status;
@@ -58,7 +59,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async setThirdPlaceMatch(tournamentId, enabled) {
-    const client = createClient();
+    const client = createAdminClient();
     // Atualiza o flag. A criação/remoção da partida 'placement' no bracket é
     // tratada pelo lado do banco (RPC generate_bracket / migration) — ver
     // supabase/migrations do third_place_match.
@@ -73,7 +74,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async addParticipants(tournamentId, items: AddParticipantInput[]) {
-    const client = createClient();
+    const client = createAdminClient();
     const rows = items.map((i) => ({
       tournament_id: tournamentId, user_id: i.userId ?? null, guest_name: i.guestName ?? null,
       flag: i.flag ?? null, avatar_url: i.avatarUrl ?? null, color: i.color ?? null,
@@ -85,13 +86,13 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async removeParticipant(participantId) {
-    const client = createClient();
+    const client = createAdminClient();
     const { error } = await client.from("tournament_participants").delete().eq("id", participantId);
     if (error) throw error;
   },
 
   async saveSeeding(tournamentId, order: SaveSeedingInput[]) {
-    const client = createClient();
+    const client = createAdminClient();
     await Promise.all(
       order.map((s) => {
         // Só atualiza grupo/pote quando enviados — reordenar seeds não pode
@@ -105,7 +106,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async generateBracket(tournamentId, method: SeedingMethod) {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client.rpc("generate_bracket", {
       p_tournament: tournamentId, p_method: method,
     });
@@ -114,7 +115,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async reportResult(matchId, input: ReportResultInput) {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client.rpc("report_match_result", {
       p_match: matchId, p_a: input.scoreA, p_b: input.scoreB, p_sets: input.sets ?? null,
     });
@@ -123,13 +124,13 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async revertResult(matchId) {
-    const client = createClient();
+    const client = createAdminClient();
     const { error } = await client.rpc("revert_match_result", { p_match: matchId });
     if (error) throw error;
   },
 
   async walkover(matchId, winnerParticipantId) {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client.rpc("walkover", {
       p_match: matchId, p_winner: winnerParticipantId,
     });
@@ -148,13 +149,13 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async closeGroupStage(tournamentId) {
-    const client = createClient();
+    const client = createAdminClient();
     const { error } = await client.rpc("close_group_stage", { p_tournament: tournamentId });
     if (error) throw error;
   },
 
   async finishTournament(tournamentId, championParticipantId) {
-    const client = createClient();
+    const client = createAdminClient();
     const part = await client
       .from("tournament_participants")
       .select("user_id, guest_name")
@@ -235,7 +236,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async createEvent(input: CreateEventInput) {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client.from("tournament_events").insert({
       name: input.name, event_date: input.eventDate ?? null, venue: input.venue ?? null,
       season_id: input.seasonId ?? null, created_by: input.createdBy,
@@ -245,7 +246,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async updateEvent(eventId, patch) {
-    const client = createClient();
+    const client = createAdminClient();
     const row: Record<string, unknown> = {};
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.eventDate !== undefined) row.event_date = patch.eventDate;
@@ -257,7 +258,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async addDivision(eventId, input: AddDivisionInput) {
-    const client = createClient();
+    const client = createAdminClient();
     const ev = await client.from("tournament_events").select("name, season_id, created_by, branding").eq("id", eventId).single();
     if (ev.error || !ev.data) throw new Error("Evento não encontrado");
     const countRes = await client.from("tournaments").select("id", { count: "exact", head: true }).eq("event_id", eventId);
@@ -272,7 +273,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async setDivisionOrder(eventId, order) {
-    const client = createClient();
+    const client = createAdminClient();
     await Promise.all(
       order.map((o) =>
         client.from("tournaments").update({ division_order: o.divisionOrder }).eq("id", o.tournamentId).eq("event_id", eventId),
