@@ -65,6 +65,7 @@ export default function AdminTournamentPage() {
   const [thirdPlaceConfirmOpen, setThirdPlaceConfirmOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [localParticipants, setLocalParticipants] = useState<TournamentParticipant[] | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: tournamentKeys.detail(id) });
@@ -148,18 +149,30 @@ export default function AdminTournamentPage() {
   }
 
   async function handleGenerate() {
+    setActionError(null);
     startTransition(async () => {
-      await generateBracket(id);
-      setGenerateConfirmOpen(false);
-      invalidate();
-      setTab(isRoundRobin ? "grupos" : "chave");
+      try {
+        await generateBracket(id);
+        setGenerateConfirmOpen(false);
+        invalidate();
+        setTab(isRoundRobin ? "grupos" : "chave");
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Erro ao gerar chave.");
+        setGenerateConfirmOpen(false);
+      }
     });
   }
   async function handleRegenerate() {
+    setActionError(null);
     startTransition(async () => {
-      await generateBracket(id);
-      setRegenConfirmOpen(false);
-      invalidate();
+      try {
+        await generateBracket(id);
+        setRegenConfirmOpen(false);
+        invalidate();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Erro ao regenerar chave.");
+        setRegenConfirmOpen(false);
+      }
     });
   }
   async function handleFinish() {
@@ -201,6 +214,19 @@ export default function AdminTournamentPage() {
     <>
       <ArenaShell title={tournament.name} subtitle="Admin" showBack>
         <div className="flex flex-col gap-4">
+
+          {actionError && (
+            <div
+              className="flex items-start gap-2 rounded-2xl px-4 py-3"
+              style={{
+                background: "color-mix(in srgb, var(--state-noshow) 8%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--state-noshow) 25%, transparent)",
+              }}
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--state-noshow)" }} />
+              <p className="text-sm" style={{ color: "var(--state-noshow)" }}>{actionError}</p>
+            </div>
+          )}
 
           {/* ── Banner ── */}
           <GlassCard variant="elevated" className="relative overflow-hidden">
