@@ -1,4 +1,3 @@
-import { createClient } from "@/utils/supabase/client";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
 import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, TournamentStatus } from "../types";
@@ -7,7 +6,7 @@ import { deriveEventStatus } from "../event-status";
 
 export const supabaseRepo: TournamentRepo = {
   async listTournaments(filter) {
-    const client = createClient();
+    const client = createAdminClient();
     let q = client.from("tournaments").select("*").order("created_at", { ascending: false });
     if (filter?.status) q = q.eq("status", filter.status);
     const { data, error } = await q;
@@ -16,7 +15,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async getTournament(id) {
-    const client = createClient();
+    const client = createAdminClient();
     const [tRes, pRes, mRes] = await Promise.all([
       client.from("tournaments").select("*").eq("id", id).single(),
       client.from("tournament_participants").select("*").eq("tournament_id", id),
@@ -139,7 +138,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async getStandings(tournamentId) {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client
       .from("tournament_standings")
       .select("*")
@@ -187,7 +186,7 @@ export const supabaseRepo: TournamentRepo = {
   // ── Eventos / Divisões ──
 
   async listEvents() {
-    const client = createClient();
+    const client = createAdminClient();
     const { data, error } = await client.from("tournament_events").select("*").order("event_date", { ascending: false });
     if (error) throw error;
     const evs = (data ?? []).map((r: Record<string, unknown>) => tournamentEventFromRow(r));
@@ -211,7 +210,7 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async getEvent(eventId): Promise<TournamentEventDetail | null> {
-    const client = createClient();
+    const client = createAdminClient();
     const [evRes, divRes] = await Promise.all([
       client.from("tournament_events").select("*").eq("id", eventId).single(),
       client.from("tournaments").select("*").eq("event_id", eventId).order("division_order", { ascending: true }),
