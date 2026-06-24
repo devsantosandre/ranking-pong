@@ -13,7 +13,7 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
   addParticipants, removeParticipant, saveSeeding,
   generateBracket, openRegistration, closeRegistration, finishTournament, configureGroups,
-  setThirdPlaceMatch,
+  setThirdPlaceMatch, updateTournament,
 } from "@/app/actions/tournaments";
 import { finishedSemisCount } from "@/lib/tournaments/placement";
 import { getSeedColor } from "@/lib/tournaments/seed-colors";
@@ -63,6 +63,7 @@ export default function AdminTournamentPage() {
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
   const [thirdPlaceConfirmOpen, setThirdPlaceConfirmOpen] = useState(false);
+  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [localParticipants, setLocalParticipants] = useState<TournamentParticipant[] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -302,6 +303,20 @@ export default function AdminTournamentPage() {
                 </p>
               </div>
             </GlassCard>
+          )}
+
+          {/* ── Reabrir torneio (quando encerrado) ── */}
+          {tournament.status === "finished" && (
+            <button
+              type="button"
+              onClick={() => setReopenConfirmOpen(true)}
+              disabled={isPending}
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-40"
+              style={{ background: "color-mix(in srgb, var(--state-noshow) 10%, transparent)", color: "var(--state-noshow)", border: "1px solid color-mix(in srgb, var(--state-noshow) 25%, transparent)" }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reabrir torneio
+            </button>
           )}
 
           {/* ── Ações ── */}
@@ -919,6 +934,7 @@ export default function AdminTournamentPage() {
               participants={tournament.participants}
               tournamentId={id}
               bestOf={tournament.bestOf}
+              readOnly={tournament.status === "finished"}
               onClose={() => { setSelectedMatch(null); invalidate(); }}
             />
           </div>
@@ -969,6 +985,23 @@ export default function AdminTournamentPage() {
           : "Será criada uma partida extra entre os perdedores das semifinais (3º × 4º)."}
         confirmText={tournament.thirdPlaceMatch ? "Desativar" : "Ativar"}
         variant="warning"
+        loading={isPending}
+      />
+
+      <ConfirmModal
+        isOpen={reopenConfirmOpen}
+        onClose={() => setReopenConfirmOpen(false)}
+        onConfirm={() => {
+          startTransition(async () => {
+            await updateTournament(id, { status: "active" });
+            setReopenConfirmOpen(false);
+            invalidate();
+          });
+        }}
+        title="Reabrir torneio"
+        description="O torneio voltará para status Ativo. O resultado registrado como campeão será removido e os placares poderão ser editados novamente."
+        confirmText="Reabrir"
+        variant="danger"
         loading={isPending}
       />
     </>

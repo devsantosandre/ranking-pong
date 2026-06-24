@@ -12,6 +12,7 @@ interface ScoreSheetProps {
   participants: TournamentParticipant[];
   tournamentId: string;
   bestOf: number;
+  readOnly?: boolean;
   onClose?: () => void;
 }
 
@@ -19,7 +20,7 @@ function findParticipant(participants: TournamentParticipant[], id: string | nul
   return participants.find((p) => p.id === id);
 }
 
-export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose }: ScoreSheetProps) {
+export function ScoreSheet({ match, participants, tournamentId, bestOf, readOnly = false, onClose }: ScoreSheetProps) {
   const winsNeeded = Math.ceil(bestOf / 2);
 
   const [scoreA, setScoreA] = useState(match.scoreA ?? 0);
@@ -85,6 +86,20 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   return (
     <>
       <div className="flex flex-col gap-5">
+        {/* Aviso: torneio encerrado */}
+        {readOnly && (
+          <div
+            className="rounded-xl px-3 py-2.5 text-center text-xs font-semibold"
+            style={{
+              background: "color-mix(in srgb, var(--arena-muted) 10%, transparent)",
+              color: "var(--arena-muted)",
+              border: "1px solid color-mix(in srgb, var(--arena-muted) 20%, transparent)",
+            }}
+          >
+            Torneio encerrado — apenas visualização. Reabra o torneio para editar.
+          </div>
+        )}
+
         {/* Erro de ação */}
         {actionError && (
           <div
@@ -99,7 +114,7 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
         )}
 
         {/* Aviso de edição */}
-        {isEditing && (
+        {isEditing && !readOnly && (
           <div
             className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-bold"
             style={{
@@ -178,6 +193,7 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
         </div>
 
         {/* Ações */}
+        {!readOnly && (
         <div className="flex gap-2">
           <button
             type="button"
@@ -206,9 +222,10 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
+        )}
 
-        {/* Desfazer — só quando a partida já foi lançada */}
-        {isEditing && (
+        {/* Desfazer — só quando a partida já foi lançada e torneio não encerrado */}
+        {isEditing && !readOnly && (
           <button
             type="button"
             onClick={() => setRevertOpen(true)}
