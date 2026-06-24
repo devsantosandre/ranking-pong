@@ -21,12 +21,12 @@ import { FORMAT_META } from "@/lib/tournaments/format-meta";
 import { useTournament, useTournamentStandings, tournamentKeys } from "@/lib/queries/use-tournaments";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useSyncExternalStore } from "react";
 import type { TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding } from "@/lib/tournaments/types";
 import {
   Users, Network, ListOrdered, Play, Trophy,
   Loader2, CheckCircle, UserPlus, RotateCcw,
-  X, Tv, Swords, ChevronRight, Medal,
+  X, Tv, Swords, Medal,
   CheckCheck, Crown, ClipboardList, LayoutGrid, AlertTriangle, Maximize2,
 } from "lucide-react";
 import Link from "next/link";
@@ -66,6 +66,15 @@ export default function AdminTournamentPage() {
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [localParticipants, setLocalParticipants] = useState<TournamentParticipant[] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // useSyncExternalStore com getServerSnapshot=false garante que o servidor e o
+  // primeiro render do cliente concordem no mesmo estado (false), independente
+  // do queryClient singleton ter dados em memória de navegações anteriores.
+  // Sem isso, React 19 detecta hydration mismatch e exibe "Application error".
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: tournamentKeys.detail(id) });
@@ -73,7 +82,7 @@ export default function AdminTournamentPage() {
     queryClient.invalidateQueries({ queryKey: tournamentKeys.standings(id) });
   }
 
-  if (isLoading) {
+  if (isLoading || !mounted) {
     return (
       <ArenaShell title="Torneio" showBack>
         <div className="flex items-center justify-center py-20">
@@ -112,7 +121,6 @@ export default function AdminTournamentPage() {
   // group). Antes disso, reordenar é permitido — salvar refaz a tabela/chave.
   const playedCount = tournament.matches.filter((m) => m.status === "finished").length;
   const seedsLocked = playedCount > 0;
-  const allGroupMatchesDone = groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
   const TABS = buildTabs(tournament.format);
   const pendingMatches = tournament.matches.filter(
     (m) =>
@@ -827,7 +835,7 @@ export default function AdminTournamentPage() {
                       const cA = getSeedColor(partA?.seed ?? 1);
                       const cB = getSeedColor(partB?.seed ?? 2);
                       const isWinnerA = m.winnerParticipantId === m.participantAId;
-                      const roundLabel = m.round === 1 ? "Final" : m.round === 2 ? "Semifinal" : m.round === 3 ? "Quartas de Final" : m.round === 4 ? "Oitavas de Final" : `Rodada ${m.round}`;
+                      const roundLabel = m.bracket === "placement" ? "Disputa de 3º lugar" : m.round === 1 ? "Final" : m.round === 2 ? "Semifinal" : m.round === 3 ? "Quartas de Final" : m.round === 4 ? "Oitavas de Final" : `Rodada ${m.round}`;
                       return (
                         <GlassCard key={m.id} noPadding className="flex items-center gap-3 px-3.5 py-3">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums"
