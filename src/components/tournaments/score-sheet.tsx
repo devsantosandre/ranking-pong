@@ -27,6 +27,7 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [revertOpen, setRevertOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const partA = findParticipant(participants, match.participantAId);
   const partB = findParticipant(participants, match.participantBId);
@@ -53,18 +54,30 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   const winnerChanges = isEditing && newWinnerId !== null && match.winnerParticipantId !== newWinnerId;
 
   function handleConfirm() {
+    setActionError(null);
     startTransition(async () => {
-      await reportResult(match.id, { scoreA, scoreB });
-      setConfirmOpen(false);
-      onClose?.();
+      try {
+        await reportResult(match.id, { scoreA, scoreB });
+        setConfirmOpen(false);
+        onClose?.();
+      } catch (err) {
+        setConfirmOpen(false);
+        setActionError(err instanceof Error ? err.message : "Erro ao salvar resultado.");
+      }
     });
   }
 
   function handleRevert() {
+    setActionError(null);
     startTransition(async () => {
-      await revertResult(match.id, tournamentId);
-      setRevertOpen(false);
-      onClose?.();
+      try {
+        await revertResult(match.id, tournamentId);
+        setRevertOpen(false);
+        onClose?.();
+      } catch (err) {
+        setRevertOpen(false);
+        setActionError(err instanceof Error ? err.message : "Erro ao desfazer resultado.");
+      }
     });
   }
 
@@ -74,6 +87,19 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   return (
     <>
       <div className="flex flex-col gap-5">
+        {/* Erro de ação */}
+        {actionError && (
+          <div
+            className="rounded-xl px-3 py-2.5 text-center text-xs font-semibold"
+            style={{
+              background: "color-mix(in srgb, var(--state-noshow) 12%, transparent)",
+              color: "var(--state-noshow)",
+            }}
+          >
+            {actionError}
+          </div>
+        )}
+
         {/* Aviso de edição */}
         {isEditing && (
           <div

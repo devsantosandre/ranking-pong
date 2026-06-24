@@ -115,7 +115,12 @@ export default function AdminTournamentPage() {
   const allGroupMatchesDone = groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
   const TABS = buildTabs(tournament.format);
   const pendingMatches = tournament.matches.filter(
-    (m) => (m.status === "pending" || m.status === "scheduled") && m.participantAId && m.participantBId && m.bracket !== "group",
+    (m) =>
+      (m.status === "pending" || m.status === "scheduled") &&
+      m.participantAId &&
+      m.participantBId &&
+      m.bracket !== "group" &&
+      m.bracket !== "placement",
   );
   const finishedMatches = tournament.matches.filter((m) => m.status === "finished" && (m.scoreA !== null || m.scoreB !== null) && m.bracket !== "group");
   const finalMatch = hasBracket && knockoutMatches.length > 0 ? knockoutMatches.reduce((b, m) => m.round < b.round ? m : b, knockoutMatches[0]!) : null;
