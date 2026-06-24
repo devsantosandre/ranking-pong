@@ -56,13 +56,12 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   function handleConfirm() {
     setActionError(null);
     startTransition(async () => {
-      try {
-        await reportResult(match.id, { scoreA, scoreB });
-        setConfirmOpen(false);
+      const result = await reportResult(match.id, { scoreA, scoreB });
+      setConfirmOpen(false);
+      if (result.error) {
+        setActionError(result.error);
+      } else {
         onClose?.();
-      } catch (err) {
-        setConfirmOpen(false);
-        setActionError(err instanceof Error ? err.message : "Erro ao salvar resultado.");
       }
     });
   }
@@ -70,13 +69,12 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, onClose 
   function handleRevert() {
     setActionError(null);
     startTransition(async () => {
-      try {
-        await revertResult(match.id, tournamentId);
-        setRevertOpen(false);
+      const result = await revertResult(match.id, tournamentId);
+      setRevertOpen(false);
+      if (result.error) {
+        setActionError(result.error);
+      } else {
         onClose?.();
-      } catch (err) {
-        setRevertOpen(false);
-        setActionError(err instanceof Error ? err.message : "Erro ao desfazer resultado.");
       }
     });
   }

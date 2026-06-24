@@ -149,20 +149,32 @@ const reportResultSchema = z.object({
 export async function reportResult(matchId: string, rawInput: unknown) {
   await assertAdmin();
   const input = reportResultSchema.parse(rawInput);
-  const repo = await getTournamentRepo();
-  const match = await repo.reportResult(matchId, input);
-  await logAdmin("tournament_result", { match_id: matchId, ...input });
-  invalidateTournament(match.tournamentId);
-  return { match };
+  try {
+    const repo = await getTournamentRepo();
+    const match = await repo.reportResult(matchId, input);
+    await logAdmin("tournament_result", { match_id: matchId, ...input });
+    invalidateTournament(match.tournamentId);
+    return { match, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[reportResult]", msg, err);
+    return { match: null, error: msg };
+  }
 }
 
 export async function revertResult(matchId: string, tournamentId: string) {
   await assertAdmin();
-  const repo = await getTournamentRepo();
-  await repo.revertResult(matchId);
-  await logAdmin("tournament_revert", { match_id: matchId });
-  invalidateTournament(tournamentId);
-  return { ok: true };
+  try {
+    const repo = await getTournamentRepo();
+    await repo.revertResult(matchId);
+    await logAdmin("tournament_revert", { match_id: matchId });
+    invalidateTournament(tournamentId);
+    return { ok: true, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[revertResult]", msg, err);
+    return { ok: false, error: msg };
+  }
 }
 
 export async function finishTournament(tournamentId: string, championParticipantId: string) {
