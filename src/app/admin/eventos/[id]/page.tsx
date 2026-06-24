@@ -195,11 +195,12 @@ function NewDivisionModal({ eventId, onClose }: { eventId: string; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
-      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }}
-      onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-md rounded-t-3xl p-5 sm:rounded-3xl"
+        className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-3xl sm:pb-5"
         style={{ background: "var(--popover)", border: "1px solid var(--glass-border)" }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -113,14 +113,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-[380px] space-y-6">
         {/* Logo / Branding */}
         <div className="text-center">
-          <div
-            className="mx-auto mb-4 flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl p-4"
-            style={{
-              background: "var(--glass-bg)",
-              border: "1px solid var(--glass-border)",
-              boxShadow: "var(--shadow-card)",
-            }}
-          >
+          <div className="login-logo-frame mx-auto mb-4 flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl p-4">
             <Image
               src="/smash-pong-logo.png"
               alt="Smash Pong App Logo"

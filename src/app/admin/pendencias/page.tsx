@@ -161,7 +161,7 @@ function PendingActionModal({
         : "Placar informado";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 p-4 backdrop-blur-sm sm:items-center">
       <div className="w-full max-w-md rounded-3xl border border-(--glass-border) bg-(--glass-bg-strong) p-5 shadow-xl">
         <div className="space-y-1">
           <p className="text-base font-semibold text-(--arena-foreground)">{title}</p>

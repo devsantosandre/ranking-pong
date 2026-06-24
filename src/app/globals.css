@@ -377,6 +377,18 @@
   box-shadow: var(--shadow-card);
 }
 
+/* Login — logo branca precisa de superfície escura no tema claro */
+.login-logo-frame {
+  background: color-mix(in srgb, var(--arena-primary) 86%, #120818);
+  border: 1px solid color-mix(in srgb, var(--arena-primary) 32%, transparent);
+  box-shadow: var(--shadow-card);
+}
+
+.dark .login-logo-frame {
+  background: color-mix(in srgb, var(--arena-primary) 18%, var(--arena-bg-2));
+  border: 1px solid var(--glass-border-strong);
+}
+
 .glow-active {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--state-active) 12%, transparent),

@@ -421,7 +421,7 @@ function InfoModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center">
       <button
         type="button"
         aria-label="Fechar modal"
