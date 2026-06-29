@@ -2219,12 +2219,24 @@ export async function adminResetPassword(
   // Buscar usuario
   const { data: user, error: userError } = await supabase
     .from("users")
-    .select("id, name, full_name, email")
+    .select("id, name, full_name, email, role")
     .eq("id", userId)
     .single();
 
   if (userError || !user) {
     throw new Error("Usuario nao encontrado");
+  }
+
+  // Impedir escalada de privilegio: um moderador nao pode resetar a senha de
+  // um admin ou de outro moderador (poderia fazer login na conta alvo).
+  const currentUser = await getCurrentUser();
+  if (
+    currentUser?.role !== "admin" &&
+    (user.role === "admin" || user.role === "moderator")
+  ) {
+    throw new Error(
+      "Apenas um admin pode resetar a senha de moderadores ou admins"
+    );
   }
 
   // Resetar senha (requer service_role_key)
@@ -2421,7 +2433,7 @@ export async function adminToggleUserStatus(userId: string) {
   // Buscar usuario
   const { data: user, error: userError } = await supabase
     .from("users")
-    .select("id, name, full_name, is_active")
+    .select("id, name, full_name, is_active, role")
     .eq("id", userId)
     .single();
 
@@ -2430,6 +2442,32 @@ export async function adminToggleUserStatus(userId: string) {
   }
 
   const newStatus = !user.is_active;
+
+  // Protecoes contra lockout do sistema ao DESATIVAR (newStatus === false):
+  if (newStatus === false) {
+    // 1) Admin nao pode desativar a propria conta (cairia a sessao na hora).
+    const currentUser = await getCurrentUser();
+    if (currentUser?.id === userId) {
+      throw new Error("Voce nao pode desativar a propria conta");
+    }
+
+    // 2) Nao desativar o ultimo admin ativo (ninguem mais acessaria o /admin).
+    if (user.role === "admin") {
+      const { count, error: countError } = await supabase
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "admin")
+        .eq("is_active", true);
+
+      if (countError) {
+        throw new Error("Erro ao verificar administradores ativos");
+      }
+
+      if ((count ?? 0) <= 1) {
+        throw new Error("Nao e possivel desativar o ultimo admin ativo");
+      }
+    }
+  }
 
   // Atualizar status
   const { error: updateError } = await supabase

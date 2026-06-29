@@ -1073,20 +1073,22 @@ export default function AdminJogadoresPage() {
                             </Button>
                           )}
 
-                          {/* Ativar/Desativar */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className={`w-full ${
-                              player.is_active
-                                ? "text-red-600 hover:bg-red-50"
-                                : "text-green-600 hover:bg-green-50"
-                            }`}
-                            onClick={() => handleToggleStatusClick(player)}
-                          >
-                            <Power className="mr-2 h-4 w-4" />
-                            {player.is_active ? "Desativar" : "Ativar"}
-                          </Button>
+                          {/* Ativar/Desativar (não permite desativar a própria conta) */}
+                          {!(isCurrentUser && player.is_active) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={`w-full ${
+                                player.is_active
+                                  ? "text-red-600 hover:bg-red-50"
+                                  : "text-green-600 hover:bg-green-50"
+                              }`}
+                              onClick={() => handleToggleStatusClick(player)}
+                            >
+                              <Power className="mr-2 h-4 w-4" />
+                              {player.is_active ? "Desativar" : "Ativar"}
+                            </Button>
+                          )}
 
                           {/* Ocultar/Mostrar no Ranking */}
                           <Button
