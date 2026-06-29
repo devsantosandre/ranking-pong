@@ -3,8 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/lib/auth-store";
+import { loginAction } from "@/app/actions/auth";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -21,9 +21,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const supabase = createClient();
 
   useEffect(() => {
     document.title = buildBrowserTitle("Entrar");
@@ -53,18 +50,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setMessage(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const result = await loginAction(email, password);
 
-    if (error) {
+    if (result.error) {
       if (typeof window !== "undefined") {
         sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
       }
-      setError(error.message);
+      setError(result.error);
       setLoading(false);
       return;
     }
@@ -149,18 +142,11 @@ export default function LoginPage() {
               </div>
             )}
 
-            {message && (
-              <div className="rounded-xl bg-green-500/10 p-3 text-sm text-green-600">
-                {message}
-              </div>
-            )}
-
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Entrar
             </Button>
           </form>
-
         </div>
 
         {/* Footer */}

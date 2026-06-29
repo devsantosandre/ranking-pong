@@ -37,6 +37,14 @@ export function ConfirmModal({
 
   useEffect(() => {
     if (isOpen) {
+      // Ao (re)abrir, garante estado limpo: cancela qualquer fechamento
+      // pendente de um ciclo anterior (timeout fantasma) e zera o "isClosing"
+      // remanescente. Sem isto, o modal reabre invisível (opacity-0) e/ou é
+      // fechado sozinho pelo timeout antigo, travando as ações até recarregar.
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
       const frameId = requestAnimationFrame(() => {
         setIsClosing(false);
       });

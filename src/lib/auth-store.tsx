@@ -1,7 +1,12 @@
 "use client";
 
 import { createClient } from "@/utils/supabase/client";
-import type { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
+import type {
+  User,
+  AuthChangeEvent,
+  Session,
+  RealtimePostgresChangesPayload,
+} from "@supabase/supabase-js";
 import {
   createContext,
   type ReactNode,
@@ -177,6 +182,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (profile?.is_active === false) {
+        await safeSignOut("local");
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
       setUser({
         id: authUser.id,
         name:
@@ -338,6 +350,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [supabase, fetchUserProfile, safeSignOut]);
+
+  // Realtime: derruba a sessão imediatamente se o admin desativar a conta,
+  // sem esperar o usuário recarregar a página. Escuta apenas a própria linha.
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`user-active-watch-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "users",
+          filter: `id=eq.${userId}`,
+        },
+        (payload: RealtimePostgresChangesPayload<{ is_active: boolean | null }>) => {
+          const next = payload.new as { is_active?: boolean | null };
+          if (next?.is_active === false) {
+            void safeSignOut("local");
+            setUser(null);
+            setLoading(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, user?.id, safeSignOut]);
 
   const logout = useCallback(async () => {
     setUser(null);

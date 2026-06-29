@@ -168,33 +168,47 @@ export default function AdminJogadoresPage() {
     void loadUsers(0, true);
   }, [loadUsers]);
 
-  // Busca server-side quando tem 2+ caracteres
+  // Executa a busca server-side (reutilizável: debounce + refresh pós-ação)
+  const runSearch = useCallback(async () => {
+    if (searchInput.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const filters = {
+        status: statusFilter !== "todos" ? statusFilter : undefined,
+        role: roleFilter !== "todos" ? roleFilter : undefined,
+      };
+      const results = await adminSearchUsers(searchInput, filters);
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [searchInput, statusFilter, roleFilter]);
+
+  // Busca server-side quando tem 2+ caracteres (debounce de 300ms)
   useEffect(() => {
     if (!isSearching) {
       setSearchResults([]);
       return;
     }
-
-    const searchUsers = async () => {
-      setSearchLoading(true);
-      try {
-        const filters = {
-          status: statusFilter !== "todos" ? statusFilter : undefined,
-          role: roleFilter !== "todos" ? roleFilter : undefined,
-        };
-        const results = await adminSearchUsers(searchInput, filters);
-        setSearchResults(results);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
-      }
-    };
-
-    // Debounce de 300ms
-    const timeoutId = setTimeout(searchUsers, 300);
+    const timeoutId = setTimeout(() => {
+      void runSearch();
+    }, 300);
     return () => clearTimeout(timeoutId);
-  }, [searchInput, statusFilter, roleFilter, isSearching]);
+  }, [isSearching, runSearch]);
+
+  // Recarrega a lista visível após uma ação. Sem isto, ações feitas sobre um
+  // resultado de busca não refletem na tela (só a lista normal era recarregada).
+  const refreshAfterAction = useCallback(async () => {
+    await Promise.all([
+      loadUsers(0, true),
+      searchInput.length >= 2 ? runSearch() : Promise.resolve(),
+    ]);
+  }, [loadUsers, runSearch, searchInput]);
 
   // Escolhe qual lista mostrar
   const displayUsers = isSearching ? searchResults : users;
@@ -308,7 +322,7 @@ export default function AdminJogadoresPage() {
       setShowAddForm(false);
       setNewUser({ name: "", email: "", password: "" });
       setAddErrors({ name: "", email: "", password: "" });
-      await loadUsers(0, true);
+      await refreshAfterAction();
     } catch (err) {
       setAddErrors({
         ...addErrors,
@@ -349,7 +363,7 @@ export default function AdminJogadoresPage() {
       setRatingErrors({ rating: "", reason: "" });
       // Invalidar queries de ranking pois rating mudou
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      await loadUsers(0, true);
+      await refreshAfterAction();
     } catch (err) {
       setRatingErrors({
         ...ratingErrors,
@@ -485,7 +499,7 @@ export default function AdminJogadoresPage() {
         }
       }
 
-      await loadUsers(0, true);
+      await refreshAfterAction();
     } catch (err) {
       // Mostrar erro ao usuário
       const errorMessage = err instanceof Error ? err.message : "Erro ao executar acao";
