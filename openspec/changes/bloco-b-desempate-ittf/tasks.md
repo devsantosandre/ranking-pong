@@ -18,7 +18,7 @@
 - [x] 3.1 `GroupStanding` ganha `gamePointsWon`/`gamePointsLost` (derivados de `m.sets`) + `standingFromRow` default 0.
 - [x] 3.2 Reescrever `computeGroupStandings`: pontos de game de `m.sets`; pontos 3/vitória (mantido).
 - [x] 3.3 Implementar `breakTies(tied, matches)` recursivo/progressivo (pontos → razão de sets → razão de pontos, só entre empatados) + `ratio(w,l)`.
-- [~] 3.4 **[TS]** DUAS metades: (a) ✅ `getStandings` calcula no TS (`computeGroupStandings`) — feito no commit b68e334; (b) ⏳ **PENDENTE** mover a decisão de classificados do SQL para a action (ao fechar o grupo, calcular no TS e gravar os slots do KO, incl. avanço por bye) + desabilitar auto-avanço SQL. Revalidar em HML.
+- [x] 3.4 **[TS]** DUAS metades: (a) ✅ `getStandings` calcula no TS (`computeGroupStandings`) — feito no commit b68e334; (b) ✅ `supabase-repo.advanceGroupQualifiers` decide os classificados no TS (ITTF/CBTM) e grava os slots do KO (incl. avanço por bye), chamado em `reportResult`/`walkover`/`closeGroupStage`; auto-avanço SQL vira no-op (migration `20260701000100`). Revalidar em HML (task 6.3).
 
 ## 4. Implementação — captura de sets e validação
 
@@ -28,13 +28,13 @@
 
 ## 5. Implementação — UI da classificação
 
-- [ ] 5.1 Invocar a skill `arena-design-pattern` antes de mexer na UI.
-- [ ] 5.2 `standings-table.tsx` + tabela do `GroupsTab`: exibir **pontos de game** (ganhos–perdidos) e sinalizar/tooltip quando a posição foi decidida por desempate; legenda do critério.
+- [x] 5.1 Invocar a skill `arena-design-pattern` antes de mexer na UI.
+- [x] 5.2 `standings-table.tsx` + tabela do `GroupsTab`: coluna **PG** (pontos de game ganhos–perdidos), marcador **D** + tooltip nas linhas empatadas em pontos (posição via desempate ITTF) e legenda do critério. Tokens `--state-scheduled`; tsc/lint/grep §3.1 limpos.
 
 ## 6. Verificação
 
-- [ ] 6.1 `npx vitest run` — cenários 2.x verdes.
-- [ ] 6.2 `npm run lint` e `npm run build` sem erros nos arquivos tocados.
-- [ ] 6.3 Se houver migration SQL: aplicar e validar **em HML** (não prod) — E2E com empate triplo confirmando exibição == classificados (auto-avanço).
-- [ ] 6.4 `openspec validate bloco-b-desempate-ittf` ok; atualizar `design.md` com a conclusão do checkpoint 1.1/1.2.
-- [ ] 6.5 Smoke manual: lançar um grupo com empate e conferir classificação + tooltip de desempate.
+- [x] 6.1 `npx vitest run` — 137 testes verdes (cenários 2.x de desempate incluídos).
+- [x] 6.2 `npm run lint` e `npm run build` (exit 0) sem erros nos arquivos tocados; tsc limpo; grep §3.1 (tokens) limpo na UI.
+- [ ] 6.3 **HANDOFF (usuário):** aplicar/validar em **HML** (não prod) a migration `20260701000100` — E2E com empate confirmando exibição == classificados (auto-avanço TS). MCP `supabase-hml__query` é read-only; aplicar via túnel/`psql` com ROLLBACK, estilo Bloco A.
+- [x] 6.4 `openspec validate bloco-b-desempate-ittf` ok; `design.md` atualizado (decisão B implementada + checkpoint 1.1/1.2 concluído).
+- [ ] 6.5 **HANDOFF (usuário):** smoke manual — lançar um grupo com empate e conferir classificação + coluna PG + marcador/tooltip de desempate (D).

@@ -5,6 +5,106 @@ import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFro
 import { computeGroupStandings } from "../standings";
 import { deriveEventStatus } from "../event-status";
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+type GroupSlotRow = { group_id: string; rank: number; match_id: string; match_slot: number };
+
+/**
+ * Bloco B — auto-avanço dos classificados de um grupo, decidido no TS (fonte
+ * única ITTF/CBTM via `computeGroupStandings`, com o desempate progressivo).
+ * Substitui o auto-avanço SQL (`tournament_auto_advance_group`, agora no-op na
+ * migration 20260701000100): a classificação EXIBIDA e os CLASSIFICADOS que
+ * avançam passam a usar exatamente o mesmo critério, sem divergência.
+ *
+ * Espelha `mock-repo.autoAdvanceGroup`: só age com o grupo terminado, preenche
+ * os slots do mata-mata (`tournament_group_slots`) com os classificados e trata
+ * o avanço por BYE (jogo de 1ª rodada com um único slot no total → finaliza e
+ * propaga o classificado para a rodada seguinte).
+ */
+async function advanceGroupQualifiers(client: AdminClient, tournamentId: string, groupId: string) {
+  const [pRes, mRes, sRes] = await Promise.all([
+    client.from("tournament_participants").select("*").eq("tournament_id", tournamentId),
+    client.from("tournament_matches").select("*").eq("tournament_id", tournamentId),
+    client.from("tournament_group_slots").select("group_id, rank, match_id, match_slot").eq("tournament_id", tournamentId),
+  ]);
+  if (pRes.error) throw pRes.error;
+  if (mRes.error) throw mRes.error;
+  if (sRes.error) throw sRes.error;
+
+  const participants = (pRes.data ?? []).map((r: Record<string, unknown>) => participantFromRow(r));
+  const matches = (mRes.data ?? []).map((r: Record<string, unknown>) => matchFromRow(r));
+  const slots = (sRes.data ?? []) as GroupSlotRow[];
+
+  // Grupo ainda em andamento (ou sem partidas) → não avança nada.
+  const groupMatches = matches.filter((m) => m.bracket === "group" && m.groupId === groupId);
+  if (groupMatches.length === 0 || groupMatches.some((m) => m.status !== "finished")) return;
+
+  // Classificação ITTF/CBTM deste grupo (position = rank + 1).
+  const standings = computeGroupStandings(matches, participants)
+    .filter((s) => s.groupId === groupId)
+    .sort((a, b) => a.position - b.position);
+
+  const matchById = new Map(matches.map((m) => [m.id, m]));
+  // Quantos classificados apontam para cada partida de KO — total == 1 ⇒ BYE.
+  const slotCountByMatch = new Map<string, number>();
+  for (const s of slots) slotCountByMatch.set(s.match_id, (slotCountByMatch.get(s.match_id) ?? 0) + 1);
+
+  const groupSlots = slots.filter((s) => s.group_id === groupId);
+
+  // 1) Preenche os slots do mata-mata com os classificados deste grupo.
+  for (const slot of groupSlots) {
+    const qualifier = standings[slot.rank];
+    if (!qualifier) continue;
+    const col = slot.match_slot === 0 ? "participant_a_id" : "participant_b_id";
+    const { error } = await client.from("tournament_matches").update({ [col]: qualifier.participantId }).eq("id", slot.match_id);
+    if (error) throw error;
+    const local = matchById.get(slot.match_id);
+    if (local) {
+      if (slot.match_slot === 0) local.participantAId = qualifier.participantId;
+      else local.participantBId = qualifier.participantId;
+    }
+  }
+
+  // 2) Ativa os jogos com os dois lados preenchidos (pending → scheduled).
+  for (const slot of groupSlots) {
+    const m = matchById.get(slot.match_id);
+    if (m && m.participantAId && m.participantBId && m.status === "pending") {
+      const { error } = await client.from("tournament_matches").update({ status: "scheduled" }).eq("id", m.id).eq("status", "pending");
+      if (error) throw error;
+      m.status = "scheduled";
+    }
+  }
+
+  // 3) Auto-avanço por BYE: jogo de 1ª rodada com um único slot no total — o
+  // classificado avança direto e é propagado para a próxima rodada.
+  for (const slot of groupSlots) {
+    if ((slotCountByMatch.get(slot.match_id) ?? 0) !== 1) continue;
+    const m = matchById.get(slot.match_id);
+    if (!m || m.winnerParticipantId) continue;
+    const winner = m.participantAId ?? m.participantBId;
+    if (!winner) continue;
+    const { error: fErr } = await client.from("tournament_matches")
+      .update({ winner_participant_id: winner, status: "finished", finished_at: new Date().toISOString() })
+      .eq("id", m.id);
+    if (fErr) throw fErr;
+    m.winnerParticipantId = winner;
+    m.status = "finished";
+
+    if (!m.nextMatchId) continue;
+    const col = m.nextMatchSlot === 0 ? "participant_a_id" : "participant_b_id";
+    const { error: nErr } = await client.from("tournament_matches").update({ [col]: winner }).eq("id", m.nextMatchId);
+    if (nErr) throw nErr;
+    const next = matchById.get(m.nextMatchId);
+    if (!next) continue;
+    if (m.nextMatchSlot === 0) next.participantAId = winner;
+    else next.participantBId = winner;
+    if (next.participantAId && next.participantBId && next.status === "pending") {
+      const { error: aErr } = await client.from("tournament_matches").update({ status: "scheduled" }).eq("id", next.id).eq("status", "pending");
+      if (aErr) throw aErr;
+      next.status = "scheduled";
+    }
+  }
+}
+
 export const supabaseRepo: TournamentRepo = {
   async listTournaments(filter) {
     const client = createAdminClient();
@@ -121,7 +221,13 @@ export const supabaseRepo: TournamentRepo = {
       p_match: matchId, p_a: input.scoreA, p_b: input.scoreB, p_sets: input.sets ?? null,
     });
     if (error) throw error;
-    return matchFromRow(data as Record<string, unknown>);
+    const match = matchFromRow(data as Record<string, unknown>);
+    // Bloco B: a decisão de quem avança do grupo é feita no TS (ITTF/CBTM). O
+    // auto-avanço SQL virou no-op (migration 20260701000100).
+    if (match.bracket === "group" && match.groupId) {
+      await advanceGroupQualifiers(client, match.tournamentId, match.groupId);
+    }
+    return match;
   },
 
   async revertResult(matchId) {
@@ -136,7 +242,12 @@ export const supabaseRepo: TournamentRepo = {
       p_match: matchId, p_winner: winnerParticipantId,
     });
     if (error) throw error;
-    return matchFromRow(data as Record<string, unknown>);
+    const match = matchFromRow(data as Record<string, unknown>);
+    // Bloco B: W.O. em jogo de grupo também dispara o avanço no TS (ver reportResult).
+    if (match.bracket === "group" && match.groupId) {
+      await advanceGroupQualifiers(client, match.tournamentId, match.groupId);
+    }
+    return match;
   },
 
   async getStandings(tournamentId) {
@@ -157,8 +268,17 @@ export const supabaseRepo: TournamentRepo = {
 
   async closeGroupStage(tournamentId) {
     const client = createAdminClient();
-    const { error } = await client.rpc("close_group_stage", { p_tournament: tournamentId });
+    // Bloco B: fecha os grupos avançando os classificados no TS (fonte única
+    // ITTF/CBTM). Não usa mais o RPC close_group_stage, cujo avanço SQL é no-op.
+    const { data, error } = await client
+      .from("tournament_group_slots")
+      .select("group_id")
+      .eq("tournament_id", tournamentId);
     if (error) throw error;
+    const groupIds = Array.from(new Set((data ?? []).map((r: { group_id: string }) => r.group_id))).sort();
+    for (const groupId of groupIds) {
+      await advanceGroupQualifiers(client, tournamentId, groupId);
+    }
   },
 
   async finishTournament(tournamentId, championParticipantId) {

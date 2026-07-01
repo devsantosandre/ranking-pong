@@ -1101,6 +1101,10 @@ function GroupsTab({
       {/* Classificação por grupo */}
       {groupIds.map((gId) => {
         const groupStandings = standings.filter((s) => s.groupId === gId).sort((a, b) => a.position - b.position);
+        // Pontos que empataram entre 2+ jogadores → ordem definida pelo desempate ITTF.
+        const gPointsCount = new Map<number, number>();
+        for (const s of groupStandings) gPointsCount.set(s.points, (gPointsCount.get(s.points) ?? 0) + 1);
+        const gTiedPoints = new Set(Array.from(gPointsCount.entries()).filter(([, c]) => c > 1).map(([p]) => p));
         const gMatches = groupMatches.filter((m) => m.groupId === gId);
         const pendingInGroup = gMatches.filter((m) => m.status !== "finished");
         const groupDone = gMatches.length > 0 && pendingInGroup.length === 0;
@@ -1132,6 +1136,7 @@ function GroupsTab({
                 <span className="w-8 text-center">V</span>
                 <span className="w-8 text-center">D</span>
                 <span className="w-12 text-center">Sets</span>
+                <span className="w-12 text-center" title="Pontos de game (ganhos–perdidos)">PG</span>
                 <span className="w-10 text-center">Pts</span>
               </div>
               {groupStandings.length === 0 ? (
@@ -1155,15 +1160,30 @@ function GroupsTab({
                       <span className="truncate text-sm font-semibold text-(--arena-foreground)">
                         {part?.guestName ?? `Jogador ${s.participantId}`}
                       </span>
+                      {gTiedPoints.has(s.points) && (
+                        <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                          style={{ background: "color-mix(in srgb,var(--state-scheduled) 15%,transparent)", color: "var(--state-scheduled)" }}
+                          title="Empate em pontos — posição definida pelo desempate ITTF (razão de sets → razão de pontos de game)">
+                          D
+                        </span>
+                      )}
                     </div>
                     <span className="w-8 text-center text-sm tabular-nums" style={{ color: "var(--state-played)" }}>{s.wins}</span>
                     <span className="w-8 text-center text-sm tabular-nums" style={{ color: "var(--state-noshow)" }}>{s.losses}</span>
                     <span className="w-12 text-center text-xs tabular-nums text-(--arena-muted)">{s.setsWon}–{s.setsLost}</span>
+                    <span className="w-12 text-center text-xs tabular-nums text-(--arena-muted)">{s.gamePointsWon}–{s.gamePointsLost}</span>
                     <span className="w-10 text-center text-sm font-black tabular-nums text-(--arena-foreground)"
                       style={{ fontFamily: "var(--font-display)" }}>{s.points}</span>
                   </div>
                 );
               })}
+              {gTiedPoints.size > 0 && (
+                <p className="px-3 py-2 text-[10px] leading-snug text-(--arena-muted)"
+                  style={{ borderTop: "1px solid var(--glass-border)" }}>
+                  <span className="font-bold text-(--state-scheduled)">D</span> = empate em pontos, posição definida
+                  pelo desempate ITTF (razão de sets → razão de pontos de game). PG = pontos de game.
+                </p>
+              )}
             </GlassCard>
 
             {/* Partidas do grupo */}

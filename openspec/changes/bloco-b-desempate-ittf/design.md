@@ -49,10 +49,13 @@ Regra oficial (ITTF 3.7.6 / CBTM): pontos de vitória (2/1/0); em empate, olhar 
 - **Classificados (auto-avanço):** função SQL `tournament_group_standings(p_tournament, p_group_id)` (`language sql`), usada pelo `tournament_auto_advance_group` (reescrito no Bloco A) para promover os top N. Mesmo critério simplificado (`points desc, saldo desc, sets_won desc`).
 - **Implicação:** o desempate ITTF + pontos 2/1/0 + pontos de game precisam entrar **nesses dois pontos SQL** para exibição e auto-avanço concordarem. **Porém**, o desempate ITTF é **progressivo/recursivo** (fixa subconjunto distinto, recomeça entre os restantes) — inexprimível numa view (single SELECT) e difícil/arriscado em PL/pgSQL. Isso força uma **decisão de arquitetura** (ver abaixo).
 
-## Decisão de arquitetura pendente (onde mora o desempate)
+## Decisão de arquitetura (onde mora o desempate) — RESOLVIDO: opção B
 
 Duas saídas coerentes (a híbrida foi rejeitada por causar divergência exibição × classificados):
 - **A) Tudo em SQL:** transformar `tournament_standings` (view→função RPC) e `tournament_group_standings` para chamar um helper PL/pgSQL com o desempate progressivo; `getStandings` passa a chamar via RPC. Mantém o auto-avanço do Bloco A intacto. Custo: PL/pgSQL recursivo difícil, testável só em HML.
 - **B) Tudo em TS (fonte única testável):** `getStandings` calcula no TS via `computeGroupStandings`; e a decisão de classificados sai do SQL para a action (ao fechar o grupo, calcula no TS e grava os slots do mata-mata, inclusive avanço por bye). Custo: refatorar o fluxo de auto-avanço (toca a lógica de byes do Bloco A). Ganho: uma só implementação, 100% coberta por Vitest, sem divergência.
 
-**Recomendação:** B (fonte única no TS), pela testabilidade do desempate progressivo. A definir com o usuário antes de codar 3.4.
+**Decisão do usuário: B (fonte única no TS).** Implementado:
+- `supabase-repo.getStandings` calcula no TS (`computeGroupStandings`) — commit b68e334 (3.4a).
+- `supabase-repo.advanceGroupQualifiers` decide os classificados no TS (ITTF/CBTM) e grava os slots do KO, incl. avanço por BYE; chamado em `reportResult`/`walkover`/`closeGroupStage` (3.4b).
+- Auto-avanço SQL (`tournament_auto_advance_group`) vira NO-OP idempotente — migration `20260701000100_tournament_auto_advance_group_noop.sql` (⚠️ validar em HML, aplicar à mão; não aplicar em prod automaticamente).

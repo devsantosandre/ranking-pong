@@ -18,7 +18,14 @@ Decisões do usuário: **arquitetura tudo-em-TS**; **pontos mantidos em 3/vitór
 - Ranking exibido = view SQL `tournament_standings`; classificados (auto-avanço) = função SQL `tournament_group_standings` (chamada por `tournament_auto_advance_group`, reescrita no Bloco A). Ambos usavam critério simplificado.
 - O **mock** já usa `computeGroupStandings` tanto p/ display quanto p/ auto-avanço → mock já é ITTF-consistente. Só a **produção SQL** diverge.
 
-## PRÓXIMO PASSO — task 3.4(b): classificados via TS (a parte que falta)
+## ✅ ESTADO ATUAL (atualizado) — só falta validar em HML + arquivar
+Implementação **concluída na develop** (18/20 tasks; falta só 6.3 HML e 6.5 smoke, ambos handoff do usuário):
+- **3.4(b) feito:** `supabase-repo.advanceGroupQualifiers` decide os classificados no TS (ITTF/CBTM) e grava os slots do KO (incl. bye); ligado em `reportResult`/`walkover`/`closeGroupStage`. Auto-avanço SQL vira NO-OP: migration `20260701000100_tournament_auto_advance_group_noop.sql` (⚠️ NÃO aplicada).
+- **5 (UI) feito:** coluna **PG** (pontos de game) + marcador **D**/tooltip + legenda em `standings-table.tsx` e na tabela do `GroupsTab`. Tokens Arena; tsc/lint/grep §3.1 limpos.
+- **6:** vitest 137✓, lint✓, build exit 0✓, `openspec validate` ok✓. **Falta:** 6.3 aplicar/validar a migration em HML (túnel+psql, ROLLBACK) e 6.5 smoke manual.
+- **Próximo:** validar em HML → `opsx:archive` do Bloco A e do Bloco B.
+
+## (histórico) PRÓXIMO PASSO — task 3.4(b): classificados via TS (a parte que falta)
 **Problema:** display já é TS-ITTF, mas os CLASSIFICADOS que avançam ainda saem do SQL (`tournament_group_standings`, critério antigo) → podem divergir do exibido em caso de empate. Consertar movendo a decisão p/ o TS.
 
 **Plano sugerido:**

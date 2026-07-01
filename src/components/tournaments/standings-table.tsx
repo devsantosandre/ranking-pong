@@ -43,7 +43,14 @@ export function StandingsTable({
 
   return (
     <div className="flex flex-col gap-4">
-      {groups.map(([groupId, rows], gi) => (
+      {groups.map(([groupId, rows], gi) => {
+        // Pontos de vitória que empataram entre 2+ jogadores → a ordem entre eles
+        // saiu do desempate oficial ITTF (razão de sets → razão de pontos de game).
+        const pointsCount = new Map<number, number>();
+        for (const r of rows) pointsCount.set(r.points, (pointsCount.get(r.points) ?? 0) + 1);
+        const tiedPoints = new Set(Array.from(pointsCount.entries()).filter(([, c]) => c > 1).map(([p]) => p));
+
+        return (
         <div
           key={groupId}
           className="glass overflow-hidden rounded-2xl"
@@ -65,6 +72,7 @@ export function StandingsTable({
               <span className="w-6 text-center">V</span>
               <span className="w-6 text-center">D</span>
               <span className="w-8 text-center">Sets</span>
+              <span className="w-10 text-center" title="Pontos de game (ganhos–perdidos)">PG</span>
               <span className="w-6 text-center">Pts</span>
             </div>
           </div>
@@ -74,6 +82,7 @@ export function StandingsTable({
             const isQualifying = row.position <= qualifyingSpots;
             const name = getParticipantName(row.participantId, participants);
             const flag = getParticipantFlag(row.participantId, participants);
+            const tieBroken = tiedPoints.has(row.points);
 
             return (
               <motion.div
@@ -124,6 +133,18 @@ export function StandingsTable({
                       Q
                     </span>
                   )}
+                  {tieBroken && (
+                    <span
+                      className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                      style={{
+                        background: "color-mix(in srgb,var(--state-scheduled) 15%,transparent)",
+                        color: "var(--state-scheduled)",
+                      }}
+                      title="Empate em pontos — posição definida pelo desempate ITTF (razão de sets → razão de pontos de game)"
+                    >
+                      D
+                    </span>
+                  )}
                 </div>
 
                 {/* Stats */}
@@ -134,13 +155,28 @@ export function StandingsTable({
                   <span className="w-8 text-center">
                     {row.setsWon}-{row.setsLost}
                   </span>
+                  <span className="w-10 text-center">
+                    {row.gamePointsWon}-{row.gamePointsLost}
+                  </span>
                   <span className="w-6 text-center font-bold text-(--arena-foreground)">{row.points}</span>
                 </div>
               </motion.div>
             );
           })}
+
+          {/* Legenda: critério de desempate */}
+          {tiedPoints.size > 0 && (
+            <p
+              className="px-4 py-2 text-[10px] leading-snug text-(--arena-muted)"
+              style={{ borderTop: "1px solid var(--glass-border)" }}
+            >
+              <span className="font-bold text-(--state-scheduled)">D</span> = empate em pontos, posição definida
+              pelo desempate ITTF (razão de sets → razão de pontos de game, só entre os empatados). PG = pontos de game.
+            </p>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
