@@ -18,13 +18,13 @@
 - [x] 3.1 `GroupStanding` ganha `gamePointsWon`/`gamePointsLost` (derivados de `m.sets`) + `standingFromRow` default 0.
 - [x] 3.2 Reescrever `computeGroupStandings`: pontos de game de `m.sets`; pontos 3/vitória (mantido).
 - [x] 3.3 Implementar `breakTies(tied, matches)` recursivo/progressivo (pontos → razão de sets → razão de pontos, só entre empatados) + `ratio(w,l)`.
-- [ ] 3.4 **[TS]** `getStandings` calcula no TS (`computeGroupStandings`) em vez de ler a view; e mover a decisão de classificados do SQL para a action (ao fechar o grupo, calcular no TS e gravar os slots do KO, incl. avanço por bye). Revalidar em HML.
+- [~] 3.4 **[TS]** DUAS metades: (a) ✅ `getStandings` calcula no TS (`computeGroupStandings`) — feito no commit b68e334; (b) ⏳ **PENDENTE** mover a decisão de classificados do SQL para a action (ao fechar o grupo, calcular no TS e gravar os slots do KO, incl. avanço por bye) + desabilitar auto-avanço SQL. Revalidar em HML.
 
 ## 4. Implementação — captura de sets e validação
 
-- [ ] 4.1 `score-sheet.tsx`: quando `bracket === "group"` (ou prop `captureSets`), exibir `scoreA+scoreB` linhas de set (pontos A × B) e enviar `sets` no `reportResult`.
-- [ ] 4.2 Validação por set (vencedor ≥ 11 e diff ≥ 2; vencedor do set coincide com o agregado) no `ScoreSheet` e reforço no `reportResult`/`reportResultSchema` (`src/app/actions/tournaments.ts`).
-- [ ] 4.3 Mata-mata: garantir que nada muda (sem inputs de set).
+- [x] 4.1 `score-sheet.tsx`: em `bracket === "group"`, inputs de pontos por set (uma linha por set decidido) + envio de `sets` no `reportResult`.
+- [x] 4.2 Validação por set (vencedor ≥ 11 e diff ≥ 2; sets batem com o agregado) no `ScoreSheet` e no `reportResultSchema`.
+- [x] 4.3 Mata-mata: `captureSets = bracket === "group"` garante que nada muda no KO.
 
 ## 5. Implementação — UI da classificação
 
