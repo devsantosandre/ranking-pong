@@ -40,5 +40,19 @@ Regra oficial (ITTF 3.7.6 / CBTM): pontos de vitória (2/1/0); em empate, olhar 
 
 ## Open Questions
 
-- A classificação exibida e a decisão de classificados são SQL (view + função) ou TS? (resolver na 1ª task — forte indício de SQL, confirmado parcialmente no Bloco A.)
+- ~~A classificação exibida e a decisão de classificados são SQL ou TS?~~ **RESOLVIDO (checkpoint 1.1/1.2).** Ambas são **SQL** — ver abaixo.
 - O 3º critério (razão de pontos) é necessário em produção agora, ou pontos + razão de sets já bastam para o MVP? (assumindo os 3, por fidelidade.)
+
+## Checkpoint 1.1/1.2 — conclusão (definições vivas no HML)
+
+- **Classificação exibida:** view SQL `tournament_standings` (lida por `supabase-repo.getStandings` → `/api/.../standings` → `useTournamentStandings`). Hoje: `points = 3×vitórias`; `position = row_number() over (partition by tournament, group order by points desc, (sets_won-sets_lost) desc, sets_won desc)`. Sem pontos de game, sem desempate entre-empatados.
+- **Classificados (auto-avanço):** função SQL `tournament_group_standings(p_tournament, p_group_id)` (`language sql`), usada pelo `tournament_auto_advance_group` (reescrito no Bloco A) para promover os top N. Mesmo critério simplificado (`points desc, saldo desc, sets_won desc`).
+- **Implicação:** o desempate ITTF + pontos 2/1/0 + pontos de game precisam entrar **nesses dois pontos SQL** para exibição e auto-avanço concordarem. **Porém**, o desempate ITTF é **progressivo/recursivo** (fixa subconjunto distinto, recomeça entre os restantes) — inexprimível numa view (single SELECT) e difícil/arriscado em PL/pgSQL. Isso força uma **decisão de arquitetura** (ver abaixo).
+
+## Decisão de arquitetura pendente (onde mora o desempate)
+
+Duas saídas coerentes (a híbrida foi rejeitada por causar divergência exibição × classificados):
+- **A) Tudo em SQL:** transformar `tournament_standings` (view→função RPC) e `tournament_group_standings` para chamar um helper PL/pgSQL com o desempate progressivo; `getStandings` passa a chamar via RPC. Mantém o auto-avanço do Bloco A intacto. Custo: PL/pgSQL recursivo difícil, testável só em HML.
+- **B) Tudo em TS (fonte única testável):** `getStandings` calcula no TS via `computeGroupStandings`; e a decisão de classificados sai do SQL para a action (ao fechar o grupo, calcula no TS e grava os slots do mata-mata, inclusive avanço por bye). Custo: refatorar o fluxo de auto-avanço (toca a lógica de byes do Bloco A). Ganho: uma só implementação, 100% coberta por Vitest, sem divergência.
+
+**Recomendação:** B (fonte única no TS), pela testabilidade do desempate progressivo. A definir com o usuário antes de codar 3.4.

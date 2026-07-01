@@ -141,8 +141,13 @@ export interface GroupStanding {
   losses: number;
   setsWon: number;
   setsLost: number;
+  /** Pontos de game (somatório dos pontos de cada set) — derivados de `match.sets`. */
+  gamePointsWon: number;
+  gamePointsLost: number;
   points: number;
   position: number;
+  /** Critério que definiu a posição quando houve empate (desempate ITTF). */
+  tiebreak?: "match-points" | "sets-ratio" | "game-points-ratio" | null;
 }
 
 export interface TournamentDetail extends Tournament {
@@ -215,6 +220,10 @@ export function standingFromRow(row: Record<string, unknown>): GroupStanding {
     losses: row.losses as number,
     setsWon: row.sets_won as number,
     setsLost: row.sets_lost as number,
+    // Pontos de game não vêm da view SQL atual (só do cálculo TS). Default 0 até a
+    // classificação passar a ser computada no TS (Bloco B — decisão "tudo em TS").
+    gamePointsWon: (row.game_points_won as number | undefined) ?? 0,
+    gamePointsLost: (row.game_points_lost as number | undefined) ?? 0,
     points: row.points as number,
     position: row.position as number,
   };

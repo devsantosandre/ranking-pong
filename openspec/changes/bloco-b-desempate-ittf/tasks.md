@@ -1,22 +1,24 @@
 ## 1. Investigação (checkpoint)
 
-- [ ] 1.1 Confirmar onde a **classificação exibida** é ordenada: view SQL `tournament_standings` (lida por `supabase-repo.getStandings`) vs TS `computeGroupStandings`. Registrar no `design.md` (Open Questions).
-- [ ] 1.2 Confirmar onde a **definição dos classificados** ocorre: função SQL `tournament_group_standings` (usada por `tournament_auto_advance_group`) vs TS. Mapear o que precisa do desempate ITTF (view + função + TS) para exibição e auto-avanço concordarem.
+- [x] 1.1 Confirmar onde a **classificação exibida** é ordenada → **view SQL `tournament_standings`** (registrado no design.md).
+- [x] 1.2 Confirmar onde a **definição dos classificados** ocorre → **função SQL `tournament_group_standings`** (auto-avanço). Decisão de arquitetura (SQL vs TS) registrada no design.md — aguarda escolha do usuário antes da 3.4.
+
+> **Decisões (do usuário):** (1) arquitetura = **tudo em TS** (fonte única testável); (2) **foco no desempate agora** — pontuação mantida em 3/vitória; **2/1/0 + marcador de W.O. → follow-up** (os dados não marcam W.O., então 2/1/0 seria order-equivalente ao atual).
 
 ## 2. Testes primeiro (test-first) — desempate no TS
 
-- [ ] 2.1 `tests/unit/standings.test.ts`: pontuação 2/1/0 — vitória=2, derrota disputada=1, W.O.=0; ordem preservada vs 3/vitória em grupo completo.
-- [ ] 2.2 `standings.test.ts`: empate duplo → confronto direto (critério 1 na mini-tabela).
-- [ ] 2.3 `standings.test.ts`: empate triplo → razão de sets só entre os 3; e **aplicação progressiva** (distingue o 1º, recomeça entre os 2 restantes).
-- [ ] 2.4 `standings.test.ts`: 3º critério (razão de pontos de game) desempata quando pontos e razão de sets empatam.
-- [ ] 2.5 `standings.test.ts`: bordas — `sets` nulo (razão neutra 0), denominador zero (Infinity se há ganhos, 0 se não), W.O. com razões neutras.
+- [~] 2.1 Pontuação 2/1/0 — **ADIADO** (follow-up): sem marcador de W.O. nos dados, seria order-equivalente ao 3/vitória atual. Mantido 3/vitória.
+- [x] 2.2 `standings.test.ts`: empate → confronto direto (critério 1 na mini-tabela) — incl. dois pares 2-a-2.
+- [x] 2.3 `standings.test.ts`: empate triplo → razão de sets só entre os 3 (aplicação progressiva).
+- [x] 2.4 `standings.test.ts`: 3º critério (razão de pontos de game) desempata quando pontos e razão de sets empatam.
+- [x] 2.5 `standings.test.ts`: bordas — `sets` nulo (razão neutra), sem quebrar.
 
 ## 3. Implementação — cálculo (standings.ts)
 
-- [ ] 3.1 `GroupStanding` ganha `gamePointsWon`/`gamePointsLost` (derivados de `m.sets`, não persistidos).
-- [ ] 3.2 Reescrever `computeGroupStandings`: pontos 2/1/0; stats por jogador incl. pontos de game de `m.sets`.
-- [ ] 3.3 Implementar `breakTies(tied, matches)` recursivo/progressivo (pontos → razão de sets → razão de pontos, só entre empatados) + `ratio(w,l)` até 2.x passarem.
-- [ ] 3.4 Aplicar o mesmo desempate no ponto identificado em 1.1/1.2: se SQL, criar migration idempotente reescrevendo a view `tournament_standings` e a função `tournament_group_standings` (**não aplicar em prod**); espelhar no `mock-repo`/TS para o auto-avanço.
+- [x] 3.1 `GroupStanding` ganha `gamePointsWon`/`gamePointsLost` (derivados de `m.sets`) + `standingFromRow` default 0.
+- [x] 3.2 Reescrever `computeGroupStandings`: pontos de game de `m.sets`; pontos 3/vitória (mantido).
+- [x] 3.3 Implementar `breakTies(tied, matches)` recursivo/progressivo (pontos → razão de sets → razão de pontos, só entre empatados) + `ratio(w,l)`.
+- [ ] 3.4 **[TS]** `getStandings` calcula no TS (`computeGroupStandings`) em vez de ler a view; e mover a decisão de classificados do SQL para a action (ao fechar o grupo, calcular no TS e gravar os slots do KO, incl. avanço por bye). Revalidar em HML.
 
 ## 4. Implementação — captura de sets e validação
 
