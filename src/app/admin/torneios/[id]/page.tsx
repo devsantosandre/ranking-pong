@@ -16,6 +16,8 @@ import {
   setThirdPlaceMatch, updateTournament,
 } from "@/app/actions/tournaments";
 import { finishedSemisCount } from "@/lib/tournaments/placement";
+import { planGroupSizes, qualifiersCount, snakeGroups } from "@/lib/tournaments/group-planner";
+import { nextPowerOfTwo, countByes } from "@/lib/tournaments/seeding";
 import { getSeedColor } from "@/lib/tournaments/seed-colors";
 import { FORMAT_META } from "@/lib/tournaments/format-meta";
 import { useTournament, useTournamentStandings, tournamentKeys } from "@/lib/queries/use-tournaments";
@@ -1021,24 +1023,25 @@ function GroupsTab({
   onGenerate: () => void;
   onRegenerate: () => void;
 }) {
-  const groupIds = Array.from(new Set(tournament.participants.map((p) => p.groupId).filter(Boolean))) as string[];
+  // Ordena os grupos alfabeticamente (A, B, C, …) — igual ao backend, que agrupa
+  // com `order by group_id`. Sem isto a lista sairia na ordem de aparição dos jogadores.
+  const groupIds = (Array.from(new Set(tournament.participants.map((p) => p.groupId).filter(Boolean))) as string[])
+    .sort((a, b) => a.localeCompare(b));
   const groupMatches = tournament.matches.filter((m) => m.bracket === "group");
-  const [numGroups, setNumGroups] = useState(
-    Math.max(2, Math.min(8, Math.floor(confirmed.length / 3))),
+  // Sugestão padrão: nº de grupos que maximiza grupos de 3 (planGroupSizes, ITTF/CBTM).
+  const [numGroups, setNumGroups] = useState(() =>
+    Math.max(2, planGroupSizes(confirmed.length).length),
   );
   const [isConfiguring, startConfiguring] = useTransition();
 
+  // Distribuição serpentina (snake, ITTF 3.6) reusando o helper testável.
   function computePreview(n: number) {
     const labels = Array.from({ length: n }, (_, i) => String.fromCharCode(65 + i));
     const seeded = [...confirmed].sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
-    const groups = new Map<string, TournamentParticipant[]>(labels.map((l) => [l, []]));
-    seeded.forEach((p, i) => {
-      const round = Math.floor(i / n);
-      const pos = i % n;
-      const idx = round % 2 === 0 ? pos : n - 1 - pos;
-      groups.get(labels[idx]!)!.push(p);
-    });
-    return groups;
+    const distributed = snakeGroups(seeded, n);
+    return new Map<string, TournamentParticipant[]>(
+      labels.map((l, i) => [l, distributed[i] ?? []]),
+    );
   }
 
   const confirmedKey = confirmed.map((p) => p.id).sort().join(",");
@@ -1135,17 +1138,24 @@ function GroupsTab({
                 <p className="px-3 py-4 text-center text-xs text-(--arena-muted)">Nenhum resultado ainda</p>
               ) : groupStandings.map((s, idx) => {
                 const part = tournament.participants.find((p) => p.id === s.participantId);
-                const { bg, color, border } = getSeedColor(idx + 1);
+                // Bolinha colorida = SEED global (identidade única do jogador em todo o app);
+                // a posição no grupo aparece como número neutro na coluna "#".
+                const { bg, color, border } = getSeedColor(part?.seed ?? 1);
                 return (
                   <div key={s.participantId} className="flex items-center gap-2 px-3 py-2.5"
                     style={{ borderTop: idx > 0 ? `1px solid var(--glass-border)` : undefined }}>
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-                      style={{ background: bg, color, border: `1px solid ${border}` }}>
-                      {s.position}
-                    </div>
-                    <span className="flex-1 truncate text-sm font-semibold text-(--arena-foreground)">
-                      {part?.guestName ?? `Jogador ${s.participantId}`}
+                    <span className="w-5 shrink-0 text-center text-xs font-bold tabular-nums text-(--arena-muted)">
+                      {s.position}º
                     </span>
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                        style={{ background: bg, color, border: `1px solid ${border}` }}>
+                        {part?.seed ?? "?"}
+                      </div>
+                      <span className="truncate text-sm font-semibold text-(--arena-foreground)">
+                        {part?.guestName ?? `Jogador ${s.participantId}`}
+                      </span>
+                    </div>
                     <span className="w-8 text-center text-sm tabular-nums" style={{ color: "var(--state-played)" }}>{s.wins}</span>
                     <span className="w-8 text-center text-sm tabular-nums" style={{ color: "var(--state-noshow)" }}>{s.losses}</span>
                     <span className="w-12 text-center text-xs tabular-nums text-(--arena-muted)">{s.setsWon}–{s.setsLost}</span>
@@ -1244,22 +1254,25 @@ function GroupsTab({
               </div>
             </div>
 
-            {/* Número de grupos */}
+            {/* Número de grupos — top 2 avançam sempre; sem teto de 8 nem trava de potência de 2 */}
             {(() => {
-              const maxG = Math.min(Math.floor(confirmed.length / 2), 8);
+              // Opções: de 2 grupos até floor(n/2) (cada grupo precisa de ao menos 2).
+              const maxG = Math.max(2, Math.floor(confirmed.length / 2));
               const groupOptions = Array.from({ length: maxG - 1 }, (_, i) => i + 2);
+              const suggested = Math.max(2, planGroupSizes(confirmed.length).length);
 
-              const minSizeSel = Math.floor(confirmed.length / numGroups);
-              const spotsSel = Math.max(1, Math.ceil(minSizeSel / 2));
-              const totalSel = numGroups * spotsSel;
-              const validSel = totalSel > 0 && (totalSel & (totalSel - 1)) === 0;
-              const equalSel = confirmed.length % numGroups === 0;
-
-              const validOptions = groupOptions.filter((n) => {
-                const s = Math.max(1, Math.ceil(Math.floor(confirmed.length / n) / 2));
-                const t = n * s;
-                return t > 0 && (t & (t - 1)) === 0;
-              });
+              // Resumo derivado da distribuição atual (reflete ajustes manuais no board).
+              const sizes = Array.from(editableGroups.values()).map((g) => g.length);
+              const numG = sizes.length;
+              const sizeParts = [2, 3, 4]
+                .map((s) => ({ s, c: sizes.filter((x) => x === s).length }))
+                .filter((p) => p.c > 0)
+                .map((p) => `${p.c} de ${p.s}`);
+              const bigParts = sizes.filter((x) => x > 4).length;
+              const qualifiers = qualifiersCount(sizes); // 2 × grupos
+              const bracket = nextPowerOfTwo(qualifiers);
+              const byes = countByes(qualifiers);
+              const hasGroupOfTwo = sizes.some((x) => x === 2);
 
               return (
                 <div className="flex flex-col gap-2">
@@ -1267,31 +1280,17 @@ function GroupsTab({
 
                   <div className="flex flex-wrap gap-2">
                     {groupOptions.map((n) => {
-                      const minSize = Math.floor(confirmed.length / n);
-                      const spots = Math.max(1, Math.ceil(minSize / 2));
-                      const total = n * spots;
-                      const valid = total > 0 && (total & (total - 1)) === 0;
                       const equal = confirmed.length % n === 0;
                       const isSelected = numGroups === n;
-
-                      let bg: string, fg: string;
-                      if (isSelected) {
-                        bg = valid ? "var(--arena-primary)" : "var(--state-scheduled)";
-                        fg = "#fff";
-                      } else {
-                        bg = "color-mix(in srgb,var(--arena-muted) 10%,transparent)";
-                        fg = valid ? "var(--arena-foreground)" : "var(--arena-muted)";
-                      }
-
+                      const isSuggested = n === suggested;
                       const sizeMin = Math.floor(confirmed.length / n);
                       const sizeMax = Math.ceil(confirmed.length / n);
-                      const tooltipSize = equal
-                        ? `Todos os grupos terão exatamente ${sizeMin} jogadores`
-                        : `Os grupos terão ${sizeMin} ou ${sizeMax} jogadores`;
-                      const tooltipBracket = valid
-                        ? `${total} jogadores avançam para o mata-mata — chaveamento completo`
-                        : `${total} jogadores avançariam para o mata-mata — número incompatível com o chaveamento`;
-                      const tooltip = `${tooltipSize}. ${tooltipBracket}.`;
+                      const tooltip =
+                        (equal
+                          ? `Todos os grupos terão ${sizeMin} jogadores`
+                          : `Os grupos terão ${sizeMin} ou ${sizeMax} jogadores`) +
+                        `. ${n * 2} classificados (top 2 de cada).` +
+                        (isSuggested ? " Sugestão ITTF/CBTM." : "");
 
                       return (
                         <button
@@ -1299,21 +1298,20 @@ function GroupsTab({
                           type="button"
                           onClick={() => setNumGroups(n)}
                           className="relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold transition"
-                          style={{ background: bg, color: fg }}
+                          style={{
+                            background: isSelected
+                              ? "var(--arena-primary)"
+                              : "color-mix(in srgb,var(--arena-muted) 10%,transparent)",
+                            color: isSelected ? "#fff" : "var(--arena-foreground)",
+                          }}
                           title={tooltip}
                         >
                           {n}
-                          {/* Badge verde: todos os grupos com o mesmo número de jogadores */}
-                          {equal && (
-                            <span className="absolute -left-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full"
+                          {/* Badge: sugestão padrão (maximiza grupos de 3) */}
+                          {isSuggested && !isSelected && (
+                            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full"
                               style={{ background: "var(--state-played)" }}>
                               <CheckCircle className="h-2.5 w-2.5 text-white" />
-                            </span>
-                          )}
-                          {/* Badge laranja: número de classificados incompatível com o mata-mata */}
-                          {!valid && (
-                            <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-(--state-scheduled)">
-                              <AlertTriangle className="h-2 w-2 text-white" />
                             </span>
                           )}
                         </button>
@@ -1321,67 +1319,44 @@ function GroupsTab({
                     })}
                   </div>
 
-                  {/* Legenda compacta */}
-                  <div className="flex items-center gap-4 text-[10px] text-(--arena-muted)">
-                    <span className="flex items-center gap-1 whitespace-nowrap">
-                      <CheckCircle className="h-3 w-3 shrink-0" style={{ color: "var(--state-played)" }} />
-                      grupos iguais
-                    </span>
-                    <span className="flex items-center gap-1 whitespace-nowrap">
-                      <AlertTriangle className="h-3 w-3 shrink-0 text-(--state-scheduled)" />
-                      mata-mata incompleto
-                    </span>
+                  <div className="flex items-center gap-1.5 text-[10px] text-(--arena-muted)">
+                    <CheckCircle className="h-3 w-3 shrink-0" style={{ color: "var(--state-played)" }} />
+                    sugestão (mais grupos de 3)
                   </div>
 
-                  {/* Descrição do estado atual */}
-                  {!validSel ? (
-                    <div className="flex items-start gap-2 rounded-xl p-3" style={{ background: "color-mix(in srgb,var(--state-scheduled) 10%,transparent)", border: "1px solid color-mix(in srgb,var(--state-scheduled) 30%,transparent)" }}>
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "var(--state-scheduled)" }} />
-                      <div>
-                        <p className="text-[11px] font-bold" style={{ color: "var(--state-scheduled)" }}>
-                          Esta divisão deixa o mata-mata incompleto
+                  {/* Resumo da configuração atual */}
+                  <div className="flex items-start gap-2 rounded-xl p-3"
+                    style={{ background: "color-mix(in srgb,var(--arena-primary) 8%,transparent)", border: "1px solid color-mix(in srgb,var(--arena-primary) 24%,transparent)" }}>
+                    <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-(--arena-primary)" />
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-[11px] font-bold text-(--arena-foreground)">
+                        {numG} grupos · {sizeParts.join(" e ")}{bigParts > 0 ? ` e ${bigParts} maiores` : ""}
+                      </p>
+                      <p className="text-[11px] text-(--arena-muted)">
+                        {qualifiers} classificados → mata-mata de {bracket}
+                        {byes > 0 ? ` (${byes} bye${byes > 1 ? "s" : ""} nos melhores)` : " (sem byes)"}
+                      </p>
+                      {hasGroupOfTwo && (
+                        <p className="text-[11px]" style={{ color: "var(--state-scheduled)" }}>
+                          Há grupo(s) de 2 — nesses, os dois jogadores avançam.
                         </p>
-                        <p className="text-[11px] text-(--arena-muted) mt-0.5">
-                          Com {numGroups} grupos, {totalSel} jogadores avançariam — número que não fecha o chaveamento corretamente.
-                          {validOptions.length > 0 && (
-                            <> Use {validOptions.join(" ou ")} grupo{validOptions.length > 1 ? "s" : ""} para que o mata-mata fique completo.</>
-                          )}
-                        </p>
-                      </div>
+                      )}
                     </div>
-                  ) : equalSel ? (
-                    <p className="text-[11px]" style={{ color: "var(--state-played)" }}>
-                      {numGroups} grupos de {Math.floor(confirmed.length / numGroups)} jogadores cada —{" "}
-                      {totalSel} avançam para o mata-mata. Divisão perfeita.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-(--arena-muted)">
-                      Os grupos terão {Math.floor(confirmed.length / numGroups)} ou {Math.ceil(confirmed.length / numGroups)} jogadores.{" "}
-                      {totalSel} avançam para o mata-mata. O chaveamento fecha corretamente.
-                    </p>
-                  )}
+                  </div>
                 </div>
               );
             })()}
 
-            {(() => {
-              const minSize = Math.floor(confirmed.length / numGroups);
-              const spots = Math.max(1, Math.ceil(minSize / 2));
-              const total = numGroups * spots;
-              const valid = total > 0 && (total & (total - 1)) === 0;
-              return (
-                <button
-                  type="button"
-                  onClick={handleConfigureGroups}
-                  disabled={isConfiguring || isPending || confirmed.length < numGroups * 2 || !valid}
-                  className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
-                  style={{ background: "var(--arena-primary)", boxShadow: "0 4px 12px color-mix(in srgb,var(--arena-primary) 30%,transparent)" }}
-                >
-                  {isConfiguring ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
-                  Distribuir e gerar partidas
-                </button>
-              );
-            })()}
+            <button
+              type="button"
+              onClick={handleConfigureGroups}
+              disabled={isConfiguring || isPending || confirmed.length < numGroups * 2}
+              className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
+              style={{ background: "var(--arena-primary)", boxShadow: "0 4px 12px color-mix(in srgb,var(--arena-primary) 30%,transparent)" }}
+            >
+              {isConfiguring ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
+              Distribuir e gerar partidas
+            </button>
           </GlassCard>
 
           {/* Board drag-and-drop — breakout para tela cheia */}

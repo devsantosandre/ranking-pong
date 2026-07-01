@@ -1,7 +1,7 @@
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "@/lib/tournaments/repo/tournament-repo";
 import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "@/lib/tournaments/types";
 import { computeBracketLayout } from "@/lib/tournaments/bracket-layout";
-import { nextPowerOfTwo, buildStandardOrder } from "@/lib/tournaments/seeding";
+import { nextPowerOfTwo, buildStandardOrder, seedQualifiersIntoBracket } from "@/lib/tournaments/seeding";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
 import { deriveEventStatus } from "@/lib/tournaments/event-status";
 
@@ -17,6 +17,8 @@ type MockGlobal = {
   __mockParticipants?: Map<string, TournamentParticipant[]>;
   __mockMatches?: Map<string, TournamentMatch[]>;
   __mockGroupSlotMap?: Map<string, GroupSlotEntry[]>;
+  // matchId → slot (0|1) que é BYE (adversário inexistente) nos brackets grupos→KO
+  __mockByeSlotMap?: Map<string, Map<string, 0 | 1>>;
   __mockEvents?: Map<string, TournamentEvent>;
 };
 const g = globalThis as typeof globalThis & MockGlobal;
@@ -24,44 +26,33 @@ if (!g.__mockTournaments) g.__mockTournaments = new Map<string, Tournament>();
 if (!g.__mockParticipants) g.__mockParticipants = new Map<string, TournamentParticipant[]>();
 if (!g.__mockMatches) g.__mockMatches = new Map<string, TournamentMatch[]>();
 if (!g.__mockGroupSlotMap) g.__mockGroupSlotMap = new Map<string, GroupSlotEntry[]>();
+if (!g.__mockByeSlotMap) g.__mockByeSlotMap = new Map<string, Map<string, 0 | 1>>();
 if (!g.__mockEvents) g.__mockEvents = new Map<string, TournamentEvent>();
 
 const tournaments = g.__mockTournaments;
 const participants = g.__mockParticipants;
 const matches = g.__mockMatches;
 const groupSlotMap = g.__mockGroupSlotMap;
+const byeSlotMap = g.__mockByeSlotMap;
 const events = g.__mockEvents;
 
 // ── Helpers para o fluxo grupos_knockout ──
 
+// Espelha a RPC SQL `generate_bracket` (branch groups_knockout): top 2 fixos por
+// grupo (ITTF/CBTM), chaveamento ITTF 3.7 via `seedQualifiersIntoBracket` e byes
+// nos melhores seeds quando 2×grupos não é potência de 2.
 function buildKnockoutSkeleton(
   tournamentId: string,
   groupIds: string[],
-  spotsPerGroup: number,
-): { knockoutMatches: TournamentMatch[]; slotEntries: GroupSlotEntry[] } {
-  const totalClassified = groupIds.length * spotsPerGroup;
-  if (totalClassified < 2) return { knockoutMatches: [], slotEntries: [] };
-  if (totalClassified > 1 && (totalClassified & (totalClassified - 1)) !== 0) {
-    throw new Error(
-      `Configuração inválida: ${totalClassified} classificados não é potência de 2. Use 2, 4 ou 8 grupos para um bracket sem byes.`,
-    );
-  }
+): { knockoutMatches: TournamentMatch[]; slotEntries: GroupSlotEntry[]; byeSlots: Map<string, 0 | 1> } {
+  const g = groupIds.length;
+  const q = g * 2; // top 2 de cada grupo
+  if (q < 2) return { knockoutMatches: [], slotEntries: [], byeSlots: new Map() };
 
-  // Seeding cross-group: rank0 forward, rank1 reversed, intercalados
-  const seededSlots: { groupId: string; rank: number }[] = [];
-  for (let r = 0; r < spotsPerGroup; r++) {
-    const tier = (r % 2 === 0 ? groupIds : [...groupIds].reverse()).map((gId) => ({ groupId: gId, rank: r }));
-    for (let i = 0; i < tier.length; i++) {
-      if (r === 0) {
-        seededSlots.push(tier[i]!);
-      } else {
-        // intercalar com o tier anterior
-        seededSlots.splice(i * spotsPerGroup + r, 0, tier[i]!);
-      }
-    }
-  }
-
-  const n = nextPowerOfTwo(totalClassified);
+  // Posições do bracket (0 = topo, B-1 = fundo); null = bye.
+  const bracketSlots = seedQualifiersIntoBracket(g);
+  const groupIdOf = (num: number) => groupIds[num - 1]!; // grupo 1-indexed -> id ordenado
+  const n = bracketSlots.length; // nextPowerOfTwo(q)
   const rounds = Math.log2(n);
 
   // matchIdsByRoundIdx[k] = IDs para round = (rounds - k)
@@ -80,21 +71,27 @@ function buildKnockoutSkeleton(
     deadlineAt: null, scheduledAt: null, tableNo: null, startedAt: null, finishedAt: null,
   });
 
+  const byeSlots = new Map<string, 0 | 1>();
+
   // Primeira rodada (round = rounds)
   const firstRoundIds = matchIdsByRoundIdx[0]!;
   for (let i = 0; i < firstRoundIds.length; i++) {
-    const seedA = seededSlots[i * 2];
-    const seedB = seededSlots[i * 2 + 1];
+    const posA = bracketSlots[i * 2] ?? null;
+    const posB = bracketSlots[i * 2 + 1] ?? null;
     const nextMatchId = rounds > 1 ? (matchIdsByRoundIdx[1]?.[Math.floor(i / 2)] ?? null) : null;
+    const id = firstRoundIds[i]!;
     knockoutMatches.push({
-      id: firstRoundIds[i]!, tournamentId, round: rounds, bracket: "winners", slot: i,
+      id, tournamentId, round: rounds, bracket: "winners", slot: i,
       groupId: null, participantAId: null, participantBId: null, ...blank(),
       nextMatchId: rounds > 1 ? nextMatchId : null,
       nextMatchSlot: rounds > 1 ? (i % 2 as 0 | 1) : null,
       status: "pending",
     });
-    if (seedA) slotEntries.push({ groupId: seedA.groupId, rank: seedA.rank, matchId: firstRoundIds[i]!, matchSlot: 0 });
-    if (seedB) slotEntries.push({ groupId: seedB.groupId, rank: seedB.rank, matchId: firstRoundIds[i]!, matchSlot: 1 });
+    if (posA) slotEntries.push({ groupId: groupIdOf(posA.group), rank: posA.rank, matchId: id, matchSlot: 0 });
+    if (posB) slotEntries.push({ groupId: groupIdOf(posB.group), rank: posB.rank, matchId: id, matchSlot: 1 });
+    // Bye: exatamente um lado nulo -> registra o slot vazio (adversário inexistente).
+    if (posA && !posB) byeSlots.set(id, 1);
+    else if (!posA && posB) byeSlots.set(id, 0);
   }
 
   // Rodadas intermediárias e final
@@ -114,7 +111,7 @@ function buildKnockoutSkeleton(
     }
   }
 
-  return { knockoutMatches, slotEntries };
+  return { knockoutMatches, slotEntries, byeSlots };
 }
 
 function autoAdvanceGroup(tournamentId: string, groupId: string) {
@@ -129,6 +126,7 @@ function autoAdvanceGroup(tournamentId: string, groupId: string) {
     .sort((a, b) => a.position - b.position);
 
   const slotEntries = (groupSlotMap.get(tournamentId) ?? []).filter((e) => e.groupId === groupId);
+  const byeSlots = byeSlotMap.get(tournamentId) ?? new Map<string, 0 | 1>();
   let changed = false;
   for (const entry of slotEntries) {
     const qualifier = parts.find((p) => p.id === groupStandings[entry.rank]?.participantId);
@@ -137,7 +135,27 @@ function autoAdvanceGroup(tournamentId: string, groupId: string) {
     if (!m) continue;
     if (entry.matchSlot === 0) m.participantAId = qualifier.id;
     else m.participantBId = qualifier.id;
-    if (m.participantAId && m.participantBId) m.status = "scheduled";
+
+    // Se o adversário é um bye, o classificado avança direto para a rodada seguinte.
+    if (byeSlots.has(m.id)) {
+      if (!m.winnerParticipantId) {
+        m.winnerParticipantId = qualifier.id;
+        m.status = "finished";
+        m.finishedAt = new Date().toISOString();
+        if (m.nextMatchId) {
+          const next = ms.find((x) => x.id === m.nextMatchId);
+          if (next) {
+            if (m.nextMatchSlot === 0) next.participantAId = qualifier.id;
+            else next.participantBId = qualifier.id;
+            if (next.participantAId && next.participantBId && next.status === "pending") {
+              next.status = "scheduled";
+            }
+          }
+        }
+      }
+    } else if (m.participantAId && m.participantBId) {
+      m.status = "scheduled";
+    }
     changed = true;
   }
   if (changed) matches.set(tournamentId, [...ms]);
@@ -292,7 +310,12 @@ export const mockRepo: TournamentRepo = {
     if (!t) return null;
     return {
       ...t,
-      participants: participants.get(id) ?? [],
+      // Ordem canônica = por seed asc (nulls por último, estável). O SeedingBoard
+      // equipara posição (index+1) ao seed; sem esta ordem, salvar reorder corromperia
+      // os seeds e o indicador "era #N" ficaria sem sentido.
+      participants: [...(participants.get(id) ?? [])].sort(
+        (a, b) => (a.seed ?? Infinity) - (b.seed ?? Infinity),
+      ),
       matches: matches.get(id) ?? [],
     } as TournamentDetail;
   },
@@ -403,12 +426,12 @@ export const mockRepo: TournamentRepo = {
         }
       }
 
-      // Skeleton do mata-mata (slots TBD, preenchidos conforme grupos terminam)
+      // Skeleton do mata-mata (top 2 fixos, slots TBD, preenchidos conforme grupos terminam)
       const groupIds = Array.from(byGroup.keys()).sort();
-      const spotsPerGroup = Math.max(1, Math.ceil(Math.max(...Array.from(byGroup.values()).map((g) => g.length)) / 2));
-      const { knockoutMatches, slotEntries } = buildKnockoutSkeleton(tournamentId, groupIds, spotsPerGroup);
+      const { knockoutMatches, slotEntries, byeSlots } = buildKnockoutSkeleton(tournamentId, groupIds);
 
       groupSlotMap.set(tournamentId, slotEntries);
+      byeSlotMap.set(tournamentId, byeSlots);
       const allMatches = [...groupMatches, ...knockoutMatches];
       matches.set(tournamentId, allMatches);
       if (t) tournaments.set(tournamentId, { ...t, status: "active" });

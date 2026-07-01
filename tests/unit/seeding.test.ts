@@ -5,6 +5,8 @@ import {
   sequentialSeeding,
   countByes,
   nextPowerOfTwo,
+  byeSeeds,
+  seedQualifiersIntoBracket,
 } from "@/lib/tournaments/seeding";
 import type { TournamentParticipant } from "@/lib/tournaments/types";
 
@@ -91,6 +93,83 @@ describe("standardSeeding", () => {
     const players = makePlayers(2);
     const result = standardSeeding(players);
     expect(result.map((p) => p.seed).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([1, 2]);
+  });
+});
+
+describe("byeSeeds — byes nos melhores seeds (ITTF)", () => {
+  it("12 classificados → bracket 16, byes nos seeds 1,2,3,4", () => {
+    expect(byeSeeds(12)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("classificados que deixam 1 bye → bye no seed 1", () => {
+    // 3 → bracket 4, 1 bye no melhor seed
+    expect(byeSeeds(3)).toEqual([1]);
+  });
+
+  it("classificados em potência de 2 → 0 byes", () => {
+    expect(byeSeeds(8)).toEqual([]);
+    expect(byeSeeds(16)).toEqual([]);
+  });
+
+  it("os byes vão sempre para os seeds mais altos, em ordem", () => {
+    // 10 → bracket 16, 6 byes nos seeds 1..6
+    expect(byeSeeds(10)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe("seedQualifiersIntoBracket — ITTF 3.7", () => {
+  /** metade (0 = topo, 1 = fundo) da posição `pos` num bracket de `b` posições */
+  const halfOf = (pos: number, b: number): 0 | 1 => (pos < b / 2 ? 0 : 1);
+
+  it("vencedor do grupo 1 no topo, vencedor do grupo 2 no fundo (metades opostas)", () => {
+    const slots = seedQualifiersIntoBracket(4); // 4 grupos → 8 classificados
+    const b = slots.length;
+    const posG1w = slots.findIndex((s) => s?.group === 1 && s.rank === 0);
+    const posG2w = slots.findIndex((s) => s?.group === 2 && s.rank === 0);
+    expect(posG1w).toBe(0); // topo
+    expect(halfOf(posG1w, b)).toBe(0);
+    expect(halfOf(posG2w, b)).toBe(1); // fundo
+  });
+
+  it("1º e 2º do mesmo grupo ficam em metades opostas (só se cruzam na final)", () => {
+    for (const g of [4, 6, 8]) {
+      const slots = seedQualifiersIntoBracket(g);
+      const b = slots.length;
+      for (let group = 1; group <= g; group++) {
+        const posW = slots.findIndex((s) => s?.group === group && s.rank === 0);
+        const posR = slots.findIndex((s) => s?.group === group && s.rank === 1);
+        expect(posW).toBeGreaterThanOrEqual(0);
+        expect(posR).toBeGreaterThanOrEqual(0);
+        expect(halfOf(posW, b)).not.toBe(halfOf(posR, b));
+      }
+    }
+  });
+
+  it("nenhum confronto de 1ª rodada é entre jogadores do mesmo grupo", () => {
+    for (const g of [4, 6, 8]) {
+      const slots = seedQualifiersIntoBracket(g);
+      for (let i = 0; i < slots.length; i += 2) {
+        const a = slots[i];
+        const bb = slots[i + 1];
+        if (a && bb) expect(a.group).not.toBe(bb.group);
+      }
+    }
+  });
+
+  it("com classificados fora de potência de 2, completa com byes (posições null)", () => {
+    const slots = seedQualifiersIntoBracket(6); // 12 classificados → bracket 16
+    expect(slots).toHaveLength(16);
+    const real = slots.filter((s) => s !== null);
+    const byes = slots.filter((s) => s === null);
+    expect(real).toHaveLength(12);
+    expect(byes).toHaveLength(4);
+  });
+
+  it("todos os classificados aparecem exatamente uma vez", () => {
+    const g = 6;
+    const slots = seedQualifiersIntoBracket(g);
+    const keys = slots.filter((s) => s !== null).map((s) => `${s!.group}-${s!.rank}`);
+    expect(new Set(keys).size).toBe(g * 2);
   });
 });
 

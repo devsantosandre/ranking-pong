@@ -1,0 +1,37 @@
+schema: spec-driven
+
+context: |
+  Produto: "ranking-pong" — app de ranking e torneios de tênis de mesa (padrão de UI "Arena"),
+  white-label/multitenant, indo a produção (cliente no loop, entrega faseada). Idioma: PT-BR.
+
+  Stack: Next.js 16 (App Router), TypeScript, Tailwind v4, Supabase (Postgres + RLS),
+  React Query, Vitest + Playwright. Branch de trabalho: develop.
+
+  Onde mora a lógica de torneios:
+    - src/lib/tournaments/ (types.ts, seeding.ts, standings.ts, format-meta.ts, bracket-layout.ts, repo/)
+    - src/app/actions/tournaments.ts (server actions, todas com assertAdmin)
+    - src/app/admin/torneios/[id]/page.tsx (UI admin; GroupsTab ~L1011)
+    - src/components/tournaments/* (score-sheet, group-distribution-board, standings-table…)
+    - Schema: supabase/migrations/20260617000000_tournaments.sql
+
+  Documentos de referência (fonte da verdade narrativa — NÃO duplicar, referenciar):
+    - docs/PLANO_TORNEIOS_GRUPOS_E_INSCRICAO.md (plano dos 4 blocos A/B/C/D, decisões travadas)
+    - docs/ESTUDO_DISTRIBUICAO_GRUPOS_ITTF_CBTM.md (regras oficiais ITTF 3.6/3.7 + CBTM)
+
+  Convenções obrigatórias:
+    - Design/UI: invocar a skill `arena-design-pattern` antes de qualquer trabalho de UI;
+      cor só via tokens CSS (--arena-*/--state-*), ArenaShell/GlassCard, Tailwind v4 text-(--token).
+    - Toda ação importante exige ConfirmModal antes de executar.
+    - Migrations: apenas CRIAR arquivos; NUNCA aplicar em produção (o usuário aplica manualmente).
+    - Nunca commitar/push na main sem aprovação explícita.
+    - Spec/test-first nos blocos de LÓGICA (grupos, desempate, seeding): escrever os testes
+      Vitest a partir das tabelas de aceite ANTES de implementar.
+
+# Per-artifact rules (optional)
+rules:
+  proposal:
+    - Referenciar os docs PLANO/ESTUDO em vez de reescrever conteúdo deles.
+    - Incluir sempre uma seção de Não-objetivos (Non-goals).
+  tasks:
+    - Nos blocos de lógica, a primeira task é escrever os testes Vitest (test-first).
+    - Marcar tasks que geram migration como "não aplicar em prod".
