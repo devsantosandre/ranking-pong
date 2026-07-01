@@ -104,6 +104,22 @@ export async function removeParticipant(participantId: string, tournamentId: str
   return { ok: true };
 }
 
+export async function removeParticipants(participantIds: string[], tournamentId: string) {
+  await assertAdmin();
+  const ids = z.array(z.string().min(1)).min(1).parse(participantIds);
+  try {
+    const repo = await getTournamentRepo();
+    await repo.removeParticipants(tournamentId, ids);
+    await logAdmin("tournament_remove_participants", { tournament_id: tournamentId, count: ids.length });
+    invalidateTournament(tournamentId);
+    return { ok: true, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[removeParticipants]", msg, err);
+    return { ok: false, error: msg };
+  }
+}
+
 const saveSeedingSchema = z.array(
   z.object({
     participantId: z.string().min(1),

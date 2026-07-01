@@ -76,6 +76,8 @@ export interface TournamentRepo {
 
   addParticipants(tournamentId: string, items: AddParticipantInput[]): Promise<TournamentParticipant[]>;
   removeParticipant(participantId: string): Promise<void>;
+  /** Remoção em lote (Bloco D). Bloqueia quando o torneio está active/finished. */
+  removeParticipants(tournamentId: string, participantIds: string[]): Promise<void>;
   saveSeeding(tournamentId: string, order: SaveSeedingInput[]): Promise<void>;
 
   generateBracket(tournamentId: string, method: SeedingMethod): Promise<TournamentMatch[]>;

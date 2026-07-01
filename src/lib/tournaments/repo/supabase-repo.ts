@@ -192,6 +192,25 @@ export const supabaseRepo: TournamentRepo = {
     if (error) throw error;
   },
 
+  async removeParticipants(tournamentId, participantIds) {
+    if (participantIds.length === 0) return;
+    const client = createAdminClient();
+    // Trava de estado: não remove com o torneio em andamento/encerrado.
+    const { data: t, error: tErr } = await client
+      .from("tournaments").select("status").eq("id", tournamentId).single();
+    if (tErr) throw tErr;
+    if (t?.status === "active" || t?.status === "finished") {
+      throw new Error("Não é possível remover inscritos com o torneio em andamento ou encerrado.");
+    }
+    // Remoção em lote numa única query (evita N round-trips).
+    const { error } = await client
+      .from("tournament_participants")
+      .delete()
+      .eq("tournament_id", tournamentId)
+      .in("id", participantIds);
+    if (error) throw error;
+  },
+
   async saveSeeding(tournamentId, order: SaveSeedingInput[]) {
     const client = createAdminClient();
     await Promise.all(

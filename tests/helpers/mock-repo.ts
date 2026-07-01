@@ -378,6 +378,20 @@ export const mockRepo: TournamentRepo = {
     }
   },
 
+  async removeParticipants(tournamentId, participantIds) {
+    seedTournament();
+    const t = tournaments.get(tournamentId);
+    if (t && (t.status === "active" || t.status === "finished")) {
+      throw new Error("Não é possível remover inscritos com o torneio em andamento ou encerrado.");
+    }
+    const list = participants.get(tournamentId) ?? [];
+    const idSet = new Set(participantIds);
+    const remaining = list.filter((p) => !idSet.has(p.id));
+    // Renumera seeds sequencialmente para não ficar buracos (igual ao remove avulso).
+    remaining.forEach((p, i) => { if (p.seed !== null) p.seed = i + 1; });
+    participants.set(tournamentId, remaining);
+  },
+
   async saveSeeding(tournamentId, order: SaveSeedingInput[]) {
     seedTournament();
     const list = participants.get(tournamentId) ?? [];

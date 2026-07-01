@@ -11,7 +11,7 @@ import { ShareRegistration } from "@/components/tournaments/share-registration";
 import { ScoreSheet } from "@/components/tournaments/score-sheet";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import {
-  addParticipants, removeParticipant, saveSeeding,
+  addParticipants, removeParticipant, removeParticipants, saveSeeding,
   generateBracket, openRegistration, closeRegistration, finishTournament, configureGroups,
   setThirdPlaceMatch, updateTournament,
 } from "@/app/actions/tournaments";
@@ -20,6 +20,7 @@ import { planGroupSizes, qualifiersCount, snakeGroups } from "@/lib/tournaments/
 import { nextPowerOfTwo, countByes } from "@/lib/tournaments/seeding";
 import { getSeedColor } from "@/lib/tournaments/seed-colors";
 import { FORMAT_META } from "@/lib/tournaments/format-meta";
+import { cn } from "@/lib/utils";
 import { useTournament, useTournamentStandings, tournamentKeys } from "@/lib/queries/use-tournaments";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
@@ -30,6 +31,7 @@ import {
   Loader2, CheckCircle, UserPlus, RotateCcw,
   X, Tv, Swords, Medal,
   CheckCheck, Crown, ClipboardList, LayoutGrid, AlertTriangle, Maximize2,
+  ListChecks, CheckSquare, Square, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -69,6 +71,10 @@ export default function AdminTournamentPage() {
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [localParticipants, setLocalParticipants] = useState<TournamentParticipant[] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Bloco D — seleção múltipla + remoção em lote de inscritos
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRemoveConfirmOpen, setBulkRemoveConfirmOpen] = useState(false);
   // useSyncExternalStore com getServerSnapshot=false garante que o servidor e o
   // primeiro render do cliente concordem no mesmo estado (false), independente
   // do queryClient singleton ter dados em memória de navegações anteriores.
@@ -214,6 +220,29 @@ export default function AdminTournamentPage() {
   async function handleRemove(participantId: string) {
     startTransition(async () => {
       await removeParticipant(participantId, id);
+      invalidate();
+    });
+  }
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+  function toggleSelected(participantId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(participantId)) next.delete(participantId);
+      else next.add(participantId);
+      return next;
+    });
+  }
+  function handleBulkRemove() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    startTransition(async () => {
+      const res = await removeParticipants(ids, id);
+      if (res.error) setActionError(res.error);
+      setBulkRemoveConfirmOpen(false);
+      exitSelectionMode();
       invalidate();
     });
   }
@@ -510,20 +539,78 @@ export default function AdminTournamentPage() {
                 <ShareRegistration tournamentId={id} />
               )}
 
-              <div className="flex items-center justify-between px-1">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
-                  Confirmados
-                </p>
-                <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                  style={{
-                    background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)",
-                    color: "var(--arena-primary)",
-                  }}
+              {(() => {
+                const canRemove = tournament.status !== "active" && tournament.status !== "finished";
+                const allSelected = confirmed.length > 0 && selectedIds.size === confirmed.length;
+                return (
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+                        Confirmados
+                      </p>
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                        style={{
+                          background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)",
+                          color: "var(--arena-primary)",
+                        }}
+                      >
+                        {confirmed.length}{tournament.maxParticipants ? ` / ${tournament.maxParticipants}` : ""}
+                      </span>
+                    </div>
+
+                    {/* Toggle de modo seleção (só quando remoção é permitida) */}
+                    {canRemove && confirmed.length > 0 && (
+                      selectionMode ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedIds(allSelected ? new Set() : new Set(confirmed.map((p) => p.id)))}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-(--arena-muted) transition hover:text-(--arena-foreground)"
+                          >
+                            {allSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                            {allSelected ? "Limpar" : "Todos"}
+                          </button>
+                          <span className="text-[11px] font-semibold text-(--arena-muted)">
+                            {selectedIds.size} selecionado{selectedIds.size !== 1 ? "s" : ""}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={exitSelectionMode}
+                            className="text-[11px] font-semibold text-(--arena-muted) transition hover:text-(--arena-foreground)"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setSelectionMode(true)}
+                          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-(--arena-muted) transition hover:text-(--arena-foreground)"
+                          style={{ background: "color-mix(in srgb, var(--arena-foreground) 6%, transparent)" }}
+                        >
+                          <ListChecks className="h-3.5 w-3.5" />
+                          Selecionar
+                        </button>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Barra de remoção em lote */}
+              {selectionMode && selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setBulkRemoveConfirmOpen(true)}
+                  disabled={isPending}
+                  className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-90 disabled:opacity-40"
+                  style={{ background: "color-mix(in srgb, var(--state-noshow) 12%, transparent)", color: "var(--state-noshow)" }}
                 >
-                  {confirmed.length}{tournament.maxParticipants ? ` / ${tournament.maxParticipants}` : ""}
-                </span>
-              </div>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remover selecionado{selectedIds.size !== 1 ? "s" : ""} ({selectedIds.size})
+                </button>
+              )}
 
               {confirmed.length === 0 ? (
                 <GlassCard className="flex flex-col items-center gap-2 py-10 text-center">
@@ -533,12 +620,29 @@ export default function AdminTournamentPage() {
               ) : (
                 confirmed.map((p, idx) => {
                   const { bg, color, border } = getSeedColor(p.seed ?? idx + 1);
+                  const isSelected = selectedIds.has(p.id);
                   return (
                     <GlassCard
                       key={p.id}
                       noPadding
-                      className="group flex items-center gap-3 px-3 py-2.5"
+                      onClick={selectionMode ? () => toggleSelected(p.id) : undefined}
+                      className={cn(
+                        "group flex items-center gap-3 px-3 py-2.5 transition-all",
+                        selectionMode && "cursor-pointer hover:scale-[1.005]",
+                      )}
+                      style={selectionMode && isSelected
+                        ? { background: "color-mix(in srgb, var(--arena-primary) 10%, transparent)" }
+                        : undefined}
                     >
+                      {selectionMode && (
+                        <span
+                          className="shrink-0"
+                          style={{ color: isSelected ? "var(--arena-primary)" : "var(--arena-muted)" }}
+                          aria-hidden
+                        >
+                          {isSelected ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
+                        </span>
+                      )}
                       <div
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
                         style={{ background: bg, color, border: `1px solid ${border}` }}
@@ -553,7 +657,7 @@ export default function AdminTournamentPage() {
                       {p.flag && (
                         <span className={`fi fi-${p.flag.toLowerCase()} shrink-0 text-sm`} aria-hidden />
                       )}
-                      {tournament.status !== "active" && (
+                      {!selectionMode && tournament.status !== "active" && (
                         <button
                           type="button"
                           onClick={() => handleRemove(p.id)}
@@ -962,6 +1066,16 @@ export default function AdminTournamentPage() {
         title={`Regerar ${bracketWord}`}
         description={`A ${bracketWord} será remontada do zero com ${confirmed.length} participantes. Todos os resultados já lançados serão apagados.`}
         confirmText="Regerar"
+        variant="danger"
+        loading={isPending}
+      />
+      <ConfirmModal
+        isOpen={bulkRemoveConfirmOpen}
+        onClose={() => setBulkRemoveConfirmOpen(false)}
+        onConfirm={handleBulkRemove}
+        title="Remover inscritos selecionados"
+        description={`${selectedIds.size} inscrito${selectedIds.size !== 1 ? "s serão removidos" : " será removido"} do torneio. Esta ação não pode ser desfeita.`}
+        confirmText={`Remover ${selectedIds.size}`}
         variant="danger"
         loading={isPending}
       />
