@@ -42,6 +42,14 @@ export function SeedingBoard({ participants, onChange, disabled }: SeedingBoardP
     onChange(arrayMove(participants, oldIndex, newIndex));
   }
 
+  // Rank de cada jogador na ordem SALVA (por seed, contíguo 1..N). Comparado à
+  // posição atual, revela exatamente quem foi movido — robusto a seeds com buracos.
+  const savedRank = new Map(
+    [...participants]
+      .sort((a, b) => (a.seed ?? Infinity) - (b.seed ?? Infinity))
+      .map((p, i) => [p.id, i + 1] as const),
+  );
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={participants.map((p) => p.id)} strategy={verticalListSortingStrategy}>
@@ -51,6 +59,7 @@ export function SeedingBoard({ participants, onChange, disabled }: SeedingBoardP
               key={participant.id}
               participant={participant}
               seed={index + 1}
+              previousSeed={savedRank.get(participant.id)}
               disabled={disabled}
             />
           ))}
@@ -60,7 +69,7 @@ export function SeedingBoard({ participants, onChange, disabled }: SeedingBoardP
   );
 }
 
-function SeedRow({ participant: p, seed, disabled }: { participant: TournamentParticipant; seed: number; disabled?: boolean }) {
+function SeedRow({ participant: p, seed, previousSeed, disabled }: { participant: TournamentParticipant; seed: number; previousSeed?: number; disabled?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: p.id,
     disabled,
@@ -124,13 +133,13 @@ function SeedRow({ participant: p, seed, disabled }: { participant: TournamentPa
         {p.guestName ?? `Participante ${seed}`}
       </span>
 
-      {/* Seed original */}
-      {p.seed && p.seed !== seed && (
+      {/* Posição salva (só aparece nos que foram movidos nesta edição) */}
+      {previousSeed != null && previousSeed !== seed && (
         <span
           className="shrink-0 text-[10px] tabular-nums"
           style={{ color: "var(--arena-muted)" }}
         >
-          era #{p.seed}
+          era #{previousSeed}
         </span>
       )}
     </div>

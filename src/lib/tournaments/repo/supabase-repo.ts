@@ -18,7 +18,8 @@ export const supabaseRepo: TournamentRepo = {
     const client = createAdminClient();
     const [tRes, pRes, mRes] = await Promise.all([
       client.from("tournaments").select("*").eq("id", id).single(),
-      client.from("tournament_participants").select("*").eq("tournament_id", id),
+      client.from("tournament_participants").select("*").eq("tournament_id", id)
+        .order("seed", { ascending: true, nullsFirst: false }).order("created_at", { ascending: true }),
       client.from("tournament_matches").select("*").eq("tournament_id", id).order("round", { ascending: false }),
     ]);
     if (tRes.error || !tRes.data) return null;
