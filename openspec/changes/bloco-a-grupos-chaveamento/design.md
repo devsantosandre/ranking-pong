@@ -37,5 +37,20 @@ Regras oficiais (ver `docs/ESTUDO_DISTRIBUICAO_GRUPOS_ITTF_CBTM.md`): snake (ITT
 
 ## Open Questions
 
-- O emparelhamento grupo→KO é TS ou RPC SQL? (resolver na 1ª task)
+- ~~O emparelhamento grupo→KO é TS ou RPC SQL?~~ **RESOLVIDO (checkpoint 1.1).** Ver abaixo.
 - O cliente quer o sorteio oficial (ITTF 3.6.2) já, ou o default determinístico basta para o MVP? (assumindo determinístico)
+
+## Checkpoint 1.1/1.2 — conclusão da investigação
+
+**1.1 — Onde mora a montagem grupo→KO: é RPC SQL.**
+- Fluxo: `configureGroups` (action, `src/app/actions/tournaments.ts:218`) → `repo.saveSeeding` (persiste `group_id`) → `repo.generateBracket` (`src/lib/tournaments/repo/supabase-repo.ts:107`) → **RPC `generate_bracket`**.
+- A RPC vive em `supabase/migrations/20260622000000_tournament_engine_v2.sql`, branch `groups_knockout` (L400–551). Lá:
+  - `v_spots := ceil(v_group_size/2)` — **vagas derivadas do tamanho do grupo**, não top-2 fixo.
+  - `v_total_class` **precisa ser potência de 2**, senão `raise exception` (L427–432) — é a trava.
+  - **Não há tratamento de byes** na branch de grupos (o skeleton assume `v_total_class` = potência de 2).
+  - O emparelhamento cross-group (ITTF 3.7-ish: vencedor no topo, 2º na metade oposta) já existe via `v_seed_groups`/`v_seed_ranks` gravados em `tournament_group_slots`; `close_group_stage`/`tournament_auto_advance_group` promovem os classificados nesses slots.
+- **Decisão:** o ITTF 3.7 + byes + top-2 fixo + remoção da trava entram **numa migration idempotente** que reescreve a branch `groups_knockout` de `generate_bracket` (task 3.5). Migration criada mas **NÃO aplicada em prod** (usuário aplica). As helpers TS (`planGroupSizes`, `seedQualifiersIntoBracket`, byes) são a **lógica normativa testada** (Vitest) e alimentam o preview/resumo da UI; a produção do bracket permanece no SQL, espelhando as mesmas regras.
+
+**1.2 — Semeadura snake e persistência.**
+- A distribuição snake é feita em TS em `computePreview(n)` (`src/app/admin/torneios/[id]/page.tsx:1031`): ordena confirmados por `seed` e serpenteia em `n` grupos (rótulos A, B, C…). O `GroupDistributionBoard` permite ajuste manual.
+- `handleConfigureGroups` monta `{ participantId, groupId }` e chama `configureGroups`, que persiste `group_id` via `saveSeeding` mantendo o `seed` já gravado, e então gera o bracket. Ou seja, o `seed` de cada jogador já vem definido antes (aba de seeding); a fase de grupos só atribui `group_id`.
