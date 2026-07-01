@@ -35,6 +35,6 @@
 
 - [x] 6.1 `npx vitest run` — 137 testes verdes (cenários 2.x de desempate incluídos).
 - [x] 6.2 `npm run lint` e `npm run build` (exit 0) sem erros nos arquivos tocados; tsc limpo; grep §3.1 (tokens) limpo na UI.
-- [ ] 6.3 **HANDOFF (usuário):** aplicar/validar em **HML** (não prod) a migration `20260701000100` — E2E com empate confirmando exibição == classificados (auto-avanço TS). MCP `supabase-hml__query` é read-only; aplicar via túnel/`psql` com ROLLBACK, estilo Bloco A.
+- [x] 6.3 Migration `20260701000100` **aplicada e validada em HML** (usuário) — confirmado via MCP read-only que `tournament_auto_advance_group` está no-op no HML; avanço passa a ser 100% TS (ITTF).
 - [x] 6.4 `openspec validate bloco-b-desempate-ittf` ok; `design.md` atualizado (decisão B implementada + checkpoint 1.1/1.2 concluído).
-- [ ] 6.5 **HANDOFF (usuário):** smoke manual — lançar um grupo com empate e conferir classificação + coluna PG + marcador/tooltip de desempate (D).
+- [x] 6.5 Smoke manual em HML (usuário) — grupo com empate: classificação + coluna PG + marcador/tooltip de desempate (D) OK.

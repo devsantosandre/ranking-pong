@@ -1,19 +1,15 @@
 ## ADDED Requirements
 
-### Requirement: Pontuação oficial de grupo (2/1/0)
-O sistema SHALL pontuar os jogos de grupo com **2 pontos por vitória, 1 por derrota disputada e 0 por W.O. (não comparecimento)**, substituindo o esquema anterior de 3 por vitória. A classificação primária SHALL ser por pontos de vitória (desc).
+### Requirement: Pontuação e ordenação primária de grupo
+O sistema SHALL pontuar os jogos de grupo por pontos de vitória (**3 pontos por vitória, 0 por derrota**) e ordenar a classificação primariamente por pontos de vitória (desc), antes de qualquer critério de desempate. A pontuação oficial 2/1/0 (que distingue derrota disputada de W.O.) é um follow-up **não ativo**: os dados de partida não marcam W.O., e em grupo completo sem W.O. a ordem por 2/1/0 é equivalente à ordem por 3/vitória.
 
-#### Scenario: Vitória e derrota disputada
-- **WHEN** um jogador vence uma partida disputada e perde outra disputada
-- **THEN** ele soma 2 (vitória) + 1 (derrota disputada) = 3 pontos
+#### Scenario: Vitória pontua, derrota não
+- **WHEN** um jogador vence uma partida e perde outra
+- **THEN** ele soma 3 (vitória) + 0 (derrota) = 3 pontos
 
-#### Scenario: W.O. não pontua o ausente
-- **WHEN** uma partida termina por W.O. (ausência)
-- **THEN** o vencedor soma 2 pontos e o ausente soma 0 (não recebe o ponto de derrota disputada)
-
-#### Scenario: Ordem preservada em grupo completo
-- **WHEN** todos os jogadores de um grupo disputam o mesmo número de partidas
-- **THEN** a ordem por pontos com 2/1/0 é a mesma que seria com 3 por vitória (equivalência), diferindo apenas quando há W.O.
+#### Scenario: Ordem por pontos de vitória
+- **WHEN** os jogadores de um grupo têm quantidades diferentes de vitórias
+- **THEN** a classificação primária os ordena por pontos de vitória (desc), com o desempate aplicado apenas entre quem empata em pontos
 
 ### Requirement: Captura de placar set-a-set nos jogos de grupo
 Nos jogos de **grupo**, o sistema SHALL capturar e armazenar o placar de **cada set** em `tournament_matches.sets` (`Array<[pontosA, pontosB]>`), com uma linha por set decidido (`nº de sets = scoreA + scoreB`). O mata-mata SHALL NOT exigir placar por set (comportamento inalterado).
