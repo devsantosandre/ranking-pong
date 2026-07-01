@@ -140,11 +140,32 @@ export async function generateBracket(tournamentId: string, method: SeedingMetho
 const reportResultSchema = z.object({
   scoreA: z.number().int().min(0),
   scoreB: z.number().int().min(0),
-  sets: z.array(z.tuple([z.number(), z.number()])).optional(),
+  sets: z
+    .array(z.tuple([z.number().int().min(0), z.number().int().min(0)]))
+    .refine(
+      (sets) =>
+        sets.every(([a, b]) => {
+          const hi = Math.max(a, b);
+          const lo = Math.min(a, b);
+          return a !== b && hi >= 11 && hi - lo >= 2;
+        }),
+      { message: "Cada set precisa de um vencedor com ao menos 11 pontos e vantagem de 2." },
+    )
+    .optional(),
 }).refine((r) => r.scoreA !== r.scoreB, {
   message: "Placar não pode terminar empatado.",
   path: ["scoreB"],
-});
+}).refine(
+  // Se o placar por set foi enviado, o nº de sets vencidos por cada lado deve bater
+  // com o placar agregado (scoreA/scoreB).
+  (r) => {
+    if (!r.sets || r.sets.length === 0) return true;
+    const aWins = r.sets.filter(([a, b]) => a > b).length;
+    const bWins = r.sets.filter(([a, b]) => b > a).length;
+    return aWins === r.scoreA && bWins === r.scoreB;
+  },
+  { message: "O placar de cada set não confere com o total de sets.", path: ["sets"] },
+);
 
 export async function reportResult(matchId: string, rawInput: unknown) {
   await assertAdmin();

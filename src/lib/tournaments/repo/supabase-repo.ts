@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
 import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, TournamentStatus } from "../types";
-import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow, standingFromRow } from "../types";
+import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow } from "../types";
+import { computeGroupStandings } from "../standings";
 import { deriveEventStatus } from "../event-status";
 
 export const supabaseRepo: TournamentRepo = {
@@ -139,13 +140,19 @@ export const supabaseRepo: TournamentRepo = {
   },
 
   async getStandings(tournamentId) {
+    // Classificação calculada no TS (fonte única) para aplicar o desempate oficial
+    // ITTF/CBTM — a view SQL tournament_standings usa critério simplificado e não
+    // tem pontos de game. Ver Bloco B (decisão "tudo em TS").
     const client = createAdminClient();
-    const { data, error } = await client
-      .from("tournament_standings")
-      .select("*")
-      .eq("tournament_id", tournamentId);
-    if (error) throw error;
-    return (data ?? []).map((r: Record<string, unknown>) => standingFromRow(r));
+    const [pRes, mRes] = await Promise.all([
+      client.from("tournament_participants").select("*").eq("tournament_id", tournamentId),
+      client.from("tournament_matches").select("*").eq("tournament_id", tournamentId).eq("bracket", "group"),
+    ]);
+    if (pRes.error) throw pRes.error;
+    if (mRes.error) throw mRes.error;
+    const participants = (pRes.data ?? []).map((r: Record<string, unknown>) => participantFromRow(r));
+    const matches = (mRes.data ?? []).map((r: Record<string, unknown>) => matchFromRow(r));
+    return computeGroupStandings(matches, participants);
   },
 
   async closeGroupStage(tournamentId) {

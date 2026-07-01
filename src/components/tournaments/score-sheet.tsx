@@ -23,8 +23,14 @@ function findParticipant(participants: TournamentParticipant[], id: string | nul
 export function ScoreSheet({ match, participants, tournamentId, bestOf, readOnly = false, onClose }: ScoreSheetProps) {
   const winsNeeded = Math.ceil(bestOf / 2);
 
+  // Fase de grupos captura o placar de cada set (para o desempate ITTF). Mata-mata não.
+  const captureSets = match.bracket === "group";
+
   const [scoreA, setScoreA] = useState(match.scoreA ?? 0);
   const [scoreB, setScoreB] = useState(match.scoreB ?? 0);
+  const [setScores, setSetScores] = useState<Array<[number, number]>>(
+    () => (match.sets ?? []).map(([a, b]) => [a, b] as [number, number]),
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [revertOpen, setRevertOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -41,13 +47,39 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, readOnly
   const winnerIsA = scoreA === winsNeeded;
   const winnerIsB = scoreB === winsNeeded;
   const totalSets = scoreA + scoreB;
+
+  // Placar por set (fase de grupos): uma linha por set decidido.
+  const setRows: Array<[number, number]> = captureSets
+    ? Array.from({ length: totalSets }, (_, i) => setScores[i] ?? ([0, 0] as [number, number]))
+    : [];
+  function updateSet(index: number, side: 0 | 1, value: number) {
+    setSetScores((prev) => {
+      const next = Array.from({ length: totalSets }, (_, i) => prev[i] ?? ([0, 0] as [number, number]));
+      const pair: [number, number] = [...next[index]!];
+      pair[side] = Math.max(0, value);
+      next[index] = pair;
+      return next;
+    });
+  }
+  const setPointsValid = ([a, b]: [number, number]) => {
+    const hi = Math.max(a, b);
+    const lo = Math.min(a, b);
+    return a !== b && hi >= 11 && hi - lo >= 2;
+  };
+  const setAWins = setRows.filter(([a, b]) => a > b).length;
+  const setBWins = setRows.filter(([a, b]) => b > a).length;
+  const setsOk =
+    !captureSets ||
+    (totalSets > 0 && setRows.every(setPointsValid) && setAWins === scoreA && setBWins === scoreB);
+
   // Só é possível lançar placar com os dois jogadores definidos.
   const hasBothPlayers = !!match.participantAId && !!match.participantBId;
   const validResult =
     hasBothPlayers &&
     totalSets <= bestOf &&
     (winnerIsA || winnerIsB) &&
-    !(winnerIsA && winnerIsB);
+    !(winnerIsA && winnerIsB) &&
+    setsOk;
 
   // Edição: partida já finalizada sendo corrigida.
   const isEditing = match.status === "finished";
@@ -57,7 +89,11 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, readOnly
   function handleConfirm() {
     setActionError(null);
     startTransition(async () => {
-      const result = await reportResult(match.id, { scoreA, scoreB });
+      const result = await reportResult(match.id, {
+        scoreA,
+        scoreB,
+        ...(captureSets ? { sets: setRows } : {}),
+      });
       setConfirmOpen(false);
       if (result.error) {
         setActionError(result.error);
@@ -191,6 +227,68 @@ export function ScoreSheet({ match, participants, tournamentId, bestOf, readOnly
             );
           })}
         </div>
+
+        {/* Placar por set — fase de grupos (desempate ITTF) */}
+        {captureSets && totalSets > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-center text-[11px] font-semibold uppercase tracking-wider text-(--arena-muted)">
+              Pontos de cada set
+            </p>
+            {setRows.map((pair, i) => {
+              const ok = setPointsValid(pair);
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-(--arena-muted)">
+                    Set {i + 1}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={pair[0]}
+                    disabled={isPending || readOnly}
+                    onChange={(e) => updateSet(i, 0, Number(e.target.value))}
+                    className="w-full min-w-0 flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-bold tabular-nums outline-none"
+                    style={{
+                      background: "color-mix(in srgb, var(--arena-foreground) 5%, var(--arena-bg-2))",
+                      border: `1.5px solid ${pair[0] > pair[1] ? colorA.color : "color-mix(in srgb, var(--arena-foreground) 8%, transparent)"}`,
+                      color: "var(--arena-foreground)",
+                    }}
+                    aria-label={`Pontos de ${nameA} no set ${i + 1}`}
+                  />
+                  <span className="text-xs text-(--arena-muted)">×</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={pair[1]}
+                    disabled={isPending || readOnly}
+                    onChange={(e) => updateSet(i, 1, Number(e.target.value))}
+                    className="w-full min-w-0 flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-bold tabular-nums outline-none"
+                    style={{
+                      background: "color-mix(in srgb, var(--arena-foreground) 5%, var(--arena-bg-2))",
+                      border: `1.5px solid ${pair[1] > pair[0] ? colorB.color : "color-mix(in srgb, var(--arena-foreground) 8%, transparent)"}`,
+                      color: "var(--arena-foreground)",
+                    }}
+                    aria-label={`Pontos de ${nameB} no set ${i + 1}`}
+                  />
+                  <span
+                    className="w-3 shrink-0 text-center text-xs"
+                    style={{ color: pair[0] === 0 && pair[1] === 0 ? "transparent" : ok ? "var(--state-played)" : "var(--state-noshow)" }}
+                    aria-hidden
+                  >
+                    {ok ? "✓" : "!"}
+                  </span>
+                </div>
+              );
+            })}
+            {!setsOk && (
+              <p className="text-center text-[10px] text-(--state-noshow)">
+                Cada set precisa de um vencedor com ≥ 11 pontos e vantagem de 2, e o total de sets deve bater com o placar.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Ações */}
         {!readOnly && (
