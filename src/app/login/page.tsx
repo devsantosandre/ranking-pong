@@ -8,12 +8,19 @@ import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/lib/auth-store";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { buildBrowserTitle } from "@/lib/app-title";
 
 const POST_LOGIN_REDIRECT_KEY = "post_login_redirect_started_at_v1";
 const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
+
+const noopSubscribe = () => () => {};
+/** true só após a hidratação no cliente (server/1º render = false). Evita
+ * mismatch de hydration ao ler sessionStorage/estado do browser no render. */
+function useHydrated() {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,6 +30,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // sessionStorage/auth só podem influenciar o render DEPOIS da hidratação
+  // (no SSR e no 1º render, hydrated=false → renderiza o formulário, igual ao servidor).
+  const hydrated = useHydrated();
 
   const supabase = createClient();
 
@@ -76,8 +86,7 @@ export default function LoginPage() {
     router.replace("/");
   };
 
-  const shouldShowPostLoginTransition = (() => {
-    if (typeof window === "undefined") return false;
+  const shouldShowPostLoginTransition = hydrated && (() => {
     const rawStartedAt = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
     if (!rawStartedAt) return false;
     if (!Number.isFinite(Number(rawStartedAt))) return false;
