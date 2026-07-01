@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   standardSeeding,
   eloSeeding,
+  potsSeeding,
   sequentialSeeding,
   countByes,
   nextPowerOfTwo,
@@ -196,5 +197,38 @@ describe("eloSeeding", () => {
     // Sem ratings, todos ficam com rating 0 — ordem preservada, seeds idênticos ao padrão
     expect(eloResult).toHaveLength(4);
     expect(eloResult.every((p) => typeof p.seed === "number")).toBe(true);
+  });
+});
+
+describe("potsSeeding — seed por rating/pontuação (pot)", () => {
+  it("ordena por pot decrescente (maior pot vem primeiro)", () => {
+    const players = [
+      makeParticipant({ id: "mid", pot: 1800 }),
+      makeParticipant({ id: "low", pot: 1500 }),
+      makeParticipant({ id: "high", pot: 2000 }),
+    ];
+    const result = potsSeeding(players);
+    // A ordem interna (antes do standardSeeding) deve ser high, mid, low
+    expect(result.map((p) => p.guestName)).toEqual(["high", "mid", "low"]);
+    expect(result.every((p) => typeof p.seed === "number")).toBe(true);
+  });
+
+  it("participantes sem pot vão para o fim da fila", () => {
+    const players = [
+      makeParticipant({ id: "semPot", pot: null }),
+      makeParticipant({ id: "comPot", pot: 1200 }),
+    ];
+    const result = potsSeeding(players);
+    expect(result.map((p) => p.guestName)).toEqual(["comPot", "semPot"]);
+  });
+
+  it("empate de pot mantém ordem estável de entrada", () => {
+    const players = [
+      makeParticipant({ id: "a", pot: 1500 }),
+      makeParticipant({ id: "b", pot: 1500 }),
+      makeParticipant({ id: "c", pot: 1500 }),
+    ];
+    const result = potsSeeding(players);
+    expect(result.map((p) => p.guestName)).toEqual(["a", "b", "c"]);
   });
 });

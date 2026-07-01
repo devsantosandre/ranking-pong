@@ -22,6 +22,13 @@ export function eloSeeding(
   return standardSeeding(sorted);
 }
 
+/** Semeadura por pontuação/rating (`pot`): ordena por `pot` desc (sem `pot`
+ * vai ao fim), depois aplica standard. Base do seed por rating CBTM. */
+export function potsSeeding(participants: TournamentParticipant[]): SeededParticipant[] {
+  const sorted = [...participants].sort((a, b) => (b.pot ?? -1) - (a.pot ?? -1));
+  return standardSeeding(sorted);
+}
+
 /** Semeadura sequential: seed = posição de entrada */
 export function sequentialSeeding(participants: TournamentParticipant[]): SeededParticipant[] {
   return participants.map((p, i) => ({ ...p, seed: i + 1 }));
