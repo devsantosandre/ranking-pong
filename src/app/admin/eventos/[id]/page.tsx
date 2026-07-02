@@ -10,9 +10,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { EventInfoEditor } from "@/components/tournaments/event-info-editor";
+import { EventSignupsPanel } from "@/components/tournaments/event-signups-panel";
 import {
   Loader2, Plus, Tv, Users, ChevronRight, Settings2, X, AlertCircle, Check,
-  Network, GitBranch, RotateCw, Layers, Crown, Trophy,
+  Network, GitBranch, RotateCw, Layers, Crown, Trophy, Info, ClipboardList,
 } from "lucide-react";
 import type { TournamentFormat } from "@/lib/tournaments/types";
 
@@ -36,6 +38,7 @@ export default function EventoHubPage() {
   const { id } = useParams<{ id: string }>();
   const { data: event, isLoading } = useEvent(id);
   const [showModal, setShowModal] = useState(false);
+  const [showInfoEditor, setShowInfoEditor] = useState(false);
 
   const totalPlayers = event?.divisions.reduce((acc, d) => acc + d.participantCount, 0) ?? 0;
 
@@ -63,19 +66,33 @@ export default function EventoHubPage() {
                   {event.divisions.length} {event.divisions.length === 1 ? "categoria" : "categorias"} · {totalPlayers} {totalPlayers === 1 ? "jogador" : "jogadores"}
                 </p>
               </div>
-              <Link href={`/tv/evento/${event.id}`} target="_blank">
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => setShowInfoEditor(true)}
                   className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-90 active:scale-95"
                   style={{
                     background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)",
                     color: "var(--arena-primary)",
                   }}
                 >
-                  <Tv className="h-3.5 w-3.5" />
-                  TV do torneio
+                  <Info className="h-3.5 w-3.5" />
+                  Informações
                 </button>
-              </Link>
+                <Link href={`/tv/evento/${event.id}`} target="_blank">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-90 active:scale-95"
+                    style={{
+                      background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)",
+                      color: "var(--arena-primary)",
+                    }}
+                  >
+                    <Tv className="h-3.5 w-3.5" />
+                    TV
+                  </button>
+                </Link>
+              </div>
             </GlassCard>
 
             {/* Categorias */}
@@ -161,12 +178,24 @@ export default function EventoHubPage() {
                 );
               })}
             </div>
+
+            {/* Inscrições do evento (C2) */}
+            <div className="mt-2 flex items-center gap-1.5 px-1">
+              <ClipboardList className="h-3.5 w-3.5 text-(--arena-muted)" />
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
+                Inscrições
+              </p>
+            </div>
+            <EventSignupsPanel eventId={event.id} />
           </>
         )}
       </div>
 
       {showModal && event && (
         <NewDivisionModal eventId={event.id} onClose={() => setShowModal(false)} />
+      )}
+      {showInfoEditor && event && (
+        <EventInfoEditor event={event} onClose={() => setShowInfoEditor(false)} />
       )}
     </ArenaShell>
   );

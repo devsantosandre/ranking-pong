@@ -1,11 +1,12 @@
 import { ArenaShell } from "@/components/arena/arena-shell";
 import { GlassCard } from "@/components/arena/glass-card";
 import { StatusPill } from "@/components/arena/status-pill";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
 import { getTournamentRepo } from "@/lib/tournaments/repo";
 import { FORMAT_META } from "@/lib/tournaments/format-meta";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Users, ChevronRight, Tv, CalendarDays, MapPin, Trophy } from "lucide-react";
+import { Users, ChevronRight, Tv, CalendarDays, MapPin, Trophy, Clock, Phone, Award, CalendarClock, UserPlus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,14 @@ export default async function EventoPublicoPage({
   // Divisões em rascunho não aparecem para o público.
   const divisions = event.divisions.filter((d) => d.status !== "draft");
   const totalPlayers = divisions.reduce((acc, d) => acc + d.participantCount, 0);
+
+  const info = event.info;
+  const prices = info?.payment?.prices;
+  const priceLabel = prices
+    ? [1, 2].map((n) => prices[String(n)] != null ? `R$${prices[String(n)]} (${n} div.)` : null).filter(Boolean).join(" · ")
+    : null;
+  // CTA de inscrição: há divisões para escolher e o pagamento não é por gateway (Fase 3).
+  const signupOpen = divisions.length > 0 && (info?.payment?.mode ?? "manual") !== "gateway";
 
   return (
     <ArenaShell title={event.name} subtitle="Torneio" showBack>
@@ -61,6 +70,58 @@ export default async function EventoPublicoPage({
           </Link>
         </GlassCard>
 
+        {/* CTA de inscrição */}
+        {signupOpen && (
+          <Link href={`/eventos/${event.id}/inscrever`}>
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-(--primary-foreground) transition hover:opacity-90 active:scale-[0.99]"
+              style={{ background: "var(--arena-primary)" }}
+            >
+              <UserPlus className="h-4 w-4" /> Inscrever-se
+            </button>
+          </Link>
+        )}
+
+        {/* Informações do evento (C1) */}
+        {info?.description && (
+          <GlassCard>
+            <SafeMarkdown text={info.description} className="text-sm leading-relaxed text-(--arena-foreground)" />
+          </GlassCard>
+        )}
+
+        {(info?.registrationDeadline || info?.contactPhone || priceLabel) && (
+          <GlassCard className="flex flex-col gap-2">
+            {info?.registrationDeadline && (
+              <p className="flex items-center gap-2 text-xs text-(--arena-muted)">
+                <CalendarClock className="h-3.5 w-3.5 shrink-0 text-(--arena-primary)" />
+                Inscrições até <span className="font-semibold text-(--arena-foreground)">{info.registrationDeadline}</span>
+              </p>
+            )}
+            {priceLabel && (
+              <p className="flex items-center gap-2 text-xs text-(--arena-muted)">
+                <Award className="h-3.5 w-3.5 shrink-0 text-(--arena-primary)" />
+                <span className="font-semibold text-(--arena-foreground)">{priceLabel}</span>
+              </p>
+            )}
+            {info?.contactPhone && (
+              <p className="flex items-center gap-2 text-xs text-(--arena-muted)">
+                <Phone className="h-3.5 w-3.5 shrink-0 text-(--arena-primary)" />
+                <span className="font-semibold text-(--arena-foreground)">{info.contactPhone}</span>
+              </p>
+            )}
+          </GlassCard>
+        )}
+
+        {info?.prizeInfo && (
+          <GlassCard className="flex flex-col gap-2">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-(--arena-primary)">
+              <Trophy className="h-3.5 w-3.5" /> Premiação
+            </p>
+            <SafeMarkdown text={info.prizeInfo} className="text-sm leading-relaxed text-(--arena-foreground)" />
+          </GlassCard>
+        )}
+
         <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-(--arena-muted)">
           Categorias
         </p>
@@ -88,8 +149,21 @@ export default async function EventoPublicoPage({
                     <p className="truncate text-sm font-bold text-(--arena-foreground)">
                       {d.divisionLabel ?? d.name}
                     </p>
-                    <span className="mt-0.5 flex items-center gap-1 text-[11px] text-(--arena-muted)">
-                      <Users className="h-3 w-3" /> {d.participantCount} · {meta?.short ?? d.format}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-(--arena-muted)">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" /> {d.participantCount} · {meta?.short ?? d.format}
+                      </span>
+                      {d.startTime && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> {d.startTime}
+                        </span>
+                      )}
+                      {d.levelDescription && (
+                        <span className="rounded px-1 py-0.5 text-[10px] font-semibold"
+                          style={{ background: "color-mix(in srgb, var(--arena-primary) 12%, transparent)", color: "var(--arena-primary)" }}>
+                          {d.levelDescription}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

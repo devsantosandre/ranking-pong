@@ -21,21 +21,21 @@
 ## 4. C1 — Informações do evento (página pública + edição admin)
 
 - [x] 4.1 Action `updateEventInfo(eventId, info)` com validação Zod (só campos conhecidos; `payment.mode ∈ {manual, free}` nesta fase).
-- [ ] 4.2 Editor no hub admin do evento (`admin/eventos/[id]/...`) — skill `arena-design-pattern`.
-- [ ] 4.3 Campos por divisão `start_time`/`level_description` editáveis no admin.
-- [ ] 4.4 Página pública `(arena)/eventos/[id]`: descrição em markdown **seguro** (HTML escapado), grade de divisões (horário/nível), premiação, prazo, contato, pagamento e CTA "Inscrever-se".
+- [x] 4.2 Editor no hub admin do evento (`admin/eventos/[id]/...`) — skill `arena-design-pattern`.
+- [x] 4.3 Campos por divisão `start_time`/`level_description` editáveis no admin.
+- [x] 4.4 Página pública `(arena)/eventos/[id]`: descrição em markdown **seguro** (HTML escapado), grade de divisões (horário/nível), premiação, prazo, contato, pagamento e CTA "Inscrever-se".
 
 ## 5. C2 — Formulário nativo + inscrição
 
 - [x] 5.1 Testes (`mockRepo`): criar signup válido; máx 2 divisões; concordância obrigatória; ≥1 divisão; `free` confirma direto; confirmar gera N participantes com `pot`; idempotência; vínculo por e-mail; `gateway` rejeitado na Fase 2.
 - [x] 5.2 Actions: `createEventSignup` (Zod; `free`→confirmado, `manual`→pending, `gateway`→erro Fase 3), `confirmEventSignup`/`rejectEventSignup` (admin), geração idempotente de participantes.
-- [ ] 5.3 Página `(arena)/eventos/[id]/inscrever` (form multi-divisão, sem upload) — skill `arena-design-pattern`; tela de sucesso "aguardando confirmação".
-- [ ] 5.4 Painel admin de inscrições do evento (lista + confirmar/rejeitar com `ConfirmModal`).
+- [x] 5.3 Página `(arena)/eventos/[id]/inscrever` (form multi-divisão, sem upload) — skill `arena-design-pattern`; tela de sucesso "aguardando confirmação".
+- [x] 5.4 Painel admin de inscrições do evento (lista + confirmar/rejeitar com `ConfirmModal`).
 
 ## 6. Verificação
 
-- [ ] 6.1 `npx vitest run` — cenários 1.x e 5.x verdes.
-- [ ] 6.2 `npm run lint` + `npx tsc --noEmit` limpos nos arquivos tocados; grep §3.1 (tokens) limpo na UI.
-- [ ] 6.3 `npm run build` sem erros.
-- [ ] 6.4 `openspec validate bloco-c-fase2-inscricao-simulada` ok.
+- [x] 6.1 `npx vitest run` — cenários 1.x e 5.x verdes.
+- [x] 6.2 `npm run lint` + `npx tsc --noEmit` limpos nos arquivos tocados; grep §3.1 (tokens) limpo na UI.
+- [x] 6.3 `npm run build` sem erros.
+- [x] 6.4 `openspec validate bloco-c-fase2-inscricao-simulada` ok.
 - [ ] 6.5 **HANDOFF (usuário):** aplicar as migrations em HML e smoke ponta-a-ponta (inscrição `free` e `manual` → admin confirma → participantes gerados com `pot`).

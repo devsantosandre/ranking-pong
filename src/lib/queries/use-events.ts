@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { EventListItem, TournamentEventDetail } from "@/lib/tournaments/types";
+import type { EventListItem, TournamentEventDetail, EventSignup } from "@/lib/tournaments/types";
 
 export const eventKeys = {
   all: ["events"] as const,
   list: () => ["events", "list"] as const,
   detail: (id: string) => ["events", "detail", id] as const,
+  signups: (id: string) => ["events", "signups", id] as const,
 };
 
 async function fetchEvents(): Promise<EventListItem[]> {
@@ -36,5 +37,20 @@ export function useEvent(id: string, opts?: { refetchInterval?: number }) {
     staleTime: 0,
     enabled: !!id,
     refetchInterval: opts?.refetchInterval,
+  });
+}
+
+async function fetchEventSignups(id: string): Promise<EventSignup[]> {
+  const res = await fetch(`/api/events/${id}/signups`);
+  if (!res.ok) throw new Error("Falha ao buscar inscrições");
+  return res.json();
+}
+
+export function useEventSignups(id: string, enabled = true) {
+  return useQuery({
+    queryKey: eventKeys.signups(id),
+    queryFn: () => fetchEventSignups(id),
+    staleTime: 0,
+    enabled: !!id && enabled,
   });
 }
