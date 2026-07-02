@@ -8,7 +8,7 @@
 
 - [x] 2.1 `<ts>_event_signups.sql`: tabela `event_signups` (com campos de gateway já previstos: `payment_mode/provider/id/status`) + índices + RLS coerente com o resto.
 - [x] 2.2 `<ts>_event_info_and_division_fields.sql`: `tournament_events.info jsonb`; `tournaments.start_time text`, `tournaments.level_description text`.
-- [ ] 2.3 Registrar em memória que as migrations foram criadas e precisam ser aplicadas em HML ([[regra-nunca-aplicar-prod]]).
+- [x] 2.3 Registrar em memória que as migrations foram criadas e precisam ser aplicadas em HML ([[regra-nunca-aplicar-prod]]).
 - [ ] 2.6 Adicionar branch `pots` na RPC `generate_bracket` (order by `coalesce(pot,-1) desc, coalesce(seed,9999), created_at`) — reproduzir a função atual + o branch (migration idempotente, NÃO aplicar). Espelha o mock (task 1.3).
 
 ## 3. Tipos e repo
