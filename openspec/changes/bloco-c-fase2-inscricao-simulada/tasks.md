@@ -2,13 +2,14 @@
 
 - [x] 1.1 Teste (`seeding.test.ts`): `potsSeeding` ordena por `pot` desc; sem `pot` vai ao fim; empate estável. (3 testes, 31 no total verdes.)
 - [x] 1.2 `potsSeeding(participants)` em `src/lib/tournaments/seeding.ts` (reusa `standardSeeding`).
-- [~] 1.3 **BLOQUEADO (design):** as funções de seeding TS (standard/elo/pots) **não são chamadas no fluxo atual** — o `mock-repo` usa o campo `seed` direto e o `supabase-repo` delega à RPC SQL `generate_bracket(p_method)`. "Ligar potsSeeding" exige decidir ONDE o método é aplicado (mock+SQL) — ver nota no design/handoff. Não forçar fiação inconsistente.
+- [x] 1.3 Ligar o método `pots`: **mock** `generateBracket` ordena a eliminatória por `pot` desc quando `method === "pots"` (sem pot = mais fraco) — testado (`seeding-pots.test.ts`, 2 testes). **SQL:** a RPC `generate_bracket` hoje só tem branch `elo`/`sequential`; o branch `pots` (order by `coalesce(pot,-1) desc`) entra no pacote de migrations da task 2.6, acoplado a quando o `pot` é populado (C2). O `pot` vem de `cbtm_rating` na confirmação da inscrição.
 
 ## 2. Migrations (criar; NÃO aplicar em prod)
 
 - [ ] 2.1 `<ts>_event_signups.sql`: tabela `event_signups` (com campos de gateway já previstos: `payment_mode/provider/id/status`) + índices + RLS coerente com o resto.
 - [ ] 2.2 `<ts>_event_info_and_division_fields.sql`: `tournament_events.info jsonb`; `tournaments.start_time text`, `tournaments.level_description text`.
 - [ ] 2.3 Registrar em memória que as migrations foram criadas e precisam ser aplicadas em HML ([[regra-nunca-aplicar-prod]]).
+- [ ] 2.6 Adicionar branch `pots` na RPC `generate_bracket` (order by `coalesce(pot,-1) desc, coalesce(seed,9999), created_at`) — reproduzir a função atual + o branch (migration idempotente, NÃO aplicar). Espelha o mock (task 1.3).
 
 ## 3. Tipos e repo
 

@@ -403,9 +403,8 @@ export const mockRepo: TournamentRepo = {
   },
 
   async generateBracket(tournamentId, method: SeedingMethod) {
-    // A força de cada jogador vem do `seed` definido no seeding; `method` é
-    // mantido na assinatura por paridade com a RPC do Supabase.
-    void method;
+    // A força de cada jogador vem do `seed` definido no seeding; no método
+    // `pots` a força vem do `pot` (rating CBTM), espelhando a RPC do Supabase.
     seedTournament();
     const t = tournaments.get(tournamentId);
     const parts = (participants.get(tournamentId) ?? []).filter((p) => p.signupStatus === "confirmed");
@@ -479,10 +478,12 @@ export const mockRepo: TournamentRepo = {
     }
 
     // ── Eliminatória simples ──
-    // Ordena por força (seed do organizador; menor = mais forte) e posiciona no
-    // bracket pela ordem espelhada — assim os BYEs caem distribuídos nos seeds
-    // altos, nunca deixando um confronto "a definir × a definir".
-    const ranked = [...parts].sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
+    // Ordena por força e posiciona no bracket pela ordem espelhada — assim os
+    // BYEs caem distribuídos nos seeds altos, nunca deixando "a definir × a definir".
+    // Método `pots`: força = pot (rating) desc; senão = seed do organizador (menor = mais forte).
+    const ranked = method === "pots"
+      ? [...parts].sort((a, b) => (b.pot ?? -1) - (a.pot ?? -1))
+      : [...parts].sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
     const n = nextPowerOfTwo(ranked.length);
     const rounds = Math.log2(n);
     const order = buildStandardOrder(n);
