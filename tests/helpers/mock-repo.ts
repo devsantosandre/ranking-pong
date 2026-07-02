@@ -1,5 +1,5 @@
-import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "@/lib/tournaments/repo/tournament-repo";
-import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod } from "@/lib/tournaments/types";
+import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput, CreateEventSignupInput } from "@/lib/tournaments/repo/tournament-repo";
+import type { Tournament, TournamentEvent, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, EventInfo, EventSignup } from "@/lib/tournaments/types";
 import { computeBracketLayout } from "@/lib/tournaments/bracket-layout";
 import { nextPowerOfTwo, buildStandardOrder, seedQualifiersIntoBracket } from "@/lib/tournaments/seeding";
 import { computeGroupStandings } from "@/lib/tournaments/standings";
@@ -20,6 +20,8 @@ type MockGlobal = {
   // matchId → slot (0|1) que é BYE (adversário inexistente) nos brackets grupos→KO
   __mockByeSlotMap?: Map<string, Map<string, 0 | 1>>;
   __mockEvents?: Map<string, TournamentEvent>;
+  __mockEventSignups?: Map<string, EventSignup[]>; // eventId → inscrições
+  __mockUsersByEmail?: Map<string, string>;        // email normalizado → userId
 };
 const g = globalThis as typeof globalThis & MockGlobal;
 if (!g.__mockTournaments) g.__mockTournaments = new Map<string, Tournament>();
@@ -28,6 +30,8 @@ if (!g.__mockMatches) g.__mockMatches = new Map<string, TournamentMatch[]>();
 if (!g.__mockGroupSlotMap) g.__mockGroupSlotMap = new Map<string, GroupSlotEntry[]>();
 if (!g.__mockByeSlotMap) g.__mockByeSlotMap = new Map<string, Map<string, 0 | 1>>();
 if (!g.__mockEvents) g.__mockEvents = new Map<string, TournamentEvent>();
+if (!g.__mockEventSignups) g.__mockEventSignups = new Map<string, EventSignup[]>();
+if (!g.__mockUsersByEmail) g.__mockUsersByEmail = new Map<string, string>();
 
 const tournaments = g.__mockTournaments;
 const participants = g.__mockParticipants;
@@ -35,6 +39,30 @@ const matches = g.__mockMatches;
 const groupSlotMap = g.__mockGroupSlotMap;
 const byeSlotMap = g.__mockByeSlotMap;
 const events = g.__mockEvents;
+const eventSignups = g.__mockEventSignups;
+const usersByEmail = g.__mockUsersByEmail;
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+/** Helper de teste: registra um usuário para simular o vínculo por e-mail. */
+export function seedMockUser(email: string, userId: string) {
+  usersByEmail.set(normalizeEmail(email), userId);
+}
+
+/** Gera os participantes de uma inscrição confirmada (1 por divisão). */
+function generateParticipantsForSignup(signup: EventSignup) {
+  const userId = signup.email ? usersByEmail.get(normalizeEmail(signup.email)) ?? null : null;
+  for (const divId of signup.divisions) {
+    const list = participants.get(divId) ?? [];
+    list.push({
+      id: uuid(), tournamentId: divId, userId,
+      guestName: signup.fullName, seed: list.length + 1, groupId: null,
+      pot: signup.cbtmRating, flag: null, avatarUrl: null, color: null,
+      signupStatus: "confirmed", partnerParticipantId: null,
+    });
+    participants.set(divId, list);
+  }
+}
 
 // ── Helpers para o fluxo grupos_knockout ──
 
@@ -191,6 +219,7 @@ function seedTournament(): Tournament {
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
       eventId: null, divisionLabel: null, divisionOrder: 0, thirdPlaceMatch: true,
+      startTime: null, levelDescription: null,
     });
     participants.set(id, [
       { id: "p1", tournamentId: id, userId: "u1", guestName: "Carlos Almeida",   seed: 1, groupId: null, pot: null, flag: "br", avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -212,6 +241,7 @@ function seedGroupTournament(): Tournament {
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
       eventId: null, divisionLabel: null, divisionOrder: 0, thirdPlaceMatch: true,
+      startTime: null, levelDescription: null,
     });
     const gParts: TournamentParticipant[] = [
       { id: "g1", tournamentId: id, userId: null, guestName: "Felipe Torres",    seed: 1, groupId: "A", pot: null, flag: null, avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -263,6 +293,7 @@ function seedKingTournament(): Tournament {
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
       eventId: null, divisionLabel: null, divisionOrder: 0, thirdPlaceMatch: true,
+      startTime: null, levelDescription: null,
     });
     const kParts: TournamentParticipant[] = [
       { id: "k1", tournamentId: id, userId: null, guestName: "Rodrigo Costa",    seed: 1, groupId: null, pot: null, flag: null, avatarUrl: null, color: null, signupStatus: "confirmed", partnerParticipantId: null },
@@ -333,6 +364,7 @@ export const mockRepo: TournamentRepo = {
       divisionLabel: input.divisionLabel ?? null,
       divisionOrder: input.divisionOrder ?? 0,
       thirdPlaceMatch: true,
+      startTime: null, levelDescription: null,
     };
     tournaments.set(id, t);
     participants.set(id, []);
@@ -746,7 +778,7 @@ export const mockRepo: TournamentRepo = {
     const ev: TournamentEvent = {
       id, name: input.name, eventDate: input.eventDate ?? null, venue: input.venue ?? null,
       branding: null, seasonId: input.seasonId ?? null, createdBy: input.createdBy,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(), info: null,
     };
     events.set(id, ev);
     return ev;
@@ -773,6 +805,7 @@ export const mockRepo: TournamentRepo = {
       championUserId: null, championName: null, branding: ev.branding,
       createdBy: ev.createdBy, createdAt: new Date().toISOString(), finishedAt: null,
       eventId, divisionLabel: input.label, divisionOrder: existing.length, thirdPlaceMatch: true,
+      startTime: null, levelDescription: null,
     };
     tournaments.set(id, t);
     participants.set(id, []);
@@ -785,6 +818,85 @@ export const mockRepo: TournamentRepo = {
       const t = tournaments.get(o.tournamentId);
       if (t && t.eventId === eventId) tournaments.set(o.tournamentId, { ...t, divisionOrder: o.divisionOrder });
     }
+  },
+
+  // ── Bloco C Fase 2 ──
+
+  async updateEventInfo(eventId, info: EventInfo) {
+    const ev = events.get(eventId);
+    if (!ev) throw new Error("Evento não encontrado");
+    const updated = { ...ev, info };
+    events.set(eventId, updated);
+    return updated;
+  },
+
+  async updateDivisionInfo(tournamentId, patch) {
+    const t = tournaments.get(tournamentId);
+    if (!t) throw new Error("Divisão não encontrada");
+    const updated = {
+      ...t,
+      startTime: patch.startTime !== undefined ? patch.startTime : t.startTime,
+      levelDescription: patch.levelDescription !== undefined ? patch.levelDescription : t.levelDescription,
+    };
+    tournaments.set(tournamentId, updated);
+    return updated;
+  },
+
+  async createEventSignup(eventId, input: CreateEventSignupInput) {
+    if (input.paymentMode === "gateway") {
+      throw new Error("Pagamento automático (gateway) estará disponível numa fase posterior.");
+    }
+    if (input.divisions.length < 1 || input.divisions.length > 2) {
+      throw new Error("Escolha 1 ou 2 divisões.");
+    }
+    if (!input.agreedRules) throw new Error("É necessário concordar com as regras.");
+
+    const confirmed = input.paymentMode === "free";
+    const signup: EventSignup = {
+      id: uuid(), eventId, fullName: input.fullName,
+      email: input.email ?? null, phone: input.phone ?? null, club: input.club ?? null,
+      cbtmAffiliated: input.cbtmAffiliated ?? false, cbtmRating: input.cbtmRating ?? null,
+      divisions: input.divisions, amountCents: input.amountCents ?? null,
+      paymentMode: input.paymentMode, paymentProvider: null, paymentId: null,
+      paymentStatus: confirmed ? "confirmed" : "pending",
+      agreedRules: input.agreedRules, notes: input.notes ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    const list = eventSignups.get(eventId) ?? [];
+    list.push(signup);
+    eventSignups.set(eventId, list);
+
+    // `free` confirma na hora → gera os participantes imediatamente.
+    if (confirmed) generateParticipantsForSignup(signup);
+    return signup;
+  },
+
+  async listEventSignups(eventId) {
+    return [...(eventSignups.get(eventId) ?? [])];
+  },
+
+  async confirmEventSignup(signupId) {
+    for (const [eid, list] of eventSignups) {
+      const s = list.find((x) => x.id === signupId);
+      if (!s) continue;
+      if (s.paymentStatus === "confirmed") return; // idempotente
+      s.paymentStatus = "confirmed";
+      eventSignups.set(eid, [...list]);
+      generateParticipantsForSignup(s);
+      return;
+    }
+    throw new Error("Inscrição não encontrada");
+  },
+
+  async rejectEventSignup(signupId) {
+    for (const [eid, list] of eventSignups) {
+      const s = list.find((x) => x.id === signupId);
+      if (!s) continue;
+      s.paymentStatus = "rejected";
+      eventSignups.set(eid, [...list]);
+      return;
+    }
+    throw new Error("Inscrição não encontrada");
   },
 
   async setThirdPlaceMatch(id, enabled) {
@@ -804,6 +916,7 @@ function buildDivisionSummary(t: Tournament): DivisionSummary {
     divisionOrder: t.divisionOrder, format: t.format, status: t.status,
     participantCount: ps.length, championName: t.championName,
     hasLiveMatch: ms.some((m) => m.status === "in_progress"),
+    startTime: t.startTime, levelDescription: t.levelDescription,
   };
 }
 
@@ -815,6 +928,7 @@ function seedEventDemo(): TournamentEvent {
     id: eventId, name: "Rachão de Sábado",
     eventDate: new Date().toISOString().slice(0, 10), venue: "Escola de Tênis de Mesa",
     branding: null, seasonId: null, createdBy: "admin", createdAt: new Date().toISOString(),
+    info: null,
   });
 
   const mkParts = (divId: string, names: string[]): TournamentParticipant[] =>
@@ -832,6 +946,7 @@ function seedEventDemo(): TournamentEvent {
       championUserId: null, championName: null, branding: null,
       createdBy: "admin", createdAt: new Date().toISOString(), finishedAt: null,
       eventId, divisionLabel: label, divisionOrder: order, thirdPlaceMatch: true,
+      startTime: null, levelDescription: null,
     });
   };
 

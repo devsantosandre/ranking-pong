@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/utils/supabase/admin";
-import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput } from "./tournament-repo";
-import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, TournamentStatus } from "../types";
-import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow } from "../types";
+import type { TournamentRepo, CreateTournamentInput, AddParticipantInput, ReportResultInput, SaveSeedingInput, CreateEventInput, AddDivisionInput, CreateEventSignupInput } from "./tournament-repo";
+import type { Tournament, TournamentEvent, TournamentEventDetail, EventListItem, DivisionSummary, TournamentParticipant, TournamentMatch, TournamentDetail, GroupStanding, SeedingMethod, TournamentStatus, EventInfo, EventSignup } from "../types";
+import { tournamentFromRow, tournamentEventFromRow, participantFromRow, matchFromRow, eventSignupFromRow } from "../types";
 import { computeGroupStandings } from "../standings";
 import { deriveEventStatus } from "../event-status";
 
@@ -375,6 +375,7 @@ export const supabaseRepo: TournamentRepo = {
           id: t.id, name: t.name, divisionLabel: t.divisionLabel, divisionOrder: t.divisionOrder,
           format: t.format, status: t.status, participantCount: pCount.count ?? 0,
           championName: t.championName, hasLiveMatch: (live.count ?? 0) > 0,
+          startTime: t.startTime, levelDescription: t.levelDescription,
         };
       }),
     );
@@ -426,4 +427,97 @@ export const supabaseRepo: TournamentRepo = {
       ),
     );
   },
+
+  // ── Bloco C Fase 2 — informações do evento (C1) + inscrição nativa (C2) ──
+
+  async updateEventInfo(eventId, info: EventInfo) {
+    const client = createAdminClient();
+    const { data, error } = await client.from("tournament_events").update({ info }).eq("id", eventId).select().single();
+    if (error) throw error;
+    return tournamentEventFromRow(data as Record<string, unknown>);
+  },
+
+  async updateDivisionInfo(tournamentId, patch) {
+    const client = createAdminClient();
+    const row: Record<string, unknown> = {};
+    if (patch.startTime !== undefined) row.start_time = patch.startTime;
+    if (patch.levelDescription !== undefined) row.level_description = patch.levelDescription;
+    const { data, error } = await client.from("tournaments").update(row).eq("id", tournamentId).select().single();
+    if (error) throw error;
+    return tournamentFromRow(data as Record<string, unknown>);
+  },
+
+  async createEventSignup(eventId, input: CreateEventSignupInput) {
+    if (input.paymentMode === "gateway") {
+      throw new Error("Pagamento automático (gateway) estará disponível numa fase posterior.");
+    }
+    if (input.divisions.length < 1 || input.divisions.length > 2) {
+      throw new Error("Escolha 1 ou 2 divisões.");
+    }
+    if (!input.agreedRules) throw new Error("É necessário concordar com as regras.");
+
+    const client = createAdminClient();
+    const confirmed = input.paymentMode === "free";
+    const { data, error } = await client.from("event_signups").insert({
+      event_id: eventId, full_name: input.fullName, email: input.email ?? null,
+      phone: input.phone ?? null, club: input.club ?? null,
+      cbtm_affiliated: input.cbtmAffiliated ?? false, cbtm_rating: input.cbtmRating ?? null,
+      divisions: input.divisions, amount_cents: input.amountCents ?? null,
+      payment_mode: input.paymentMode, payment_status: confirmed ? "confirmed" : "pending",
+      agreed_rules: input.agreedRules, notes: input.notes ?? null,
+    }).select().single();
+    if (error) throw error;
+    const signup = eventSignupFromRow(data as Record<string, unknown>);
+    if (confirmed) await generateSignupParticipants(client, signup);
+    return signup;
+  },
+
+  async listEventSignups(eventId) {
+    const client = createAdminClient();
+    const { data, error } = await client
+      .from("event_signups").select("*").eq("event_id", eventId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((r: Record<string, unknown>) => eventSignupFromRow(r));
+  },
+
+  async confirmEventSignup(signupId) {
+    const client = createAdminClient();
+    const { data, error } = await client.from("event_signups").select("*").eq("id", signupId).single();
+    if (error) throw error;
+    const signup = eventSignupFromRow(data as Record<string, unknown>);
+    if (signup.paymentStatus === "confirmed") return; // idempotente
+    // Confirma condicionando ao estado pendente (evita corrida gerar 2×).
+    const { data: upd, error: uErr } = await client
+      .from("event_signups").update({ payment_status: "confirmed" })
+      .eq("id", signupId).neq("payment_status", "confirmed").select();
+    if (uErr) throw uErr;
+    if (!upd || upd.length === 0) return; // já confirmada por outra chamada
+    await generateSignupParticipants(client, signup);
+  },
+
+  async rejectEventSignup(signupId) {
+    const client = createAdminClient();
+    const { error } = await client.from("event_signups").update({ payment_status: "rejected" }).eq("id", signupId);
+    if (error) throw error;
+  },
 };
+
+/** Gera 1 `tournament_participant` por divisão de uma inscrição confirmada.
+ * Vincula `user_id` por e-mail (best-effort). Usado por create(free)/confirm. */
+async function generateSignupParticipants(client: AdminClient, signup: EventSignup) {
+  let userId: string | null = null;
+  if (signup.email) {
+    try {
+      const { data: u } = await client.from("users").select("id").ilike("email", signup.email.trim()).maybeSingle();
+      userId = (u?.id as string | undefined) ?? null;
+    } catch { /* schema de users pode variar; sem vínculo não bloqueia a inscrição */ }
+  }
+  const rows = signup.divisions.map((divId) => ({
+    tournament_id: divId, user_id: userId, guest_name: signup.fullName,
+    pot: signup.cbtmRating, signup_status: "confirmed" as const,
+  }));
+  if (rows.length === 0) return;
+  const { error } = await client.from("tournament_participants").insert(rows);
+  if (error) throw error;
+}

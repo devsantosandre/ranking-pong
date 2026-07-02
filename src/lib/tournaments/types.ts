@@ -15,6 +15,10 @@ export type RegistrationMode = "invite" | "open";
 export type MatchStatus = "pending" | "scheduled" | "in_progress" | "finished";
 export type BracketSide = "winners" | "losers" | "group" | "placement";
 export type SignupStatus = "invited" | "signed_up" | "confirmed";
+/** Modo de pagamento da inscrição de evento. `gateway` (Mercado Pago) só na Fase 3. */
+export type PaymentMode = "gateway" | "manual" | "free";
+/** Status de pagamento de uma inscrição (`event_signups`). */
+export type SignupPaymentStatus = "pending" | "confirmed" | "rejected" | "expired";
 
 export interface Tournament {
   id: string;
@@ -40,6 +44,10 @@ export interface Tournament {
   eventId: string | null;
   divisionLabel: string | null;
   divisionOrder: number;
+  /** Divisão (C1): horário de início (texto livre, ex.: "10h20"). */
+  startTime: string | null;
+  /** Divisão (C1): descrição de nível (ex.: "iniciante", "avançado"). */
+  levelDescription: string | null;
 }
 
 /**
@@ -55,6 +63,54 @@ export interface TournamentEvent {
   seasonId: string | null;
   createdBy: string;
   createdAt: string;
+  /** Informações públicas do evento (C1) — blob flexível, white-label friendly. */
+  info: EventInfo | null;
+}
+
+/**
+ * Bloco de informações públicas do evento (C1). Todos os campos são opcionais.
+ * `description`/`prizeInfo`/`rulesText` são markdown (renderizados com HTML escapado).
+ */
+export interface EventInfo {
+  description?: string;
+  registrationDeadline?: string;
+  contactPhone?: string;
+  prizeInfo?: string;
+  rulesText?: string;
+  payment?: {
+    mode: PaymentMode;
+    /** Preço por nº de divisões, em reais: { "1": 70, "2": 90 }. */
+    prices?: Record<string, number>;
+    /** Fase 3 (gateway): provedor e referência de credencial por tenant. */
+    provider?: string;
+    accountRef?: string;
+  };
+}
+
+/**
+ * Inscrição de EVENTO (C2). Uma pessoa por evento; ao confirmar, gera 1
+ * `tournament_participant` por divisão escolhida. Contato/pagamento moram aqui.
+ */
+export interface EventSignup {
+  id: string;
+  eventId: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  club: string | null;
+  cbtmAffiliated: boolean;
+  /** Rating CBTM → vira `pot` (força) dos participantes gerados. */
+  cbtmRating: number | null;
+  /** IDs dos torneios-divisão escolhidos (máx 2). */
+  divisions: string[];
+  amountCents: number | null;
+  paymentMode: PaymentMode;
+  paymentProvider: string | null;
+  paymentId: string | null;
+  paymentStatus: SignupPaymentStatus;
+  agreedRules: boolean;
+  notes: string | null;
+  createdAt: string;
 }
 
 /** Resumo leve de uma divisão, para o hub admin / seletores / TV. */
@@ -68,6 +124,8 @@ export interface DivisionSummary {
   participantCount: number;
   championName: string | null;
   hasLiveMatch: boolean;
+  startTime: string | null;
+  levelDescription: string | null;
 }
 
 export interface TournamentEventDetail extends TournamentEvent {
@@ -179,6 +237,8 @@ export function tournamentFromRow(row: Record<string, unknown>): Tournament {
     eventId: (row.event_id as string | null) ?? null,
     divisionLabel: (row.division_label as string | null) ?? null,
     divisionOrder: (row.division_order as number | null) ?? 0,
+    startTime: (row.start_time as string | null) ?? null,
+    levelDescription: (row.level_description as string | null) ?? null,
   };
 }
 
@@ -191,6 +251,29 @@ export function tournamentEventFromRow(row: Record<string, unknown>): Tournament
     branding: (row.branding as TournamentEvent["branding"]) ?? null,
     seasonId: (row.season_id as string | null) ?? null,
     createdBy: row.created_by as string,
+    createdAt: row.created_at as string,
+    info: (row.info as EventInfo | null) ?? null,
+  };
+}
+
+export function eventSignupFromRow(row: Record<string, unknown>): EventSignup {
+  return {
+    id: row.id as string,
+    eventId: row.event_id as string,
+    fullName: row.full_name as string,
+    email: (row.email as string | null) ?? null,
+    phone: (row.phone as string | null) ?? null,
+    club: (row.club as string | null) ?? null,
+    cbtmAffiliated: (row.cbtm_affiliated as boolean | null) ?? false,
+    cbtmRating: (row.cbtm_rating as number | null) ?? null,
+    divisions: (row.divisions as string[] | null) ?? [],
+    amountCents: (row.amount_cents as number | null) ?? null,
+    paymentMode: (row.payment_mode as PaymentMode | null) ?? "manual",
+    paymentProvider: (row.payment_provider as string | null) ?? null,
+    paymentId: (row.payment_id as string | null) ?? null,
+    paymentStatus: (row.payment_status as SignupPaymentStatus | null) ?? "pending",
+    agreedRules: (row.agreed_rules as boolean | null) ?? false,
+    notes: (row.notes as string | null) ?? null,
     createdAt: row.created_at as string,
   };
 }

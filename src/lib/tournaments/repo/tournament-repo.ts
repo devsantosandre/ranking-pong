@@ -10,6 +10,9 @@ import type {
   TournamentFormat,
   SeedingMethod,
   RegistrationMode,
+  EventInfo,
+  EventSignup,
+  PaymentMode,
 } from "../types";
 
 export interface CreateTournamentInput {
@@ -43,6 +46,21 @@ export interface AddDivisionInput {
   bestOf: number;
   seedingMethod?: SeedingMethod;
   registrationMode?: RegistrationMode;
+}
+
+export interface CreateEventSignupInput {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  club?: string;
+  cbtmAffiliated?: boolean;
+  cbtmRating?: number;
+  /** IDs dos torneios-divisão escolhidos (1 a 2). */
+  divisions: string[];
+  paymentMode: PaymentMode;
+  amountCents?: number;
+  agreedRules: boolean;
+  notes?: string;
 }
 
 export interface AddParticipantInput {
@@ -99,4 +117,16 @@ export interface TournamentRepo {
   updateEvent(eventId: string, patch: Partial<Pick<TournamentEvent, "name" | "eventDate" | "venue" | "branding">>): Promise<TournamentEvent>;
   addDivision(eventId: string, input: AddDivisionInput): Promise<Tournament>;
   setDivisionOrder(eventId: string, order: { tournamentId: string; divisionOrder: number }[]): Promise<void>;
+
+  // ── Bloco C Fase 2 — informações do evento (C1) + inscrição nativa (C2) ──
+  /** Edita o blob de informações públicas do evento (C1). */
+  updateEventInfo(eventId: string, info: EventInfo): Promise<TournamentEvent>;
+  /** Edita horário/nível de uma divisão (C1). */
+  updateDivisionInfo(tournamentId: string, patch: { startTime?: string | null; levelDescription?: string | null }): Promise<Tournament>;
+  /** Cria uma inscrição de evento (C2). `free` já nasce confirmada e gera participantes. */
+  createEventSignup(eventId: string, input: CreateEventSignupInput): Promise<EventSignup>;
+  listEventSignups(eventId: string): Promise<EventSignup[]>;
+  /** Confirma (modo `manual`) — gera 1 participante por divisão, idempotente. */
+  confirmEventSignup(signupId: string): Promise<void>;
+  rejectEventSignup(signupId: string): Promise<void>;
 }

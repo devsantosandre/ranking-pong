@@ -371,3 +371,117 @@ export async function setDivisionOrder(eventId: string, rawOrder: unknown) {
   invalidateEvent(eventId);
   return { ok: true };
 }
+
+// ── Bloco C Fase 2 — informações do evento (C1) + inscrição nativa (C2) ─────
+
+// Modo `gateway` (Mercado Pago) é Fase 3 → não editável aqui.
+const eventInfoSchema = z.object({
+  description: z.string().max(20000).optional(),
+  registrationDeadline: z.string().max(40).optional(),
+  contactPhone: z.string().max(40).optional(),
+  prizeInfo: z.string().max(20000).optional(),
+  rulesText: z.string().max(20000).optional(),
+  payment: z.object({
+    mode: z.enum(["manual", "free"]),
+    prices: z.record(z.string(), z.number().nonnegative()).optional(),
+  }).optional(),
+});
+
+export async function updateEventInfo(eventId: string, rawInfo: unknown) {
+  await assertAdmin();
+  const info = eventInfoSchema.parse(rawInfo);
+  const repo = await getTournamentRepo();
+  const event = await repo.updateEventInfo(eventId, info);
+  await logAdmin("event_update_info", { event_id: eventId });
+  invalidateEvent(eventId);
+  return { event };
+}
+
+const divisionInfoSchema = z.object({
+  startTime: z.string().max(40).nullable().optional(),
+  levelDescription: z.string().max(120).nullable().optional(),
+});
+
+export async function updateDivisionInfo(tournamentId: string, eventId: string, rawPatch: unknown) {
+  await assertAdmin();
+  const patch = divisionInfoSchema.parse(rawPatch);
+  const repo = await getTournamentRepo();
+  const tournament = await repo.updateDivisionInfo(tournamentId, patch);
+  invalidateEvent(eventId);
+  invalidateTournament(tournamentId);
+  return { tournament };
+}
+
+// Inscrição PÚBLICA (sem login). O modo de pagamento vem do EVENTO, não do cliente.
+const createEventSignupSchema = z.object({
+  fullName: z.string().min(2, "Informe o nome completo").max(120),
+  email: z.string().email("E-mail inválido").optional(),
+  phone: z.string().max(40).optional(),
+  club: z.string().max(120).optional(),
+  cbtmAffiliated: z.boolean().optional(),
+  cbtmRating: z.number().int().min(0).max(4000).optional(),
+  divisions: z.array(z.string().min(1)).min(1, "Escolha ao menos 1 divisão").max(2, "Máximo de 2 divisões"),
+  agreedRules: z.boolean().refine((v) => v === true, { message: "É necessário concordar com as regras." }),
+  notes: z.string().max(500).optional(),
+});
+
+export async function createEventSignup(eventId: string, rawInput: unknown) {
+  const input = createEventSignupSchema.parse(rawInput);
+  try {
+    const repo = await getTournamentRepo();
+    const event = await repo.getEvent(eventId);
+    if (!event) return { signup: null, error: "Evento não encontrado" };
+
+    const mode = event.info?.payment?.mode ?? "manual";
+    if (mode === "gateway") {
+      return { signup: null, error: "Pagamento automático estará disponível numa fase posterior." };
+    }
+    // Divisões escolhidas precisam pertencer ao evento.
+    const validDivIds = new Set(event.divisions.map((d) => d.id));
+    if (!input.divisions.every((d) => validDivIds.has(d))) {
+      return { signup: null, error: "Divisão inválida para este evento." };
+    }
+    // Valor = preço por nº de divisões (se configurado no evento).
+    const price = event.info?.payment?.prices?.[String(input.divisions.length)];
+    const amountCents = price != null ? Math.round(price * 100) : undefined;
+
+    const signup = await repo.createEventSignup(eventId, { ...input, paymentMode: mode, amountCents });
+    invalidateEvent(eventId);
+    revalidatePath(`/eventos/${eventId}/inscrever`);
+    return { signup, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[createEventSignup]", msg, err);
+    return { signup: null, error: msg };
+  }
+}
+
+export async function confirmEventSignup(signupId: string, eventId: string) {
+  await assertAdmin();
+  try {
+    const repo = await getTournamentRepo();
+    await repo.confirmEventSignup(signupId);
+    await logAdmin("event_signup_confirm", { signup_id: signupId, event_id: eventId });
+    invalidateEvent(eventId);
+    return { ok: true, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[confirmEventSignup]", msg, err);
+    return { ok: false, error: msg };
+  }
+}
+
+export async function rejectEventSignup(signupId: string, eventId: string) {
+  await assertAdmin();
+  try {
+    const repo = await getTournamentRepo();
+    await repo.rejectEventSignup(signupId);
+    await logAdmin("event_signup_reject", { signup_id: signupId, event_id: eventId });
+    invalidateEvent(eventId);
+    return { ok: true, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[rejectEventSignup]", msg, err);
+    return { ok: false, error: msg };
+  }
+}
